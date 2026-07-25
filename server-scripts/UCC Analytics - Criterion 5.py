@@ -2246,21 +2246,6 @@ def to_number(value):
         return None
 
 
-def drop_server_message():
-    # Frappe writes the permission text into its message log BEFORE raising, so
-    # catching the exception is not enough: the message still travels back in
-    # _server_messages and the Frappe client pops its own raw dialog on top of
-    # the dashboard. Drop that entry so the dashboard's own notice is the only
-    # thing the user sees. Guarded, because availability varies by version.
-    try:
-        frappe.clear_last_message()
-    except Exception:
-        try:
-            frappe.clear_messages()
-        except Exception:
-            pass
-
-
 def is_permission_error(error):
     text = lower_text(error)
     return "permission" in text or "not permitted" in text or "not allowed" in text
@@ -2273,7 +2258,6 @@ def get_meta(doctype):
         meta = frappe.get_meta(doctype)
     except Exception:
         meta = None
-        drop_server_message()
     META_CACHE[doctype] = meta
     return meta
 
@@ -2397,7 +2381,6 @@ def resolve_source(alias):
             return result
         except Exception as error:
             message = clean_text(error)
-            drop_server_message()
             attempt["stage"] = "list"
             attempt["status"] = "permission_denied" if is_permission_error(error) else "unavailable"
             attempt["message"] = message
@@ -2509,7 +2492,6 @@ def fetch_rows(source_alias, source, requested_fields=None):
         return rows
     except Exception as error:
         message = clean_text(error)
-        drop_server_message()
         status = "permission_denied" if is_permission_error(error) else "query_error"
         ROW_CACHE[cache_key] = []
         ROW_ERROR_CACHE[cache_key] = message
