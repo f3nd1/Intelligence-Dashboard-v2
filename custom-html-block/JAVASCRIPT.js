@@ -2513,6 +2513,68 @@ openModal(`Criterion ${config.number} readiness`,`<div class="ucc-demo-modal-not
 }
 function showDiagnostics(config,dashboard){const state=dashboardState(dashboard),result=state.result,logs=state.logs;openModal(`Criterion ${config.number} diagnostics`,`<div class="table-wrap"><table><thead><tr><th>Time</th><th>Level</th><th>Event</th><th>Detail</th></tr></thead><tbody>${logs.map(row=>`<tr><td>${esc(row.time)}</td><td>${statusBadge(row.level)}</td><td>${esc(row.event)}</td><td>${esc(row.detail)}</td></tr>`).join("")||'<tr><td colspan="4">No diagnostic events.</td></tr>'}</tbody></table></div><div class="ucc-demo-modal-note">API: ${esc(config.apiMethod)} · Section: ${esc(result?.meta?.subcriterion||apiSection(config,dashboard,activeSection(dashboard)))}</div>`);}
 async function handleAction(dashboard,action){const config=CONFIG[dashboard.dataset.demoDashboard],state=dashboardState(dashboard),result=state.result;if(action==="dismiss-readiness"){const notice=dashboard.querySelector("[data-demo-readiness]");if(notice){notice.dataset.dismissed="1";notice.hidden=true;}return;}if(action==="refresh")await loadLive(dashboard,true);if(action==="export-qa"){const rows=[["Section","Question","Answer","Source","Status"],...allQaRows(result)];download(`criterion_${config.number}_live_qa.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="export-exceptions"){const rows=[["Metric","Label","Value","Status","Source"],...allExceptionRows(result)];download(`criterion_${config.number}_live_exceptions.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="export-table"){const rows=[["Metric","Value","Unit","Status","Source"],...(result?.metrics||[]).map(item=>[item.label,item.value,item.unit,item.status,item.doctype||item.source])];download(`criterion_${config.number}_${result?.meta?.subcriterion||"section"}_live_metrics.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="copy-link"){const url=new URL(location.href);url.searchParams.set("dashboard",dashboard.dataset.demoDashboard);url.searchParams.set("live_tab",activeSection(dashboard));navigator.clipboard?.writeText(url.toString()).catch(()=>{});}if(action==="diagnostics")showDiagnostics(config,dashboard);if(action==="readiness")openReadiness(config,dashboard);}
+// ---- Dashboard visibility (interface composition only) ---------------------
+// Decides which workspaces and criteria are BUILT. It never changes what data
+// a user may read: every data call keeps its own Frappe permission check, and a
+// hidden tab neither grants nor removes access to anything.
+const ACCESS_WORKSPACE_PANELS={analytics:"analytics",explore:"explore",ask:"ask"};
+function fetchDashboardAccess(){
+return new Promise(function(resolve){
+if(!(window.frappe&&frappe.call)){resolve(null);return;}
+let settled=false;
+const done=function(value){if(!settled){settled=true;resolve(value);}};
+// Fail open on anything at all - a slow or broken lookup must never lock a
+// user out of a dashboard they are entitled to use.
+window.setTimeout(function(){done(null);},8000);
+try{
+frappe.call({
+method:"ucc_dashboard_access",
+args:{},
+callback:function(response){
+const message=response&&response.message;
+done(message&&message.criteria?message:null);
+},
+error:function(){done(null);}
+});
+}catch(error){done(null);}
+});
+}
+function applyDashboardAccess(access){
+if(!access||!access.criteria)return{applied:"fail_open",hiddenCriteria:[],hiddenWorkspaces:[]};
+const hiddenCriteria=[],hiddenWorkspaces=[];
+// Criteria: drop the mount point and the CONFIG entry BEFORE mounting, so the
+// tab bar and panels for a hidden criterion are never constructed at all.
+Object.keys(CONFIG).forEach(function(criterionId){
+if(access.criteria[criterionId]===false){
+hiddenCriteria.push(criterionId);
+const node=platform.querySelector('[data-dashboard-panel="'+CSS.escape(criterionId)+'"]');
+if(node&&node.parentNode)node.parentNode.removeChild(node);
+delete CONFIG[criterionId];
+}
+});
+// The dashboard picker options are static markup, so prune them separately and
+// re-point the selection if the current choice has just been removed.
+const select=platform.querySelector("#uccDashboardSelect");
+if(select){
+Array.from(select.options).forEach(function(option){
+if(option.value&&access.criteria[option.value]===false)option.remove();
+});
+if(select.options.length&&!CONFIG[select.value])select.value=select.options[0].value;
+}
+// Workspaces: remove the switcher button and its panel together.
+const workspaces=(access&&access.workspaces)||{};
+Object.keys(ACCESS_WORKSPACE_PANELS).forEach(function(key){
+if(workspaces[key]===false){
+hiddenWorkspaces.push(key);
+const button=platform.querySelector('[data-ucc-workspace="'+CSS.escape(key)+'"]');
+if(button&&button.parentNode)button.parentNode.removeChild(button);
+const panel=platform.querySelector('[data-ucc-workspace-panel="'+CSS.escape(key)+'"]');
+if(panel&&panel.parentNode)panel.parentNode.removeChild(panel);
+}
+});
+return{applied:access.applied||"role_configuration",hiddenCriteria:hiddenCriteria,hiddenWorkspaces:hiddenWorkspaces};
+}
+function bootstrapDashboards(){
 mountUnifiedDashboards();
 platform.querySelectorAll("[data-demo-dashboard]").forEach(function(dashboard){const config=CONFIG[dashboard.dataset.demoDashboard];if(!config)return;ensureLiveVisualCards(dashboard,config);syncLiveSectionVisibility(dashboard,"overview");dashboard.dataset.liveApi="1";dashboard.querySelectorAll("[data-demo-tab]").forEach(button=>button.addEventListener("click",()=>showTab(dashboard,button.dataset.demoTab)));dashboard.querySelectorAll("[data-demo-filter]").forEach(input=>input.addEventListener("change",()=>loadLive(dashboard,true)));dashboard.addEventListener("ucc:live-tool-action",function(event){const action=event.detail&&event.detail.action;const mapped=action==="export-current"?"export-table":action;if(mapped)handleAction(dashboard,mapped);});dashboard.addEventListener("click",function(event){
 const sourceButton=event.target.closest("[data-live-source-doctype]");
@@ -2538,6 +2600,15 @@ if(drill){event.preventDefault();openRecords(config,drill.dataset.demoDrill,dash
 const viewButton=event.target.closest("[data-demo-view]");
 if(viewButton){const card=viewButton.closest("[data-demo-card]");if(!card)return;renderLiveChartCardNow(card);card.querySelectorAll("[data-demo-view]").forEach(button=>button.classList.toggle("active",button===viewButton));const diagram=card.querySelector("[data-demo-chart]"),table=card.querySelector("[data-demo-chart-table]");if(diagram)diagram.classList.toggle("hidden",viewButton.dataset.demoView!=="diagram");if(table)table.classList.toggle("hidden",viewButton.dataset.demoView!=="table");}
 });dashboard.dataset.demoActiveTab="overview";dashboard.querySelectorAll("[data-demo-panel]").forEach(panel=>panel.classList.toggle("hidden",panel.dataset.demoPanel!=="overview"));if(!dashboard.classList.contains("ucc-hidden"))loadLive(dashboard);else renderReadiness(dashboard,config,null);});platform.addEventListener("ucc:dashboard-change",event=>{const id=event.detail&&event.detail.dashboard;if(!id)return;const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(id)}"]`);if(dashboard)loadLive(dashboard);});
+}
+fetchDashboardAccess().then(function(access){
+const outcome=applyDashboardAccess(access);
+platform.dataset.uccAccessApplied=outcome.applied;
+if(outcome.hiddenCriteria.length)platform.dataset.uccHiddenCriteria=outcome.hiddenCriteria.join(",");
+if(outcome.hiddenWorkspaces.length)platform.dataset.uccHiddenWorkspaces=outcome.hiddenWorkspaces.join(",");
+bootstrapDashboards();
+});
+
 platform.addEventListener("click",function(event){
 const sourceButton=event.target.closest("[data-live-source-doctype]");
 if(!sourceButton||sourceButton.closest("[data-demo-dashboard]"))return;
