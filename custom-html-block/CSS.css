@@ -2085,3 +2085,15 @@
     min-height:340px;
   }
 }
+
+/* Shared permission-denied notice: one look for every blocked view across all
+   dashboards. Amber (not red) - this is a boundary, not a fault. */
+.ucc-perm-notice{display:flex;gap:10px;align-items:flex-start;margin:8px 0;padding:12px 14px;border:1px solid #fcd34d;border-radius:10px;background:#fffbeb;color:#92400e;text-align:left}
+.ucc-perm-notice-icon{flex:0 0 auto;font-size:15px;line-height:1.3}
+.ucc-perm-notice-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ucc-perm-notice-body strong{color:#7c2d12;font-size:12.5px;font-weight:800;line-height:1.35}
+.ucc-perm-notice-body span{font-size:11px;line-height:1.45}
+.ucc-perm-notice-source b{font-weight:750}
+.ucc-perm-notice.is-compact{margin:4px 0;padding:8px 10px}
+.ucc-perm-notice.is-compact .ucc-perm-notice-body strong{font-size:11.5px}
+.ucc-perm-notice.is-compact .ucc-perm-notice-body span{font-size:10px}

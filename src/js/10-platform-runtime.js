@@ -3389,6 +3389,7 @@ state.moduleRecords = response && Array.isArray(response.message)
 } catch (error) {
 console.warn("Recruitment agents could not be loaded", error);
 state.moduleRecords = [];
+setModuleLoadNotice(error, "Recruitment agents", "Agent Contract");
 }
 return state.moduleRecords;
 }
@@ -3414,6 +3415,7 @@ state.moduleRecords = response && Array.isArray(response.message)
 } catch (error) {
 console.warn("Quality Actions could not be loaded", error);
 state.moduleRecords = [];
+setModuleLoadNotice(error, "Quality Actions", "Quality Action");
 }
 return state.moduleRecords;
 }
@@ -3474,6 +3476,7 @@ const recovered = safeArray(directory).length;
 if (kind === "Permission denied") {
 state.rollNotice = {
 tone: recovered ? "partial" : "blocked",
+permission: !recovered, view: "The student list", source: UCCShared.permissionSource(detail, "Assessment Result"),
 text: recovered
 ? "Showing the records your account can read. The full student list needs read access to every source used by the Student Roll report (including Assessment Result), so some students may be missing."
 : "Student list unavailable: your account lacks read access to a required source (including Assessment Result). Ask an administrator for read permission on the Student Roll report sources.",
@@ -3530,12 +3533,34 @@ state.studentDirectory = [];
 }
 return state.studentDirectory;
 }
+// Any Ask UCC module whose record list fails to load explains why, instead of
+// leaving an empty picker. Permission blocks get the shared wording.
+function setModuleLoadNotice(error, label, sourceName) {
+const detail = UCCShared.errorText(error);
+state.rollNotice = UCCShared.isPermissionError(detail)
+? { tone: "blocked", permission: true, view: label,
+    source: UCCShared.permissionSource(detail, sourceName),
+    text: label + " unavailable: your account doesn't have read access to " + UCCShared.permissionSource(detail, sourceName) + ". Ask an administrator to grant access if you need to see this.",
+    detail: detail }
+: { tone: "blocked", view: label, source: sourceName,
+    text: label + " could not be loaded.", detail: detail };
+}
 function renderSourceNotice() {
 if (!sourceNotice) return;
-const notice = state.activeModule === "student_journey" ? state.rollNotice : null;
+const notice = state.rollNotice;
 sourceNotice.hidden = !notice;
-sourceNotice.textContent = notice ? notice.text : "";
-if (notice && notice.detail) sourceNotice.title = notice.detail;
+if (!notice) { sourceNotice.innerHTML = ""; sourceNotice.removeAttribute("title"); return; }
+// Permission blocks use the shared platform-wide notice so Ask UCC reads the
+// same as every dashboard; other failures keep the plain sentence.
+if (notice.permission) {
+sourceNotice.classList.remove("aja-warning");
+sourceNotice.innerHTML = UCCShared.permissionNoticeHtml({view: notice.view || "This list", source: notice.source, detail: notice.detail, compact: true});
+sourceNotice.removeAttribute("title");
+} else {
+sourceNotice.classList.add("aja-warning");
+sourceNotice.textContent = notice.text;
+if (notice.detail) sourceNotice.title = notice.detail;
+}
 }
 async function sendQuestion(question, selectedApplicant, showUserMessage) {
 const text = cleanText(question);

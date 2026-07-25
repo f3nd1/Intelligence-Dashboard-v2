@@ -91,6 +91,49 @@ if (/unknown column|field .* not found|invalid field/i.test(text)) return "Field
 return "Request failed";
 }
 
+// ---- Shared "permission denied" notice -------------------------------------
+// One component for every dashboard so a blocked view reads the same way
+// everywhere: what you were trying to see, which source is blocked, and one
+// plain-language line about what to do. Raw Frappe text is never shown to the
+// end user - it is carried in the title attribute for support only.
+function isPermissionError(error) {
+return classifyError(typeof error === "string" ? error : errorText(error)) === "Permission denied";
+}
+
+// Pull the DocType out of a Frappe permission error ("No permission to read
+// Assessment Result"), so the notice can name the blocked source precisely.
+function permissionSource(error, fallbackName) {
+const text = typeof error === "string" ? error : errorText(error);
+const match = text.match(/(?:permission to (?:read|write|create)|not permitted to (?:read|access))\s+([A-Z][A-Za-z0-9 _-]*)/);
+let name = match ? match[1].trim() : "";
+name = name.replace(/\s+(is|was|has|for|in|on|of|from|and|to)\s.*$/i, "").trim();
+return name || fallbackName || "this data source";
+}
+
+function permissionNoticeHtml(options) {
+const opts = options || {};
+const view = opts.view || "This view";
+const source = opts.source || "this data source";
+const detail = opts.detail ? String(opts.detail) : "";
+const cls = "ucc-perm-notice" + (opts.compact ? " is-compact" : "");
+return '<div class="' + cls + '" role="note"' + (detail ? ' title="' + escapeHtml(detail) + '"' : "") + ">"
++ '<span class="ucc-perm-notice-icon" aria-hidden="true">&#128274;</span>'
++ '<div class="ucc-perm-notice-body">'
++ "<strong>" + escapeHtml(view) + " is not available to your account</strong>"
++ '<span class="ucc-perm-notice-source">Blocked data source: <b>' + escapeHtml(source) + "</b></span>"
++ "<span>Your account doesn't have read access to this. Ask an administrator to grant access if you need to see this.</span>"
++ "</div></div>";
+}
+
+// Replace a card/panel's contents with the notice, so a blocked section shows
+// the explanation in place of the missing chart or table rather than vanishing.
+function renderPermissionNotice(node, options) {
+if (!node) return false;
+node.innerHTML = permissionNoticeHtml(options);
+node.dataset.uccPermissionBlocked = "1";
+return true;
+}
+
 function readStorage(key, fallback) {
 try {
 const value = localStorage.getItem(key);
@@ -115,6 +158,10 @@ doctypeRoute,
 openDoctype,
 errorText,
 classifyError,
+isPermissionError,
+permissionSource,
+permissionNoticeHtml,
+renderPermissionNotice,
 readStorage,
 writeStorage
 });
@@ -1098,6 +1145,7 @@ state.moduleRecords = response && Array.isArray(response.message)
 } catch (error) {
 console.warn("Recruitment agents could not be loaded", error);
 state.moduleRecords = [];
+setModuleLoadNotice(error, "Recruitment agents", "Agent Contract");
 }
 return state.moduleRecords;
 }
@@ -1123,6 +1171,7 @@ state.moduleRecords = response && Array.isArray(response.message)
 } catch (error) {
 console.warn("Quality Actions could not be loaded", error);
 state.moduleRecords = [];
+setModuleLoadNotice(error, "Quality Actions", "Quality Action");
 }
 return state.moduleRecords;
 }
@@ -1183,6 +1232,7 @@ const recovered = safeArray(directory).length;
 if (kind === "Permission denied") {
 state.rollNotice = {
 tone: recovered ? "partial" : "blocked",
+permission: !recovered, view: "The student list", source: UCCShared.permissionSource(detail, "Assessment Result"),
 text: recovered
 ? "Showing the records your account can read. The full student list needs read access to every source used by the Student Roll report (including Assessment Result), so some students may be missing."
 : "Student list unavailable: your account lacks read access to a required source (including Assessment Result). Ask an administrator for read permission on the Student Roll report sources.",
@@ -1239,12 +1289,34 @@ state.studentDirectory = [];
 }
 return state.studentDirectory;
 }
+// Any Ask UCC module whose record list fails to load explains why, instead of
+// leaving an empty picker. Permission blocks get the shared wording.
+function setModuleLoadNotice(error, label, sourceName) {
+const detail = UCCShared.errorText(error);
+state.rollNotice = UCCShared.isPermissionError(detail)
+? { tone: "blocked", permission: true, view: label,
+    source: UCCShared.permissionSource(detail, sourceName),
+    text: label + " unavailable: your account doesn't have read access to " + UCCShared.permissionSource(detail, sourceName) + ". Ask an administrator to grant access if you need to see this.",
+    detail: detail }
+: { tone: "blocked", view: label, source: sourceName,
+    text: label + " could not be loaded.", detail: detail };
+}
 function renderSourceNotice() {
 if (!sourceNotice) return;
-const notice = state.activeModule === "student_journey" ? state.rollNotice : null;
+const notice = state.rollNotice;
 sourceNotice.hidden = !notice;
-sourceNotice.textContent = notice ? notice.text : "";
-if (notice && notice.detail) sourceNotice.title = notice.detail;
+if (!notice) { sourceNotice.innerHTML = ""; sourceNotice.removeAttribute("title"); return; }
+// Permission blocks use the shared platform-wide notice so Ask UCC reads the
+// same as every dashboard; other failures keep the plain sentence.
+if (notice.permission) {
+sourceNotice.classList.remove("aja-warning");
+sourceNotice.innerHTML = UCCShared.permissionNoticeHtml({view: notice.view || "This list", source: notice.source, detail: notice.detail, compact: true});
+sourceNotice.removeAttribute("title");
+} else {
+sourceNotice.classList.add("aja-warning");
+sourceNotice.textContent = notice.text;
+if (notice.detail) sourceNotice.title = notice.detail;
+}
 }
 async function sendQuestion(question, selectedApplicant, showUserMessage) {
 const text = cleanText(question);
@@ -2056,6 +2128,10 @@ return message;
 function apiErrorMessage(error){
 if(!error)return"Analytics request failed.";
 if(typeof error==="string")return error;
+// Read the xhr the same way the shared helper does, so a 403/PermissionError
+// carried on responseJSON survives to the point where it can be classified.
+const shared=UCCShared.errorText(error);
+if(shared&&shared!=="Request failed")return shared;
 if(error.message)return String(error.message);
 if(error._server_messages){
 try{
@@ -2070,7 +2146,7 @@ return error.exc_type||error.statusText||"Analytics request failed.";
 }
 function csvCell(value){const text=String(value==null?"":value);return/[",\n]/.test(text)?`"${text.replaceAll('"','""')}"`:text;}
 function download(name,content,type="text/csv;charset=utf-8"){const blob=new Blob(["\ufeff",content],{type});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);}
-function statusBadge(status){const raw=String(status||"available"),label=raw.replaceAll("_"," ");const cls=/risk|error|denied|unavailable|failed/i.test(raw)?"risk":/warn|unsupported|partial|pending|overdue/i.test(raw)?"warning":"good";return`<span class="ucc-demo-status ${cls}">${esc(label)}</span>`;}
+function statusBadge(status){const raw=String(status||"available"),label=raw.replaceAll("_"," ");const cls=/risk|error|denied|unavailable|failed/i.test(raw)?"risk":/warn|unsupported|partial|pending|overdue/i.test(raw)?"warning":"good";const tip=/denied|not permitted/i.test(raw)?' title="Your account does not have read access to this. Ask an administrator to grant access if you need to see this."':"";return`<span class="ucc-demo-status ${cls}"${tip}>${esc(label)}</span>`;}
 function activeSection(dashboard){return dashboard.dataset.demoActiveTab||"overview";}
 function sectionDefinition(config,tab){const key=(config.panelMap&&config.panelMap[tab])||tab;return config.sections[tab]||config.sections[key]||config.sections.overview;}
 function liveChartCardMarkup(chart){
@@ -2272,9 +2348,25 @@ const size=Math.min(5,metrics.length),start=(chartIndex*size)%metrics.length,row
 for(let i=0;i<size;i++){const metric=metrics[(start+i)%metrics.length];rows.push([metric.label,finiteNumber(metric.value,0),metric]);}
 return rows;
 }
+// Sources the API reported as permission-blocked for this user, display-named.
+function blockedSourceNames(result){
+const rows=(result&&result.sources)||[];
+const out=[];
+rows.forEach(function(s){
+const st=String(s&&(s.status||"")).toLowerCase();
+if(st==="permission_denied"||st==="not permitted"||st==="permission denied"){
+const n=displayDoctypeName(s.doctype||s.name||s.label);
+if(n&&out.indexOf(n)===-1)out.push(n);
+}
+});
+return out;
+}
 function chartForLive(node,chart,rows){
 node.dataset.visualRenderAttempted="1";
-if(!rows.length){node.innerHTML='<div class="ucc-live-empty"><strong>No live metric is readable for this section</strong><span>Open Source Mapping Report to see the exact DocType, permission or field issue.</span><button type="button" data-ucc-open-mapping>Source mapping report</button></div>';return;}
+if(!rows.length){
+const blocked=blockedSourceNames(node._liveResult);
+if(blocked.length){node.innerHTML=UCCShared.permissionNoticeHtml({view:chart&&chart.title?chart.title:"This visual",source:blocked.join(", "),compact:true});node.dataset.uccPermissionBlocked="1";return;}
+node.innerHTML='<div class="ucc-live-empty"><strong>No live metric is readable for this section</strong><span>Open Source Mapping Report to see the exact DocType, permission or field issue.</span><button type="button" data-ucc-open-mapping>Source mapping report</button></div>';return;}
 const pairs=rows.map(row=>[row[0],finiteNumber(row[1],0)]).filter(row=>Number.isFinite(row[1]));
 if(!pairs.length){node.innerHTML='<div class="ucc-live-empty"><strong>The returned metrics are not numeric</strong><span>The visual was stopped before an invalid SVG path could be produced.</span><button type="button" data-ucc-open-mapping>Source mapping report</button></div>';return;}
 try{
@@ -2317,9 +2409,9 @@ function renderLiveChartCardNow(card){
 if(!card||!card._liveCardPending||card.dataset.liveCardRendered==="1")return;
 const{chart,index,result}=card._liveCardPending;
 const rows=metricRows(result,index,chart),chartNode=card.querySelector("[data-demo-chart]"),tableBody=card.querySelector("[data-demo-chart-table-body]");
-if(chartNode){chartNode.dataset.demoChartTitle=chart.title;chartNode.dataset.demoChartType=chart.type||"bar";chartForLive(chartNode,chart,rows);}
+if(chartNode){chartNode.dataset.demoChartTitle=chart.title;chartNode.dataset.demoChartType=chart.type||"bar";chartNode._liveResult=result;chartForLive(chartNode,chart,rows);}
 if(tableBody){
-tableBody.innerHTML=rows.length?rows.map(row=>{const metric=row[2],synthetic=row[3]===true,value=synthetic?Number(row[1]||0).toLocaleString():metric?metricValue(metric):Number(row[1]||0).toLocaleString(),status=metric?.status||"available";return`<tr><td>${esc(row[0])}</td><td>${esc(value)}</td><td>${statusBadge(status)}</td></tr>`;}).join(""):'<tr><td colspan="3">No available metric for this visual.</td></tr>';
+tableBody.innerHTML=rows.length?rows.map(row=>{const metric=row[2],synthetic=row[3]===true,value=synthetic?Number(row[1]||0).toLocaleString():metric?metricValue(metric):Number(row[1]||0).toLocaleString(),status=metric?.status||"available";return`<tr><td>${esc(row[0])}</td><td>${esc(value)}</td><td>${statusBadge(status)}</td></tr>`;}).join(""):(blockedSourceNames(result).length?'<tr><td colspan="3">'+UCCShared.permissionNoticeHtml({view:(chart&&chart.title)||"This visual",source:blockedSourceNames(result).join(", "),compact:true})+'</td></tr>':'<tr><td colspan="3">No available metric for this visual.</td></tr>');
 }
 card.dataset.liveCardRendered="1";
 }
@@ -2361,7 +2453,27 @@ return`<tr><td><div>${esc(sourceName)}</div>${action}</td><td>${esc(row.key||"So
 }
 function renderQuality(dashboard,result){const target=dashboard.querySelector(`[data-demo-quality="${CSS.escape(dashboard.dataset.demoDashboard)}"]`);if(!target)return;const rows=result?.data_quality||[];target.innerHTML=rows.length?rows.map(row=>`<tr><td>${esc(row.check)}</td><td>${esc(row.source)}</td><td>${statusBadge(row.status)}</td><td>${esc(row.detail)}</td></tr>`).join(""):'<tr><td>Live source and metric checks</td><td>0</td><td>'+statusBadge("available")+'</td><td>No readiness issue returned.</td></tr>';}
 function renderReadiness(dashboard,config,result){const notice=dashboard.querySelector("[data-demo-readiness]"),title=dashboard.querySelector("[data-demo-readiness-title]"),copy=dashboard.querySelector("[data-demo-readiness-copy]");if(!result){if(notice)notice.dataset.status="loading";if(title)title.textContent=`Loading Criterion ${config.number} analytics…`;if(copy)copy.textContent="Waiting for the live data connection and current-user permission checks.";return;}const ss=result.source_summary||{},ms=result.metric_summary||{},sA=ss.available||0,sT=ss.total||0,mA=ms.available||0,mT=ms.total||0,issues=Math.max(0,sT-sA)+Math.max(0,mT-mA);if(notice)notice.dataset.status=issues?"warning":"available";if(title)title.textContent=`Criterion ${config.number} live analytics active${issues?" with limitations":""}.`;if(copy)copy.textContent=`Live data connected · ${sA} of ${sT} sources available · ${mA} of ${mT} metrics available${issues?` · ${issues} item${issues===1?"":"s"} need review`:""}`;}
-function renderError(dashboard,config,error){const notice=dashboard.querySelector("[data-demo-readiness]"),title=dashboard.querySelector("[data-demo-readiness-title]"),copy=dashboard.querySelector("[data-demo-readiness-copy]");if(notice)notice.dataset.status="error";if(title)title.textContent=`Criterion ${config.number} live API unavailable.`;if(copy)copy.textContent=error.message||String(error);const mount=dashboard.querySelector("[data-demo-kpis]");if(mount)mount.innerHTML=`<article><span>API status</span><strong>Unavailable</strong><small>${esc(error.message||error)}</small></article>`;}
+function renderError(dashboard,config,error){
+const notice=dashboard.querySelector("[data-demo-readiness]"),title=dashboard.querySelector("[data-demo-readiness-title]"),copy=dashboard.querySelector("[data-demo-readiness-copy]");
+const detail=error&&error.message?error.message:String(error);
+const viewName=`Criterion ${config.number} ${config.title||""}`.trim();
+// A permission block is not an outage: name the view and the blocked source in
+// plain language and keep the raw Frappe text out of the user-facing copy.
+if(UCCShared.isPermissionError(detail)){
+const source=UCCShared.permissionSource(detail);
+if(notice)notice.dataset.status="warning";
+if(title)title.textContent=`${viewName} is not available to your account.`;
+if(copy)copy.textContent=`Blocked data source: ${source}. Your account doesn't have read access to this. Ask an administrator to grant access if you need to see this.`;
+const pmount=dashboard.querySelector("[data-demo-kpis]");
+if(pmount)pmount.innerHTML=UCCShared.permissionNoticeHtml({view:viewName,source:source,detail:detail});
+return;
+}
+if(notice)notice.dataset.status="error";
+if(title)title.textContent=`Criterion ${config.number} live API unavailable.`;
+if(copy)copy.textContent=detail;
+const mount=dashboard.querySelector("[data-demo-kpis]");
+if(mount)mount.innerHTML=`<article><span>API status</span><strong>Unavailable</strong><small>${esc(detail)}</small></article>`;
+}
 function updateDashboardIdentity(dashboard,config,tab){
 const isAdmission=dashboard.dataset.demoDashboard==="criterion_4"&&tab==="4.1.1";
 dashboard.classList.toggle("ucc-admission-intelligence",isAdmission);
@@ -2918,7 +3030,9 @@ return `<tr><td>${esc(row.label || row.key)}</td><td>${esc((row.candidates || []
 }
 function renderMappingError(error) {
 lastMappingResult = null;
-mappingBody.innerHTML = '<div class="ucc-visual-diagnostic"><strong>Source diagnostics could not be loaded</strong><span>' + esc(error?.message || error || "Unknown API error") + '</span></div>';
+mappingBody.innerHTML = UCCShared.isPermissionError(error?.message || error || "")
+        ? UCCShared.permissionNoticeHtml({view: "The source mapping report", source: UCCShared.permissionSource(error?.message || String(error)), detail: String(error?.message || error), compact: true})
+        : '<div class="ucc-visual-diagnostic"><strong>Source diagnostics could not be loaded</strong><span>' + esc(error?.message || error || "Unknown API error") + '</span></div>';
 }
 function openSourceMapping(dashboard) {
 lastMappingResult = null;
