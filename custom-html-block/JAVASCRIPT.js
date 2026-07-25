@@ -2461,7 +2461,7 @@ const viewName=`Criterion ${config.number} ${config.title||""}`.trim();
 // plain language and keep the raw Frappe text out of the user-facing copy.
 if(UCCShared.isPermissionError(detail)){
 const source=UCCShared.permissionSource(detail);
-if(notice)notice.dataset.status="warning";
+if(notice)notice.dataset.status="blocked";
 if(title)title.textContent=`${viewName} is not available to your account.`;
 if(copy)copy.textContent=`Blocked data source: ${source}. Your account doesn't have read access to this. Ask an administrator to grant access if you need to see this.`;
 const pmount=dashboard.querySelector("[data-demo-kpis]");

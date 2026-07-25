@@ -1336,3 +1336,9 @@
 .ucc-perm-notice.is-compact{margin:4px 0;padding:8px 10px}
 .ucc-perm-notice.is-compact .ucc-perm-notice-body strong{font-size:11.5px}
 .ucc-perm-notice.is-compact .ucc-perm-notice-body span{font-size:10px}
+/* Blocked-by-permission tone for the criterion readiness banner: amber, so it
+   reads as a boundary rather than the red used for genuine errors. */
+[data-status="blocked"]{border-color:#fcd34d !important;border-left-color:#ce9e5d !important;color:#92400e !important;background:#fffbeb !important}
+/* The KPI strip is a 6-column grid; a blocked notice must span the whole row
+   instead of being squeezed into the first tile. */
+.kpis .ucc-perm-notice,.ucc-shared-kpis .ucc-perm-notice{grid-column:1/-1}
