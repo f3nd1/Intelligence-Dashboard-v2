@@ -142,9 +142,57 @@ def union_of(rows):
     return payload
 
 
+def assigned_roles(user):
+    # frappe.get_roles() returns the EFFECTIVE role set, not the roles listed on
+    # the User record. For Administrator it expands to every enabled Role on the
+    # site, so ANY configured row would match an administrator and silently
+    # apply another role's restriction - the reported bug. Match against the
+    # Has Role rows instead, which are exactly what the User form shows and what
+    # an admin edits. Fall back to get_roles() only if that read fails, so a
+    # lookup fault never changes who matches.
+    try:
+        rows = frappe.get_all(
+            "Has Role",
+            filters={"parent": user, "parenttype": "User"},
+            fields=["role"],
+            limit_page_length=500,
+            ignore_permissions=True
+        )
+    except Exception:
+        try:
+            rows = frappe.get_all(
+                "Has Role",
+                filters={"parent": user, "parenttype": "User"},
+                fields=["role"],
+                limit_page_length=500
+            )
+        except Exception:
+            return [frappe.get_roles() or [], "effective_roles_fallback"]
+    output = []
+    for row in rows or []:
+        name = clean_text(row.get("role"))
+        if name and name not in output:
+            output.append(name)
+    return [output, "assigned_roles"]
+
+
+def role_key(value):
+    # Role names are matched exactly by Frappe, but a configuration row typed
+    # with different casing or a stray space should still match rather than
+    # silently never applying.
+    return clean_text(value).lower()
+
+
 def build_response():
     user = frappe.session.user
-    roles = frappe.get_roles() or []
+    roles_result = assigned_roles(user)
+    roles = roles_result[0]
+    roles_source = roles_result[1]
+    role_lookup = []
+    for role_name in roles:
+        key = role_key(role_name)
+        if key and key not in role_lookup:
+            role_lookup.append(key)
     rows = load_rows()
 
     default_result = resolve_default(rows)
@@ -155,7 +203,7 @@ def build_response():
     matched_roles = []
     for row in rows:
         row_role = clean_text(row.get("role"))
-        if row_role and row_role in roles:
+        if row_role and role_key(row_role) in role_lookup:
             matched.append(row)
             if row_role not in matched_roles:
                 matched_roles.append(row_role)
@@ -179,6 +227,7 @@ def build_response():
         },
         "user": user,
         "roles": roles,
+        "roles_source": roles_source,
         "matched_roles": matched_roles,
         "configured_rows": len(rows),
         "applied": applied,

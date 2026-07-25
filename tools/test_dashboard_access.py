@@ -17,10 +17,12 @@ body = source[: source.index("\ntry:\n    frappe.response")]
 
 
 class Frappe:
-    def __init__(self, roles, rows, explode=False):
+    def __init__(self, roles, rows, explode=False, assigned="same"):
         self._roles = roles
         self._rows = rows
         self._explode = explode
+        # assigned = what the User form lists; defaults to matching get_roles()
+        self._assigned = list(roles) if assigned == "same" else assigned
         self.session = type("S", (), {"user": "someone@example.com"})()
         self.utils = type("U", (), {"now": staticmethod(lambda: "2026-07-25 00:00:00")})()
 
@@ -28,13 +30,18 @@ class Frappe:
         return list(self._roles)
 
     def get_all(self, doctype, **kwargs):
+        if doctype == "Has Role":
+            # mirrors the User form's Roles grid
+            if self._assigned is None:
+                raise RuntimeError("Has Role unreadable")
+            return [{"role": r} for r in self._assigned]
         if self._explode:
             raise RuntimeError("no read access to UCC Dashboard Access")
         return [dict(r) for r in self._rows]
 
 
-def load(roles, rows, explode=False):
-    scope = {"frappe": Frappe(roles, rows, explode)}
+def load(roles, rows, explode=False, assigned="same"):
+    scope = {"frappe": Frappe(roles, rows, explode, assigned)}
     exec(compile(body, "access", "exec"), scope)  # noqa: S102 - code under test
     return scope
 
@@ -153,4 +160,43 @@ assert '"enabled": 1' in source, "must filter enabled rows server-side"
 for banned in ("has_permission", "frappe.get_doc(", "frappe.db.sql"):
     assert banned not in source, f"unexpected data-permission surface: {banned}"
 
-print("PASS: dashboard access resolution (a-e + defaults, truthiness, union) - 14 scenarios")
+# (f) REGRESSION - the reported bug. frappe.get_roles() returns the EFFECTIVE
+# role set, which for Administrator expands to every Role on the site. A user
+# whose User form lists none of the configured roles must get the default, never
+# another role's configuration.
+s = load(
+    # effective roles (what get_roles would have returned) include the configured role...
+    ["All", "Desk User", "Admin Manager", "System Manager"],
+    [row("Admin Manager", show_analytics=1, show_criterion_4=1)],
+    # ...but the User form lists none of them
+    assigned=["All", "Desk User"],
+)
+r = s["build_response"]()
+assert r["applied"] == "default_show_everything", \
+    "a user without the role must fall back to the default, got " + r["applied"]
+assert r["matched_roles"] == [], r["matched_roles"]
+assert len(visible_criteria(r)) == 7, visible_criteria(r)
+assert r["roles_source"] == "assigned_roles"
+
+# and the same user, once the role IS assigned, does get that configuration
+s = load(["All"], [row("Admin Manager", show_analytics=1, show_criterion_4=1)],
+         assigned=["All", "Admin Manager"])
+r = s["build_response"]()
+assert r["applied"] == "role_configuration"
+assert visible_criteria(r) == ["criterion_4"], visible_criteria(r)
+
+# a config row typed with different casing/spacing still matches
+s = load(["All"], [row("  admin manager ", show_criterion_4=1)], assigned=["All", "Admin Manager"])
+assert visible_criteria(s["build_response"]()) == ["criterion_4"]
+
+# if Has Role cannot be read at all, fall back to effective roles (never crash)
+s = load(["All", "Admin Manager"], [row("Admin Manager", show_criterion_4=1)], assigned=None)
+r = s["build_response"]()
+assert r["roles_source"] == "effective_roles_fallback", r["roles_source"]
+assert visible_criteria(r) == ["criterion_4"]
+
+# matching must not consult the effective role list when Has Role is readable
+assert "frappe.get_roles()" in source, "fallback path must still exist"
+assert "Has Role" in source, "must match against assigned roles"
+
+print("PASS: dashboard access resolution (a-e + defaults, truthiness, union) - 20 scenarios incl. the role-leak regression")

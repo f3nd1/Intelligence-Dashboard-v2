@@ -102,12 +102,85 @@ return classifyError(typeof error === "string" ? error : errorText(error)) === "
 
 // Pull the DocType out of a Frappe permission error ("No permission to read
 // Assessment Result"), so the notice can name the blocked source precisely.
+// Frappe words permission failures several ways depending on where the block
+// comes from (row-level read, role permission, DocType access). Cover the known
+// shapes so the notice can name ANY blocked DocType without per-DocType code.
+const PERMISSION_SOURCE_PATTERNS = [
+/(?:permission to (?:read|write|create|submit|delete))\s+([A-Z][A-Za-z0-9 _-]*)/,
+/not permitted to (?:read|access)\s+([A-Z][A-Za-z0-9 _-]*)/,
+/(?:for|on) (?:document|doctype)\s+([A-Z][A-Za-z0-9 _-]*)/i,
+/(?:No permission for|Insufficient Permission for)\s+([A-Z][A-Za-z0-9 _-]*)/i,
+/([A-Z][A-Za-z0-9 _-]*)\s+is not permitted/
+];
+
 function permissionSource(error, fallbackName) {
 const text = typeof error === "string" ? error : errorText(error);
-const match = text.match(/(?:permission to (?:read|write|create)|not permitted to (?:read|access))\s+([A-Z][A-Za-z0-9 _-]*)/);
-let name = match ? match[1].trim() : "";
+let name = "";
+for (let i = 0; i < PERMISSION_SOURCE_PATTERNS.length; i++) {
+const match = text.match(PERMISSION_SOURCE_PATTERNS[i]);
+if (match && match[1]) { name = match[1].trim(); break; }
+}
 name = name.replace(/\s+(is|was|has|for|in|on|of|from|and|to)\s.*$/i, "").trim();
+name = name.replace(/\s*\(HTTP \d+\)\s*$/, "").trim();
 return name || fallbackName || "this data source";
+}
+
+// ---- Generic suppression of Frappe's raw permission dialog ------------------
+// Frappe pops its own Message box for any server message, so a permission block
+// on ANY DocType surfaces as raw text over the interface. Wrapping msgprint once
+// intercepts every one of them - today's DocType and whatever gets restricted
+// next - with no per-script or per-DocType change. Only permission-shaped
+// messages are swallowed; everything else is passed straight through untouched.
+const blockedSourceLog = [];
+
+function noteBlockedSource(name, detail) {
+const clean = String(name || "").trim();
+if (!clean) return;
+for (let i = 0; i < blockedSourceLog.length; i++) {
+if (blockedSourceLog[i].source === clean) return;
+}
+blockedSourceLog.push({ source: clean, detail: String(detail || "") });
+}
+
+function blockedSources() {
+return blockedSourceLog.slice();
+}
+
+function messageTextOf(value) {
+if (!value) return "";
+if (typeof value === "string") return value;
+if (typeof value === "object") {
+// Take the message body alone. Joining the title in would let a generic title
+// ("Message") be swallowed into the extracted DocType name.
+const candidates = [value.message, value.raw_message, value.title];
+for (let i = 0; i < candidates.length; i++) {
+if (typeof candidates[i] === "string" && candidates[i].trim()) return candidates[i];
+}
+}
+return "";
+}
+
+function installPermissionMessageFilter() {
+const host = typeof global !== "undefined" ? global : window;
+if (!host || !host.frappe || typeof host.frappe.msgprint !== "function") return false;
+if (host.frappe.msgprint.uccPermissionFilter) return true;
+const original = host.frappe.msgprint;
+const wrapped = function () {
+try {
+const text = messageTextOf(arguments[0]);
+if (text && isPermissionError(text)) {
+noteBlockedSource(permissionSource(text), text);
+return undefined;   // swallow the raw dialog; the in-app notice covers it
+}
+} catch (error) { /* never let the filter break a real message */ }
+return original.apply(this, arguments);
+};
+wrapped.uccPermissionFilter = true;
+Object.keys(original).forEach(function (key) {
+try { wrapped[key] = original[key]; } catch (error) {}
+});
+host.frappe.msgprint = wrapped;
+return true;
 }
 
 function permissionNoticeHtml(options) {
@@ -162,9 +235,19 @@ isPermissionError,
 permissionSource,
 permissionNoticeHtml,
 renderPermissionNotice,
+installPermissionMessageFilter,
+noteBlockedSource,
+blockedSources,
 readStorage,
 writeStorage
 });
+
+try { installPermissionMessageFilter(); } catch (error) {}
+if (global.document && global.document.addEventListener) {
+global.document.addEventListener("DOMContentLoaded", function () {
+try { installPermissionMessageFilter(); } catch (error) {}
+});
+}
 })(window);
 // Consolidates a dashboard's separate "Data Quality" and "Sources" tabs into a
 // single "Sources & Data Quality" tab: the Data Quality panel's content is moved

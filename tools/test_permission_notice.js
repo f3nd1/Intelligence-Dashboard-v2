@@ -48,4 +48,46 @@ assert.ok(node.innerHTML.includes("X is not available"));
 assert.strictEqual(node.dataset.uccPermissionBlocked, "1");
 assert.strictEqual(S.renderPermissionNotice(null, {}), false, "null node is a no-op, not a crash");
 
-console.log("PASS: shared permission notice (14 assertions)");
+// --- generic across DocTypes: the shapes Frappe actually emits ---
+const SHAPES = [
+  ["User x@y.z does not have doctype access via role permission for document Quality Action", "Quality Action"],
+  ["User x@y.z does not have doctype access via role permission for document Sales Invoice", "Sales Invoice"],
+  ["No permission to read Assessment Result", "Assessment Result"],
+  ["Insufficient Permission for Student Applicant", "Student Applicant"],
+  ["frappe.exceptions.PermissionError: No permission to read Course Schedule (HTTP 403)", "Course Schedule"],
+];
+SHAPES.forEach(function (pair) {
+  assert.strictEqual(S.isPermissionError(pair[0]), true, "must detect: " + pair[0]);
+  assert.strictEqual(S.permissionSource(pair[0]), pair[1], "must name the DocType in: " + pair[0]);
+});
+
+// --- msgprint filter: swallows permission popups, passes everything else ---
+const seen = [];
+const fakeFrappe = { msgprint: function (m) { seen.push(m); return "shown"; } };
+fakeFrappe.msgprint.somethingElse = 1;
+g.frappe = fakeFrappe;
+assert.strictEqual(S.installPermissionMessageFilter(), true, "filter must install");
+assert.strictEqual(g.frappe.msgprint.somethingElse, 1, "existing properties preserved");
+
+// a permission message on ANY DocType is swallowed and recorded
+g.frappe.msgprint("User a@b.c does not have doctype access via role permission for document Quality Action");
+g.frappe.msgprint({ message: "No permission to read Sales Invoice", title: "Message" });
+assert.deepStrictEqual(seen, [], "raw permission dialogs must NOT reach Frappe");
+const blocked = S.blockedSources().map(b => b.source).sort();
+assert.deepStrictEqual(blocked, ["Quality Action", "Sales Invoice"], blocked.join(","));
+
+// a normal message still goes through untouched
+g.frappe.msgprint("Document saved successfully");
+assert.deepStrictEqual(seen, ["Document saved successfully"], "non-permission messages must pass through");
+
+// installing twice must not double-wrap
+assert.strictEqual(S.installPermissionMessageFilter(), true);
+g.frappe.msgprint("Second save");
+assert.strictEqual(seen.length, 2, "no double wrapping");
+
+// a message object that throws while being read must not break msgprint
+const nasty = { get message() { throw new Error("boom"); } };
+g.frappe.msgprint(nasty);
+assert.strictEqual(seen.length, 3, "filter must fall through on internal error");
+
+console.log("PASS: shared permission notice + generic DocType filter (28 assertions)");
