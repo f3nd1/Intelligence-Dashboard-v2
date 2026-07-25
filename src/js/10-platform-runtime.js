@@ -285,16 +285,7 @@ setC5Notice(text,noticeStatus);
 // _server_messages) and status, none of which the old one-liner read, so it fell
 // back to a permission-sounding string and got misclassified. Append the HTTP
 // status so classifyError can key off 404/403 even when the body is empty.
-const errText=e=>{
-if(!e)return"Request failed";
-const rj=e.responseJSON||e._response||{};
-const status=e.httpStatus||e.status||rj.http_status_code;
-const flat=v=>Array.isArray(v)?v.join(" "):(typeof v==="string"?v:"");
-const parts=[e.message,rj.exception,rj.exc_type,flat(e._server_messages),flat(rj._server_messages),e.exc,rj.exc].filter(Boolean);
-let text=parts.join(" · ");
-if(status)text=(text?text+" ":"")+"(HTTP "+status+")";
-return text||"Request failed";
-};
+const errText=e=>UCCShared.errorText(e);
 $("[data-c5-readiness-details]")?.addEventListener("click",openC5ReadinessDetails);
 function setProgress(value,task){
 const overlay=$("[data-loading-overlay]"),fill=$("[data-progress-fill]");
@@ -302,13 +293,7 @@ overlay.classList.remove("hidden");fill.style.width=`${Math.max(0,Math.min(100,v
 set("[data-progress-value]",`${Math.round(value)}%`);set("[data-progress-task]",task);
 }
 function hideProgress(){setTimeout(()=>$("[data-loading-overlay]").classList.add("hidden"),180)}
-function classifyError(message){
-const text=String(message||"");
-if(/permission|not permitted|forbidden|403/i.test(text))return"Permission denied";
-if(/not found|does ?not ?exist|doesnotexist|no such|404/i.test(text))return"Not installed";
-if(/unknown column|field .* not found|invalid field/i.test(text))return"Field mismatch";
-return"Request failed";
-}
+function classifyError(message){return UCCShared.classifyError(message)}
 function call(method,args,context={}){
 const id=++state.requestSeq,start=performance.now();
 addLog("INFO","request","request_started",{id,method,context,args});
@@ -2690,6 +2675,7 @@ const clearChatButton = root.querySelector("#ajaClearChat");
 const controlledQuestions = root.querySelector("#ajaControlledQuestions");
 const studentSearch = root.querySelector("#ajaStudentSearch");
 const studentMatches = root.querySelector("#ajaStudentMatches");
+const sourceNotice = root.querySelector("#ajaSourceNotice");
 const studentPager = root.querySelector("#ajaStudentPager");
 const courseFilter = root.querySelector("#ajaCourseFilter");
 const recentStudents = root.querySelector("#ajaRecentStudents");
@@ -2712,6 +2698,11 @@ studentApplicant: "",
 studentName: "",
 history: [],
 studentRollRows: null,
+// Permission-aware fallback directory (Student Applicant) used for the record
+// picker when the Student Roll report is blocked. Kept separate from
+// studentRollRows so partial data is never posted back as roll evidence.
+studentDirectory: null,
+rollNotice: null,
 lastQuestion: "",
 recentStudents: [],
 lastResult: null,
@@ -2795,6 +2786,12 @@ currentStudentElement.textContent =
 (state.studentName || state.studentApplicant) +
 " (" + state.studentApplicant + ")";
 }
+// Rows behind the record picker: the Student Roll report when readable,
+// otherwise the permission-aware Student Applicant directory.
+function studentSourceRows() {
+const rows = safeArray(state.studentRollRows);
+return rows.length ? rows : safeArray(state.studentDirectory);
+}
 function uniqueStudentsFromRoll() {
 if (state.activeModule === "recruitment_agent") {
 return safeArray(state.moduleRecords).map(function (row) {
@@ -2823,7 +2820,7 @@ return a.name.localeCompare(b.name);
 });
 }
 const map = new Map();
-safeArray(state.studentRollRows).forEach(function (row) {
+studentSourceRows().forEach(function (row) {
 const id = cleanText(row.student_applicant_id);
 const name = cleanText(row.student_name);
 if (!id || map.has(id)) return;
@@ -2842,7 +2839,7 @@ const courses = new Set();
 if (state.activeModule !== "student_journey") {
 return [];
 }
-safeArray(state.studentRollRows).forEach(function (row) {
+studentSourceRows().forEach(function (row) {
 const course = cleanText(row.course);
 if (course) courses.add(course);
 });
@@ -2975,7 +2972,9 @@ const pageItems = filtered.slice(startIndex, startIndex + pageSize);
 if (!pageItems.length) {
 const empty = document.createElement("div");
 empty.className = "aja-search-empty";
-empty.textContent = "No matching " + activeModuleConfig().entityLabel + " records.";
+empty.textContent = (state.activeModule === "student_journey" && state.rollNotice)
+? state.rollNotice.text
+: "No matching " + activeModuleConfig().entityLabel + " records.";
 studentMatches.appendChild(empty);
 }
 pageItems.forEach(function (item) {
@@ -3453,12 +3452,90 @@ state.studentRollRows =
 message && Array.isArray(message.result)
 ? message.result
 : [];
+state.rollNotice = null;
 } catch (error) {
 console.warn("Student Roll report could not be loaded", error);
 state.studentRollRows = [];
+await handleRollFailure(error);
 }
 renderCourseFilter();
+renderSourceNotice();
 return state.studentRollRows;
+}
+// The Student Roll report joins sources such as Assessment Result, so a user
+// without read access to every one of them gets a 403 for the whole report.
+// Classify the failure, then try the permission-aware directory so the picker
+// shows whatever that user IS allowed to read instead of nothing at all.
+async function handleRollFailure(error) {
+const detail = UCCShared.errorText(error);
+const kind = UCCShared.classifyError(detail);
+const directory = await loadStudentDirectoryFallback();
+const recovered = safeArray(directory).length;
+if (kind === "Permission denied") {
+state.rollNotice = {
+tone: recovered ? "partial" : "blocked",
+text: recovered
+? "Showing the records your account can read. The full student list needs read access to every source used by the Student Roll report (including Assessment Result), so some students may be missing."
+: "Student list unavailable: your account lacks read access to a required source (including Assessment Result). Ask an administrator for read permission on the Student Roll report sources.",
+detail: detail
+};
+return;
+}
+state.rollNotice = {
+tone: recovered ? "partial" : "blocked",
+text: recovered
+? "The full student list could not be loaded, so a reduced list is shown. Some students may be missing."
+: (kind === "Not installed"
+? "Student list unavailable: the Student Roll report is not available on this site."
+: "Student list unavailable: the Student Roll report could not be loaded."),
+detail: detail
+};
+}
+// Minimal permission-aware source for the record picker: Student Applicant
+// carries the same identifier the assistant sends back (student_applicant),
+// plus the name parts and programme. get_list enforces the caller's read
+// permission, so this never exposes anything the user could not already read.
+async function loadStudentDirectoryFallback() {
+if (state.studentDirectory) {
+return state.studentDirectory;
+}
+try {
+const response = await frappe.call({
+method: "frappe.client.get_list",
+args: {
+doctype: "Student Applicant",
+fields: ["name", "first_name", "middle_name", "last_name", "program"],
+filters: [["Student Applicant", "docstatus", "<", 2]],
+order_by: "modified desc",
+limit_page_length: 5000
+},
+freeze: false
+});
+const rows = response && Array.isArray(response.message) ? response.message : [];
+state.studentDirectory = rows.map(function (row) {
+const parts = [];
+["first_name", "middle_name", "last_name"].forEach(function (field) {
+const value = cleanText(row[field]);
+if (value && parts.indexOf(value) === -1) parts.push(value);
+});
+return {
+student_applicant_id: cleanText(row.name),
+student_name: parts.join(" ") || cleanText(row.name),
+course: cleanText(row.program)
+};
+});
+} catch (error) {
+console.warn("Student Applicant directory could not be loaded", error);
+state.studentDirectory = [];
+}
+return state.studentDirectory;
+}
+function renderSourceNotice() {
+if (!sourceNotice) return;
+const notice = state.activeModule === "student_journey" ? state.rollNotice : null;
+sourceNotice.hidden = !notice;
+sourceNotice.textContent = notice ? notice.text : "";
+if (notice && notice.detail) sourceNotice.title = notice.detail;
 }
 async function sendQuestion(question, selectedApplicant, showUserMessage) {
 const text = cleanText(question);
@@ -4007,11 +4084,13 @@ if (sendButton) sendButton.disabled = Boolean(config.comingSoon);
 if (suggestionsContainer) suggestionsContainer.hidden = Boolean(config.comingSoon);
 renderCategoryOptions();
 renderControlledQuestions();
+renderSourceNotice();
 if (!config.comingSoon) {
 setStatus("Loading " + config.entityLabel + " records", true);
 await loadActiveModuleData();
 renderCourseFilter();
-setStatus("Ready", false);
+renderSourceNotice();
+setStatus(state.rollNotice ? "Limited record access" : "Ready", false);
 } else {
 setStatus("Coming soon", false);
 }

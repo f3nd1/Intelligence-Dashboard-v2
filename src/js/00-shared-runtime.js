@@ -63,6 +63,34 @@ if (!doctype) return;
 global.open(doctypeRoute(doctype), "_blank", "noopener,noreferrer");
 }
 
+// Surface the real Frappe error. A missing DocType raises DoesNotExistError
+// (HTTP 404) and a blocked one raises PermissionError (HTTP 403); the detail
+// lives on the xhr's responseJSON (exception / exc_type / _server_messages) and
+// status, so read all of them and append the HTTP status. classifyError can
+// then key off 403/404 even when the body is empty.
+function errorText(error) {
+if (!error) return "Request failed";
+const body = error.responseJSON || error._response || {};
+const status = error.httpStatus || error.status || body.http_status_code;
+const flat = v => (Array.isArray(v) ? v.join(" ") : (typeof v === "string" ? v : ""));
+const parts = [
+error.message, body.exception, body.exc_type,
+flat(error._server_messages), flat(body._server_messages),
+error.exc, body.exc
+].filter(Boolean);
+let text = parts.join(" · ");
+if (status) text = (text ? text + " " : "") + "(HTTP " + status + ")";
+return text || "Request failed";
+}
+
+function classifyError(message) {
+const text = String(message || "");
+if (/permission|not permitted|forbidden|403/i.test(text)) return "Permission denied";
+if (/not found|does ?not ?exist|doesnotexist|no such|404/i.test(text)) return "Not installed";
+if (/unknown column|field .* not found|invalid field/i.test(text)) return "Field mismatch";
+return "Request failed";
+}
+
 function readStorage(key, fallback) {
 try {
 const value = localStorage.getItem(key);
@@ -85,6 +113,8 @@ tableToCsv,
 download,
 doctypeRoute,
 openDoctype,
+errorText,
+classifyError,
 readStorage,
 writeStorage
 });
