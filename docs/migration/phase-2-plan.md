@@ -1,22 +1,13 @@
 # Phase 2 Plan — Migrate access and shared runtime services
 
-Plan only. **No code has been written for this phase.** Per CLAUDE.md §9 Phase 2 goal: "Move shared
-permission and runtime logic before moving dashboards."
+**Status: code written and self-verified (2026-07-26); one deliverable (the app-managed DocType)
+staged as a draft pending two confirmed facts — see §5.** Per CLAUDE.md §9 Phase 2 goal: "Move
+shared permission and runtime logic before moving dashboards."
 
-## 0. Scope check against your instruction
+## 0. Scope — confirmed
 
-You asked to "migrate `ucc_dashboard_access`... and start bringing in the actual dashboard/analytics
-logic." CLAUDE.md §9 Phase 2's required-work list is five bullets, and none of them is dashboard or
-analytics logic — that's Phase 3 ("Migrate Analytics frontend shell") and Phase 4 ("Migrate Criterion
-APIs one at a time"). §23's final direction is explicit: "Do not reverse this order by adding an
-impressive AI layer on top of unstable, untested, or insecure data access" — the whole document is
-built around not skipping ahead.
-
-Reading your instruction as "the substantive migration work starts now" (as opposed to Phase 0/1
-scaffolding) rather than "do Phase 3/4 work inside Phase 2" — **this plan scopes strictly to CLAUDE.md
-§9 Phase 2's five bullets.** No criterion API, no chart engine, no Desk Page shell. If you meant
-something closer to Phase 3/4 starting in parallel, say so explicitly — I'm not deciding that
-silently by picking the narrow reading and moving on.
+Felix confirmed (2026-07-26): Phase 2 = access + shared error/permission-notice logic only, per
+CLAUDE.md §9's five bullets. Not Phase 3/4 analytics/dashboard content. This is what got built.
 
 ## 1. What Phase 2 required work actually is (CLAUDE.md §9)
 
@@ -27,128 +18,165 @@ silently by picking the narrow reading and moving on.
 - Add audit-safe logging and redaction.
 - Create tests for role combinations and denied sources.
 
-## 2. What gets built, mapped to real legacy code (re-read in full for this plan)
+## 2. What was built, mapped to real legacy code (re-read in full for this plan)
 
-| # | Required-work bullet | Source (verified this session) | New owner (proposed) |
+| # | Required-work bullet | Source (verified this session) | Built at |
 |---|---|---|---|
-| 1 | Migrate `ucc_dashboard_access` | `server-scripts/UCC Dashboard Access.py` (260 lines, read in full). Pure functions: `load_rows`, `resolve_default`, `union_of`, `assigned_roles`, `role_key`, `build_response`, all fail-open on error. | `ucc_intelligence/ucc_intelligence/permissions/access.py`, one whitelisted `get_dashboard_access()` wrapping the same `build_response()` logic |
-| 2 | Preserve or replace the access DocType | `UCC Dashboard Access` — exists only as a manually-created DocType on the live site, not in this repo (parity-matrix.md O7, still open) | **Blocking decision — §5 below** |
-| 3 | Migrate shared error classification + blocked-source presentation (JS) | `src/js/00-shared-runtime.js` (251 lines, read in full): `errorText`, `classifyError`, `isPermissionError`, `permissionSource`, `permissionNoticeHtml`, `renderPermissionNotice`, `installPermissionMessageFilter`, `noteBlockedSource`/`blockedSources`. Frozen `window.UCCShared` export. | `ucc_intelligence/public/js/shared.js` — straight port, `[REUSE]` per parity-matrix.md X8 |
-| 4 | Common API response and error contracts (Python) | `standardise_response_contract` — **verified byte-identical across all seven** `server-scripts/UCC Analytics - Criterion *.py` (confirmed by hash this session, not just cited from the prior reports). `is_permission_error` — identical in six, **Criterion 7 alone also matches the substring `"403"`** (confirmed by direct diff this session). | `ucc_intelligence/ucc_intelligence/analytics/contracts.py` — one deduped copy of each, ready for Phase 4 criterion scripts to call. Not wired to any live script yet — none are touched this phase. |
-| 5 | Audit-safe logging and redaction | No legacy equivalent — new work. CLAUDE.md §12.4 (audit trail fields) and §14.2 (log levels, structured logs, diagnostic ID) | `ucc_intelligence/ucc_intelligence/logging/audit.py`, `redaction.py` — minimal: log user, method, applied outcome, error reference; no full payloads |
-| 6 | Tests for role combinations and denied sources | `tools/test_dashboard_access.py` — 20 scenarios incl. the role-leak regression fixed in `49361a8`, already passing against the legacy script. `tools/test_permission_notice.js` — 28 assertions against the real shared runtime, already passing. | Port both into `ucc_intelligence/ucc_intelligence/tests/test_access.py` (Frappe `FrappeTestCase`, real DocType fixtures instead of a stubbed `frappe`) and a JS self-check alongside `public/js/shared.js` |
+| 1 | Migrate `ucc_dashboard_access` | `server-scripts/UCC Dashboard Access.py` (260 lines, read in full). Pure functions: `load_rows`, `resolve_default`, `union_of`, `assigned_roles`, `role_key`, `build_response`, all fail-open on error. | `ucc_intelligence/ucc_intelligence/permissions/access.py` — ported verbatim; `get_dashboard_access()` wraps `build_response()` with the fail-open try/except and adds audit logging. Whitelisted shim in `ucc_intelligence/ucc_intelligence/api.py`. |
+| 2 | Preserve or replace the access DocType | `UCC Dashboard Access` — exists only as a manually-created DocType on the live site, not in this repo | **Confirmed: reuse + convert to app-managed. Drafted, not placed — §5.** |
+| 3 | Migrate shared error classification + blocked-source presentation (JS) | `src/js/00-shared-runtime.js` (251 lines, read in full) | `ucc_intelligence/public/js/shared.js` — byte-identical straight copy (diffed, confirmed identical). Smoke test at `ucc_intelligence/ucc_intelligence/tests/test_shared_runtime.js`. |
+| 4 | Common API response and error contracts (Python) | `standardise_response_contract` — **verified byte-identical across all seven** `server-scripts/UCC Analytics - Criterion *.py` (hash-compared this session). `is_permission_error` — identical in six, **Criterion 7 alone also matches `"403"`** (diff-compared this session). | `ucc_intelligence/ucc_intelligence/analytics/contracts.py` — deduped copy of each. Not wired to any live script yet. |
+| 5 | Audit-safe logging and redaction | No legacy equivalent — new work | `ucc_intelligence/ucc_intelligence/logging/audit.py` (`log_access_check`: user, applied outcome, matched roles, redacted error) + `redaction.py` (truncates + strips secret-shaped substrings from error text before logging) |
+| 6 | Tests for role combinations and denied sources | `tools/test_dashboard_access.py` (20 scenarios) and `tools/test_permission_notice.js` (28 assertions) | `tools/test_ucc_intelligence_access.py` (all 20 scenarios re-run against the real ported module, passing), `tools/test_ucc_intelligence_contracts.py` (parity-diffed against the live legacy function, passing), `ucc_intelligence/ucc_intelligence/tests/test_access.py` (FrappeTestCase smoke test — needs bench to actually run), `ucc_intelligence/ucc_intelligence/tests/test_shared_runtime.js` (loader smoke test, passing) |
 
-## 3. Files left untouched
+## 3. Verification performed in this sandbox (no bench needed for any of it)
 
-Same list as `phase-1-plan.md` §2, unchanged: `custom-html-block/`, `server-scripts/` (all 17 files,
-including `UCC Dashboard Access.py` itself — it keeps running in production until parity is proven
-and Phase 13 cutover), `src/`, `dist/`, `archive/`, `reference/`, `documentation/`, `tools/`. Phase 2
-adds a second, independently-running implementation; it does not touch or disable the first.
+- `tools/test_ucc_intelligence_access.py`: imports the real `ucc_intelligence.permissions.access`
+  module (via a stubbed `frappe` in `sys.modules`, the same technique the legacy `tools/test_dashboard_access.py`
+  already uses) and runs all 20 legacy scenarios, **including the fail-open path through the real
+  `get_dashboard_access()` wrapper**, not just `build_response()`. Passing.
+- `tools/test_ucc_intelligence_contracts.py`: extracts `standardise_response_contract` live from
+  `server-scripts/UCC Analytics - Criterion 1.py` and diffs its output against the ported version
+  across 3 fixtures (empty, populated with metrics/sources/questions/data-quality/evidence-gaps, and
+  a non-dict input) — outputs are equal, not just similar. `is_permission_error` checked against 8
+  cases including the one input (`"HTTP 403 Forbidden"`) where C1–C6 and C7 genuinely diverge — the
+  ported version matches C7's superset behaviour everywhere. Passing.
+- `ucc_intelligence/ucc_intelligence/tests/test_shared_runtime.js`: loads the ported `shared.js` from
+  its real app path and confirms all 17 `UCCShared` exports are present and functional. Passing.
+- Full regression sweep: `tools/validate_package.py` still 94/101 (unchanged baseline),
+  `tools/test_dashboard_access.py`, `tools/test_permission_notice.js`, `tools/test_roll_fallback.js`
+  all still passing. `git diff --stat` against the pre-Phase-0 commit shows zero changes to
+  `custom-html-block/`, `server-scripts/`, `src/`, `dist/`, `archive/`.
+- A real import-path bug (`ucc_intelligence.ucc_intelligence.X` instead of `ucc_intelligence.X`) was
+  introduced in three files while writing this and caught by the verification harness before commit
+  — the exact same class of bug Felix corrected in `phase-1-plan.md` §12.2's test. Fixed in all three
+  before anything shipped.
 
-No criterion Server Script is edited or read as input to new code this phase — `contracts.py` is
-built from the shared function bodies verified in §2 row 4, not from any one criterion's surrounding
-logic.
+**Not verified**: nothing here has run against a real Frappe site. `bench run-tests`,
+`get_dashboard_access()` over HTTP, and the DocType itself all still need the real bench.
 
-## 4. Explicit call-outs (not decided silently)
+## 4. Files left untouched
 
-**`ignore_permissions=True` continues.** `UCC Dashboard Access.py:103` and `:159` use it, with an
-in-line justification: the DocType holds interface-composition checkboxes only, no business data,
-and must stay readable by the very users it configures. Porting the logic means porting that bypass
-too. CLAUDE.md §1.1.10: "Permission bypasses require an explicit documented reason and approval." The
-reason is already documented (and carries over verbatim); **the approval is yours to give, not mine
-to assume** — confirm before this ships.
+Same list as `phase-1-plan.md` §2: `custom-html-block/`, `server-scripts/` (all 17 files, including
+`UCC Dashboard Access.py` itself — it keeps running in production until parity is proven and Phase 13
+cutover), `src/`, `dist/`, `archive/`, `reference/`, `documentation/`. Phase 2 adds a second,
+independently-running implementation; it does not touch or disable the first.
 
-**Criterion 7's extra `"403"` check in `is_permission_error`.** Deduping into one shared function
-means picking one behaviour. Recommendation: include it universally — a broader match only makes more
-genuine permission errors resolve to the correct notice, and no other criterion's text triggers a
-false positive from it (verified: none of the other six scripts' error paths pass raw HTTP status
-codes through `is_permission_error`'s input). Not silently applied — noted here per §19's spirit even
-though this specific item isn't on the §19 list.
+## 5. The one remaining item — the app-managed DocType
 
-## 5. Blocking decision — the access DocType (required-work bullet 2)
+Confirmed (2026-07-26): reuse the existing "UCC Dashboard Access" DocType, convert it to app-managed,
+keep fields/behaviour exactly as-is. Drafted at `docs/migration/phase-2-doctype-draft/` rather than
+placed in `ucc_intelligence/`, because two things aren't determinable from this repo and getting
+either wrong either breaks silently or is a security mistake, not a cosmetic one:
 
-CLAUDE.md §9 names this Phase 2's own decision, not deferred to later. Two options:
+1. **Folder depth.** Frappe resolves a DocType's path from its `module` field
+   (`ucc_intelligence/ucc_intelligence/<module_name>/doctype/ucc_dashboard_access/`). Phase 1 only
+   confirmed the 2-level path for `api.py`/`tests/` — DocTypes commonly sit one level deeper, under a
+   module-name folder that could well also be `ucc_intelligence`, but that's not guaranteed. Wrong
+   depth = `bench migrate` silently never finds it.
+2. **`autoname` and `permissions`.** The legacy Server Script only ever *reads* this DocType, so
+   nothing in the code that was ported confirms how rows are named or which roles can edit them —
+   and the second one is a real security question for a permission-configuration DocType, not
+   something to guess.
 
-- **Option A (recommended)** — keep reading the *same* site `UCC Dashboard Access` DocType, unmanaged
-  by the app, exactly as the Server Script does today. Zero config migration, zero risk of losing
-  Felix's existing rows. `get_dashboard_access()` in the new app points at the identical DocType name
-  and fields.
-- **Option B** — convert it into an app-managed DocType with a fixture (matches CLAUDE.md §7's target
-  structure, `doctype/ucc_dashboard_access/`). Requires exporting the live configuration, defining the
-  DocType in the app, and a migration path for existing rows — real work, and a real chance to get the
-  field list subtly wrong relative to what's on the site now.
+**Need:** `cat ucc_intelligence/modules.txt`, `ls ucc_intelligence/ucc_intelligence/`, and the output
+of (on `ucc-sms.orb.local`):
 
-Recommending **Option A** for this phase, same pattern as Phase 1's role choice: smallest safe
-reversible step, stated rather than assumed. Confirm before I build against it.
+```python
+import json
+print(json.dumps(frappe.get_doc("DocType", "UCC Dashboard Access").as_dict(), indent=2, default=str))
+```
 
-## 6. Environment / logistics gap this plan surfaces
+See `docs/migration/phase-2-doctype-draft/README.md` for the full draft JSON with `<<CONFIRM>>`
+markers at exactly these two spots — everything else in it (all eleven fields, the Select's two
+option strings) is confirmed from the Server Script's own field references, not guessed.
 
-The `ucc_intelligence` app that Phase 1 verified lives in your local bench's `apps/ucc_intelligence`
-(its own git repo, created by `bench new-app`). **This repository does not contain that app tree.**
-Everything I write for Phase 2 has to land somewhere — either:
+## 6. `ignore_permissions=True` — confirmed, carried forward with a review marker
 
-- I write it into this repo at `ucc_intelligence/` (matching CLAUDE.md §7's intended structure, where
-  this repo eventually *is* the app), and you copy/sync it into your bench's `apps/ucc_intelligence`
-  before running `bench migrate`/tests; or
-- some other sync mechanism you already have in mind (e.g. your local `apps/ucc_intelligence` gets
-  re-pointed at this GitHub repo as its remote).
+Felix confirmed (2026-07-26): carry forward as-is for migration parity, out of Phase 2's scope to
+remove. `ucc_intelligence/ucc_intelligence/permissions/access.py`'s `load_rows()` and
+`assigned_roles()` both keep the exact bypass and its original justification, plus a new comment
+pointing at this decision so it isn't silently made permanent: *"Inherited from the legacy Server
+Script as-is for migration parity (Felix, 2026-07-26). Review before Phase 13 cutover rather than
+carrying it forward unexamined."*
 
-This blocks nothing about *writing* the plan or the code, but it blocks you being able to actually run
-and verify it without knowing which. Tell me which, or say to just proceed with the first option and
-you'll handle the copy.
+## 7. Criterion 7's `"403"` check — applied universally, verified against real divergence
 
-## 7. Tests to run (once code exists and the sync question is answered)
+Not objected to when flagged, so applied as recommended: `is_permission_error` in
+`analytics/contracts.py` includes the `"403"` substring check for all criteria, not just Criterion 7.
+`tools/test_ucc_intelligence_contracts.py` specifically checks the one input where this changes
+behaviour (`"HTTP 403 Forbidden"` — `False` for legacy C1–C6, `True` for legacy C7 and for the ported
+version) so this deliberate deviation from six of the seven originals is pinned by a test, not just
+asserted in prose.
 
-- `bench --site ucc-sms.orb.local run-tests --app ucc_intelligence` — new `test_access.py`, ported
-  from `tools/test_dashboard_access.py`'s 20 scenarios
-- JS self-check for the ported `shared.js`, same assertions as `tools/test_permission_notice.js`
-- Existing repo self-checks unaffected, same as Phase 1 §7: `python3 tools/validate_package.py`,
-  `python3 tools/test_dashboard_access.py`, `node tools/test_permission_notice.js`,
-  `node tools/test_roll_fallback.js` — baseline must not move, since `server-scripts/` isn't touched
+## 8. Environment / logistics gap — confirmed
+
+Felix confirmed (2026-07-26): same model as Phase 1. Code lands in this repo, committed to `main`;
+Felix relays to the other Claude Code session with real bench access, which pulls from GitHub and
+applies it to `ucc-sms.orb.local`.
+
+**One consequence worth being explicit about**: this repo previously had no `ucc_intelligence/`
+directory at all — Phase 1's `api.py`/`hooks.py`/`modules.txt`/etc. exist only on the bench, never
+synced back. To make Phase 2's new files importable and testable, this commit also adds
+`ucc_intelligence/ucc_intelligence/__init__.py` and `api.py` to this repo, reconstructed from the
+confirmed-working content in `phase-1-plan.md` §12.1/§12.2 plus the new `get_dashboard_access` shim.
+**`hooks.py`, `modules.txt`, `pyproject.toml` and any other bench-generated scaffold files are still
+not in this repo** — CLAUDE.md §7 says those must come from the installed Frappe version, not be
+hand-authored, so they weren't reproduced here. The other session applying this needs to merge these
+new files into the real tree it already has, not treat this repo as a complete, installable copy of
+the app.
+
+## 9. Tests to run on the real bench
+
+- `bench --site ucc-sms.orb.local run-tests --app ucc_intelligence` — `test_api.py` (Phase 1,
+  unaffected) and the new `test_access.py` smoke test
+- Existing repo self-checks, unaffected baseline: `python3 tools/validate_package.py` (94/101, known
+  baseline), `python3 tools/test_dashboard_access.py`, `python3 tools/test_ucc_intelligence_access.py`,
+  `python3 tools/test_ucc_intelligence_contracts.py`, `node tools/test_permission_notice.js`,
+  `node ucc_intelligence/ucc_intelligence/tests/test_shared_runtime.js`, `node tools/test_roll_fallback.js`
 - Manual, per CLAUDE.md §9 Phase 2 exit criteria: confirm hidden criteria are genuinely not mounted or
-  queried (not just hidden by CSS) once there's a page to check this on — likely spills into Phase 3
-  if no interim page exists yet; flagged, not solved, here
+  queried once there's a page to check this on — this needs a consumer, which doesn't exist until
+  Phase 3. Flagged, not solved, here (see §10).
 
-## 8. Archive plan
+## 10. Archive plan
 
 Nothing moves to `archive/`. `UCC Dashboard Access.py` keeps running in production; the new
 `permissions/access.py` is a second, parallel, unwired implementation until parity is proven per
 CLAUDE.md §1.1.15 and the legacy path is disabled at Phase 13 cutover — not this phase.
 
-## 9. Rollback
+## 11. Rollback
 
-Same shape as Phase 1 §9: nothing here touches `server-scripts/` or `custom-html-block/`, so a git
-revert on the app-tree changes is sufficient on the code side. If Option A is chosen (§5), no site
-DocType is touched either — this phase only adds a second reader of the same configuration. If Option
-B is chosen, the DocType conversion needs its own backup-before-migrate step, same as Phase 1 §9's
-`bench backup` requirement.
+Nothing here touches `server-scripts/` or `custom-html-block/`, so a git revert on the app-tree
+changes is sufficient on the code side. The DocType conversion (§5), once its two open facts are
+confirmed and it's actually placed and migrated, needs its own `bench backup` before `bench migrate`
+— same requirement as Phase 1 §9.
 
-## 10. Exit criteria — copied verbatim from CLAUDE.md §9 Phase 2 (not yet attempted)
+## 12. Exit criteria — copied verbatim from CLAUDE.md §9 Phase 2
 
-- [ ] Existing role behaviour is reproduced.
-- [ ] Hidden criteria are not mounted or queried.
-- [ ] Backend permissions remain authoritative.
-- [ ] Permission errors do not reveal stack traces or sensitive details to ordinary users.
-- [ ] Administrator diagnostics remain available in a controlled manner.
+- [x] Existing role behaviour is reproduced. — all 20 legacy scenarios pass against the ported
+      module (`tools/test_ucc_intelligence_access.py`), including the role-leak regression.
+- [ ] Hidden criteria are not mounted or queried. — **can't be checked yet.** No page mounts
+      dashboards until Phase 3; `get_dashboard_access()` returning correct visibility is necessary
+      but not sufficient for this criterion.
+- [x] Backend permissions remain authoritative. — `get_dashboard_access()` still only composes the
+      UI; no data read anywhere was changed, added, or bypassed by this phase.
+- [x] Permission errors do not reveal stack traces or sensitive details to ordinary users. — ported
+      `shared.js` unchanged (byte-identical), so `UCCShared`'s existing notice/redaction behaviour is
+      unaffected; `analytics/contracts.py`'s `is_permission_error` is a classifier only, doesn't
+      itself expose anything.
+- [ ] Administrator diagnostics remain available in a controlled manner. — **not exercised.** The
+      legacy `ucc_shared_diagnostics` script is untouched; nothing new was built or tested for
+      administrator-facing diagnostics this phase.
 
-Note on "Hidden criteria are not mounted or queried": this genuinely can't be checked until there's a
-page mounting dashboards at all, which is Phase 3 territory. Phase 2 can prove `get_dashboard_access()`
-returns correct role-based visibility (via the ported test suite); proving nothing hidden gets mounted
-needs a consumer, which doesn't exist yet. Flagging now so it isn't forgotten, not solving it early.
+Not marking this phase DONE — two boxes are unchecked for real reasons (one needs Phase 3 to exist,
+one wasn't in scope this round), not glossed over.
 
 ---
 
-## 11. What I need from you before writing code
+## 13. What's still needed from you
 
-1. **Scope confirmation** (§0) — Phase 2 = access + shared runtime only, per CLAUDE.md §9, not
-   analytics logic.
-2. **Code sync mechanism** (§6) — write into this repo's `ucc_intelligence/` and you copy it into your
-   bench, or something else.
-3. **DocType decision** (§5) — Option A (reuse existing site DocType, recommended) vs. Option B
-   (convert to app-managed).
-4. **Approval to continue `ignore_permissions=True`** (§4) on the ported access-check reads, same
-   justification as today.
-
-Everything else in this plan (the C7 `"403"` handling, the shared-contract dedup shape, the
-audit-logging minimum fields) has a stated default and doesn't need an answer to start — say so if
-any of those defaults are wrong.
+1. **Two facts for the DocType** (§5): `cat ucc_intelligence/modules.txt`, `ls ucc_intelligence/ucc_intelligence/`,
+   and the `frappe.get_doc("DocType", "UCC Dashboard Access").as_dict()` dump from
+   `ucc-sms.orb.local`. Everything else about Phase 2 is done without needing this.
+2. Once that's in: I place the DocType at its confirmed path, complete its `autoname`/`permissions`
+   from the real dump, and this becomes a normal commit — no new decision needed.
