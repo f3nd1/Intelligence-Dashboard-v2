@@ -180,13 +180,27 @@ already covers exactly this transition's concerns and gets re-run against the ne
 Nothing moves to `archive/`. The Custom HTML Block stays fully live throughout Phase 3 — per Decision
 A, real users see zero change. Legacy removal is Phase 13, after all phases and full parity sign-off.
 
-## 8. Exit criteria — copied verbatim from CLAUDE.md §9 Phase 3 (not yet attempted)
+## 8. Exit criteria — copied verbatim from CLAUDE.md §9 Phase 3
 
-- [ ] All seven criterion shells render from the app.
-- [ ] No Custom HTML Block is required for the staging version.
-- [ ] Navigation and selected criterion persistence work.
-- [ ] Hidden criteria are not available through direct UI manipulation.
-- [ ] Desktop and supported mobile widths are visually checked.
+Updated 2026-07-26 after Felix's genuine-hard-refresh test of `/app/sophia-analytics`: page rendered
+(header, criterion dropdown, workspace nav, KPI panels, charts), `shared.js` loaded, no `page.body`
+error, no `Unexpected token '<'`. That confirms the default criterion's full live path — access check
+→ dropdown → fetch → normalise → render — works end to end. It does not by itself confirm the other
+four criteria, persistence, role gating, or mobile layout, so those stay open rather than being marked
+done on the strength of one observation.
+
+- [ ] All seven criterion shells render from the app. **Partial**: default criterion confirmed
+      end-to-end (KPIs + charts rendered from live data). The other six haven't been switched to yet.
+- [x] No Custom HTML Block is required for the staging version. Confirmed both structurally (this page
+      never references `custom-html-block/`) and now empirically (Felix loaded the route directly and
+      it worked standalone).
+- [ ] Navigation and selected criterion persistence work. Not yet exercised — need a criterion switch
+      followed by a reload to confirm the selection is remembered the way the legacy shell does.
+- [ ] Hidden criteria are not available through direct UI manipulation. Not yet exercised — needs a
+      restricted-role user (or role removed from `UCC Dashboard Access`) confirming a hidden criterion
+      can't be forced into the DOM via devtools.
+- [ ] Desktop and supported mobile widths are visually checked. Desktop confirmed by the report above.
+      Mobile width not yet checked.
 
 ## 9. Rollback
 
