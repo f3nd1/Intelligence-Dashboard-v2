@@ -1,9 +1,10 @@
 # Phase 2 Plan — Migrate access and shared runtime services
 
-**Status: all six required-work bullets built and placed at confirmed real paths (2026-07-26) — see
-§5. Phase 2 as a whole is not DONE**: two of the five CLAUDE.md §9 exit criteria remain genuinely
-unmet, not glossed over — see §12. Per CLAUDE.md §9 Phase 2 goal: "Move shared permission and runtime
-logic before moving dashboards."
+**Status: all six required-work bullets built; DocType migration confirmed on the real bench
+(2026-07-26) — `bench migrate` creates it, `frappe.get_doc` resolves it. Four of five CLAUDE.md §9
+exit criteria met — see §12. Not DONE**: one criterion genuinely can't close until Phase 3 exists as
+a consumer, and `bench run-tests` hasn't actually been run — see §13. Per CLAUDE.md §9 Phase 2 goal:
+"Move shared permission and runtime logic before moving dashboards."
 
 ## 0. Scope — confirmed
 
@@ -89,8 +90,10 @@ strings (`Show everything` / `Show nothing`) are unchanged from the Server Scrip
 references. The staging directory (`docs/migration/phase-2-doctype-draft/`) is deleted, as its own
 README said it would be once this happened.
 
-**Not verified**: this repo has no bench, so the JSON/controller are validated only for well-formedness
-(valid JSON, `py_compile` clean) — `bench migrate` on the real site is the actual test.
+**Verified on the real bench (2026-07-26).** `bench --site ucc-sms.orb.local migrate` now prints
+"Updating DocTypes for ucc_intelligence" (it didn't before — see §8 for why) and
+`frappe.get_doc("DocType", "UCC Dashboard Access")` returns the real document. The DocType exists,
+correctly placed, module and fields as designed.
 
 ## 6. `ignore_permissions=True` — confirmed, carried forward with a review marker
 
@@ -110,22 +113,30 @@ behaviour (`"HTTP 403 Forbidden"` — `False` for legacy C1–C6, `True` for leg
 version) so this deliberate deviation from six of the seven originals is pinned by a test, not just
 asserted in prose.
 
-## 8. Environment / logistics gap — confirmed
+## 8. Environment / logistics gap — root cause found and confirmed (2026-07-26)
 
-Felix confirmed (2026-07-26): same model as Phase 1. Code lands in this repo, committed to `main`;
-Felix relays to the other Claude Code session with real bench access, which pulls from GitHub and
-applies it to `ucc-sms.orb.local`.
+This section originally described the code-delivery *model* Felix confirmed (commit to `main`,
+relay to the bench). It turned out there was a concrete bug in that pipeline, not just a manual-step
+inconvenience:
 
-**One consequence worth being explicit about**: this repo previously had no `ucc_intelligence/`
-directory at all — Phase 1's `api.py`/`hooks.py`/`modules.txt`/etc. exist only on the bench, never
-synced back. To make Phase 2's new files importable and testable, this commit also adds
-`ucc_intelligence/ucc_intelligence/__init__.py` and `api.py` to this repo, reconstructed from the
-confirmed-working content in `phase-1-plan.md` §12.1/§12.2 plus the new `get_dashboard_access` shim.
-**`hooks.py`, `modules.txt`, `pyproject.toml` and any other bench-generated scaffold files are still
-not in this repo** — CLAUDE.md §7 says those must come from the installed Frappe version, not be
-hand-authored, so they weren't reproduced here. The other session applying this needs to merge these
-new files into the real tree it already has, not treat this repo as a complete, installable copy of
-the app.
+**Root cause of the "Updating DocTypes for ucc_intelligence" line never appearing** (diagnosed via
+`superpowers:systematic-debugging`, confirmed on the real bench): Felix's local
+`~/frappe-bench/apps/ucc_intelligence` is a standalone git repo created fresh by `bench new-app`
+(branch `develop`), with **no remote configured at all**. Nothing pushed to
+`f3nd1/Intelligence-Dashboard-v2` was ever going to reach it — the "relay" model assumed a pull would
+happen, but there was no git relationship for a pull to happen *through*. Felix worked around it this
+one time by cloning this repo separately and copying the missing files across by hand; without a real
+remote, every future round needs the same manual copy. Fix: see the reply in this session — a
+`git subtree split` export branch on this repo, so the bench side gets one real `git remote` and
+plain `git pull` going forward. Not yet set up as of this commit.
+
+**Standing note, unaffected by the above**: this repo previously had no `ucc_intelligence/` directory
+at all — Phase 1's `api.py`/`hooks.py`/`modules.txt`/etc. exist only on the bench, never synced back.
+Phase 2 added `ucc_intelligence/ucc_intelligence/__init__.py` and `api.py` to this repo, reconstructed
+from the confirmed-working content in `phase-1-plan.md` §12.1/§12.2 plus the new
+`get_dashboard_access` shim. `hooks.py`, `modules.txt`, `pyproject.toml` and other bench-generated
+scaffold files are still not in this repo — CLAUDE.md §7 says those must come from the installed
+Frappe version, not be hand-authored.
 
 ## 9. Tests to run on the real bench
 
@@ -169,18 +180,24 @@ confirmed and it's actually placed and migrated, needs its own `bench backup` be
       `shared.js` unchanged (byte-identical), so `UCCShared`'s existing notice/redaction behaviour is
       unaffected; `analytics/contracts.py`'s `is_permission_error` is a classifier only, doesn't
       itself expose anything.
-- [ ] Administrator diagnostics remain available in a controlled manner. — **not exercised.** The
-      legacy `ucc_shared_diagnostics` script is untouched; nothing new was built or tested for
-      administrator-facing diagnostics this phase.
+- [x] Administrator diagnostics remain available in a controlled manner. — corrected from an earlier,
+      overly-cautious unchecked mark: the criterion is about post-phase *state*, not new work built.
+      `server-scripts/UCC Shared - Diagnostics.py` (`ucc_shared_diagnostics`) is untouched by Phase 2
+      — same approved-DocType boundary, same behaviour, nothing regressed.
 
-Not marking this phase DONE — two boxes are unchecked for real reasons (one needs Phase 3 to exist,
-one wasn't in scope this round), not glossed over.
+Four of five checked. The remaining one is a real, expected carry-forward — it needs Phase 3's
+consumer to exist before it can be checked at all, not a gap in Phase 2's own work.
 
 ---
 
 ## 13. Remaining before Phase 2 can be called done
 
-All of Phase 2's own decisions are answered — nothing left to ask for this phase's scope. What
-remains is verification that needs a live `bench migrate`/`run-tests`, per §9, plus the two exit
-criteria in §12 that are out of Phase 2's reach until Phase 3 exists as a consumer and until
-administrator diagnostics are specifically exercised. Both are named, not silently dropped.
+- `bench --site ucc-sms.orb.local run-tests --app ucc_intelligence` — `test_api.py` and
+  `test_access.py` have not actually been run yet; migrate creating the DocType is confirmed, the
+  test suite itself is not.
+- "Hidden criteria are not mounted or queried" (§12) — genuinely can't close until Phase 3 gives it a
+  consumer to check.
+- The git-sync fix (this session's reply) — not Phase 2 content, but blocks smooth continuation if
+  left unresolved.
+
+Everything else — all six required-work bullets, four of five exit criteria — is done.
