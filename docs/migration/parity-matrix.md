@@ -4,8 +4,8 @@ Every user-visible behaviour of the legacy system, its current owner file, its i
 `ucc_intelligence`, and **how parity will be proven**. A row cannot be marked done — and its legacy
 owner cannot be archived — until its verification passes.
 
-> **Format caveat.** Structure is unverified against the intended `CLAUDE.md` §20; the 13-phase spec
-> is not present in this repository. See `phase-1-plan.md` §7.
+> **Update.** The real 13-phase `CLAUDE.md` now exists at repo root (`a4b8641` / merged in `f7f7286`);
+> the format caveat that used to be here is resolved.
 
 Legend: `[REUSE]` portable as-is · `[ADAPT]` logic portable, contract changes · `[REBUILD]`
 requirement survives, implementation does not.
@@ -58,7 +58,7 @@ scaffold rows.
 | # | Behaviour | Legacy owner | Class | Proposed new owner | Parity verification |
 |---|---|---|---|---|---|
 | X1 | Role → visible workspaces/criteria (UI composition only) | `server-scripts/UCC Dashboard Access.py` | `[ADAPT]` | `ucc_intelligence/api/access.py` | `tools/test_dashboard_access.py`'s 20 scenarios ported and passing |
-| X2 | `UCC Dashboard Access` configuration DocType | manually created on site (not in repo) | `[REBUILD]` | `ucc_intelligence/ucc_intelligence/doctype/ucc_dashboard_access/` | DocType installs with the app; existing site rows still resolve |
+| X2 | `UCC Dashboard Access` configuration DocType | manually created on site (not in repo) | `[REBUILD]` | **Undecided — see O7.** Proposed only: `ucc_intelligence/ucc_intelligence/doctype/ucc_dashboard_access/` | DocType installs with the app; existing site rows still resolve |
 | X3 | Fail-open on access-check failure (8 s client timeout) | `fetchDashboardAccess` `:2604` | `[ADAPT]` | app JS | Server 500 / timeout still yields a usable UI |
 | X4 | Hidden criteria removed from DOM **and** `CONFIG` before mount | `applyDashboardAccess` `:2625` | `[ADAPT]` | app JS | A hidden criterion has no tab bar and no config entry |
 | X5 | Source Mapping Report | `UCC Shared - Diagnostics.py` + `JAVASCRIPT.js:3199` | `[ADAPT]` | `ucc_intelligence/api/diagnostics.py` | Same candidate/metadata/field inventory for the same criterion |
@@ -117,3 +117,4 @@ decided here.
 | O4 | Does the `dashboard_studio` "Publish to Sophia" contract write into the same DocTypes as X2, or its own? **Assumption stated, not decided:** the publish contract is a *separate inbound* surface and shares no DocType with `UCC Dashboard Access`. Nothing in Phase 1 depends on it; do not name a DocType `Dashboard` or `Publish*` until the contract is known. | X2, all future publish work |
 | O5 | Keep the C5 5.4/5.5 cache-defeating behaviour bug-for-bug during parity, then fix in a named phase? | A4, S5 |
 | O6 | Do `ucc_analytics_bootstrap`, `ucc_analytics_drilldown`, `ucc_analytics_criterion_catalogue` and `ucc_analytics_placeholder_preview` have callers outside this repo? | X10–X13 |
+| O7 | **CLAUDE.md §19 item, not decided here.** May the existing `UCC Dashboard Access` configuration DocType (manually created on the live site, not in this repo) be converted into an app-managed DocType with a fixture, or must the app read the same site DocType unmanaged, or introduce a new one? Row X2 above names a proposed app-managed path only as a placeholder — it is not an approval to convert. | X1, X2 |

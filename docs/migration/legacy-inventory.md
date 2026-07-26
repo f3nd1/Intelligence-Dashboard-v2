@@ -4,10 +4,11 @@ Read-only inventory of everything in `f3nd1/Intelligence-Dashboard-v2` at commit
 the `ucc_intelligence` Frappe app migration. Nothing was modified, moved or archived to produce this
 document.
 
-> **Format caveat.** The task brief specifies "per CLAUDE.md §20 exactly". The `CLAUDE.md` at repo
-> root is an architecture-guidance file (commit `1b2f84c`) with no numbered sections and no phase
-> plan — the 13-phase migration spec is not present in this repository on any branch. The structure
-> below is therefore my own and is **unverified against §20**. See `phase-1-plan.md` §7.
+> **Update.** This document was originally written before the real `CLAUDE.md` (13-phase migration
+> spec) existed in this repository; the format caveat that used to be here is resolved — the real
+> spec landed at repo root in `a4b8641` / merged into this branch in `f7f7286`. Structure and content
+> below now match CLAUDE.md §20 Phase 0. One §19 item this inventory could not resolve on its own is
+> recorded in §6.
 
 ## Classification tags
 
@@ -250,3 +251,20 @@ These are not opinions; each is verified and each changes how Phase 1+ must proc
 - `UCC Analytics - Placeholder Preview.py` internals (869 lines) — classified from its docstring and
   the fact that its target criteria are all live.
 - `archive/legacy-source/` and `custom-html-block/archive/` contents (pre-existing archives, 148 KB).
+
+## 6. §19 item this inventory surfaces but cannot resolve
+
+**"Which current Server Scripts are actually deployed"** (CLAUDE.md §19). Everything in §1 above is
+classified from the 17 files present in `server-scripts/` in this repository — that is repo
+presence, not confirmed deployment. `docs/analytics_workspace_report_2.md` independently confirmed
+two live call sites from the deployed JS (`ucc_shared_diagnostics`, `ucc_dashboard_access`) and the
+seven `ucc_analytics_criterion_N` methods via `config.apiMethod`; the three Ask UCC methods are
+confirmed live via `MODULE_CONFIG.apiMethod` in the same deployed file. That leaves four scripts
+(`ucc_analytics_bootstrap`, `ucc_analytics_drilldown`, `ucc_analytics_criterion_catalogue`,
+`ucc_analytics_placeholder_preview`, §1.3) whose presence in this repo does not by itself mean they
+are installed as enabled Server Scripts on the live site, or that the live site doesn't have
+*additional* scripts not mirrored into this repo at all. This is genuinely unresolvable from static
+repo reading — it needs a Server Script list view export from the actual site, which is exactly the
+`docs/environment-discovery-template.md` §4 row "Server Scripts present on the site" and the two rows
+below it ("in this repo not on site" / "on site not in this repo"). Not decided here; carried
+forward as an open blocker rather than assumed either way.

@@ -3,8 +3,8 @@
 How the UCC Intelligence Platform works **today**, as deployed, before any migration work. Static
 reading only — nothing was executed against a Frappe site.
 
-> **Format caveat.** Structure is unverified against the intended `CLAUDE.md` §20; the 13-phase spec
-> is not present in this repository. See `../migration/phase-1-plan.md` §7.
+> **Update.** The real 13-phase `CLAUDE.md` now exists at repo root (`a4b8641` / merged in `f7f7286`);
+> the format caveat that used to be here is resolved.
 
 Corroborated by two prior independent read-only investigations,
 `docs/investigation_analytics_report.md` and `docs/analytics_workspace_report_2.md`, which agree on

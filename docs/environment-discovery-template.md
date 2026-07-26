@@ -4,8 +4,10 @@ Blank template. **Nothing here is filled in** — no environment facts have been
 migration, and none may be guessed. Fill this in against the real bench/site and commit it before
 Phase 1 scaffolding is installed anywhere.
 
-> **Format caveat.** Structure is unverified against the intended `CLAUDE.md` §20; the 13-phase spec
-> is not present in this repository. See `migration/phase-1-plan.md` §7.
+> **Update.** The real 13-phase `CLAUDE.md` now exists at repo root (`a4b8641` / merged in `f7f7286`);
+> the format caveat that used to be here is resolved. This file is the blank template required by
+> CLAUDE.md §20 Step 3. Once filled in against the real environment it becomes the confirmed report
+> §6.3 asks for (`docs/environment-discovery.md`) — that filled version does not exist yet.
 
 Rules for filling this in:
 
