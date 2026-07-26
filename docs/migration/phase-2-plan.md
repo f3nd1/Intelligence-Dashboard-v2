@@ -1,8 +1,9 @@
 # Phase 2 Plan — Migrate access and shared runtime services
 
 **Status: code written and self-verified (2026-07-26); one deliverable (the app-managed DocType)
-staged as a draft pending two confirmed facts — see §5.** Per CLAUDE.md §9 Phase 2 goal: "Move
-shared permission and runtime logic before moving dashboards."
+staged as a draft — see §5. Live-bench check on 2026-07-26 found the DocType doesn't exist on
+`ucc.local`, revising that deliverable from "convert existing" to "create fresh."** Per CLAUDE.md §9
+Phase 2 goal: "Move shared permission and runtime logic before moving dashboards."
 
 ## 0. Scope — confirmed
 
@@ -23,7 +24,7 @@ CLAUDE.md §9's five bullets. Not Phase 3/4 analytics/dashboard content. This is
 | # | Required-work bullet | Source (verified this session) | Built at |
 |---|---|---|---|
 | 1 | Migrate `ucc_dashboard_access` | `server-scripts/UCC Dashboard Access.py` (260 lines, read in full). Pure functions: `load_rows`, `resolve_default`, `union_of`, `assigned_roles`, `role_key`, `build_response`, all fail-open on error. | `ucc_intelligence/ucc_intelligence/permissions/access.py` — ported verbatim; `get_dashboard_access()` wraps `build_response()` with the fail-open try/except and adds audit logging. Whitelisted shim in `ucc_intelligence/ucc_intelligence/api.py`. |
-| 2 | Preserve or replace the access DocType | `UCC Dashboard Access` — exists only as a manually-created DocType on the live site, not in this repo | **Confirmed: reuse + convert to app-managed. Drafted, not placed — §5.** |
+| 2 | Preserve or replace the access DocType | `UCC Dashboard Access` — **verified 2026-07-26 not to exist** on `ucc.local` (`DoesNotExistError` via `bench console`); assumed live on the site until checked | **Revised: create fresh, not convert. Drafted, not placed — §5.** |
 | 3 | Migrate shared error classification + blocked-source presentation (JS) | `src/js/00-shared-runtime.js` (251 lines, read in full) | `ucc_intelligence/public/js/shared.js` — byte-identical straight copy (diffed, confirmed identical). Smoke test at `ucc_intelligence/ucc_intelligence/tests/test_shared_runtime.js`. |
 | 4 | Common API response and error contracts (Python) | `standardise_response_contract` — **verified byte-identical across all seven** `server-scripts/UCC Analytics - Criterion *.py` (hash-compared this session). `is_permission_error` — identical in six, **Criterion 7 alone also matches `"403"`** (diff-compared this session). | `ucc_intelligence/ucc_intelligence/analytics/contracts.py` — deduped copy of each. Not wired to any live script yet. |
 | 5 | Audit-safe logging and redaction | No legacy equivalent — new work | `ucc_intelligence/ucc_intelligence/logging/audit.py` (`log_access_check`: user, applied outcome, matched roles, redacted error) + `redaction.py` (truncates + strips secret-shaped substrings from error text before logging) |
@@ -62,34 +63,50 @@ Same list as `phase-1-plan.md` §2: `custom-html-block/`, `server-scripts/` (all
 cutover), `src/`, `dist/`, `archive/`, `reference/`, `documentation/`. Phase 2 adds a second,
 independently-running implementation; it does not touch or disable the first.
 
-## 5. The one remaining item — the app-managed DocType
+## 5. The one remaining item — the app-managed DocType (revised 2026-07-26)
 
-Confirmed (2026-07-26): reuse the existing "UCC Dashboard Access" DocType, convert it to app-managed,
-keep fields/behaviour exactly as-is. Drafted at `docs/migration/phase-2-doctype-draft/` rather than
-placed in `ucc_intelligence/`, because two things aren't determinable from this repo and getting
-either wrong either breaks silently or is a security mistake, not a cosmetic one:
+Original plan: reuse the existing "UCC Dashboard Access" DocType, convert it to app-managed, keep
+fields/behaviour exactly as-is. That assumed the DocType exists on the live site — never actually
+checked until now, only inferred from the Server Script's own docstring.
 
-1. **Folder depth.** Frappe resolves a DocType's path from its `module` field
-   (`ucc_intelligence/ucc_intelligence/<module_name>/doctype/ucc_dashboard_access/`). Phase 1 only
-   confirmed the 2-level path for `api.py`/`tests/` — DocTypes commonly sit one level deeper, under a
-   module-name folder that could well also be `ucc_intelligence`, but that's not guaranteed. Wrong
-   depth = `bench migrate` silently never finds it.
-2. **`autoname` and `permissions`.** The legacy Server Script only ever *reads* this DocType, so
-   nothing in the code that was ported confirms how rows are named or which roles can edit them —
-   and the second one is a real security question for a permission-configuration DocType, not
-   something to guess.
+**Verified on `ucc.local` via `bench console`:**
 
-**Need:** `cat ucc_intelligence/modules.txt`, `ls ucc_intelligence/ucc_intelligence/`, and the output
-of (on `ucc-sms.orb.local`):
-
-```python
-import json
-print(json.dumps(frappe.get_doc("DocType", "UCC Dashboard Access").as_dict(), indent=2, default=str))
+```
+DoesNotExistError: DocType UCC Dashboard Access not found
 ```
 
-See `docs/migration/phase-2-doctype-draft/README.md` for the full draft JSON with `<<CONFIRM>>`
-markers at exactly these two spots — everything else in it (all eleven fields, the Select's two
-option strings) is confirmed from the Server Script's own field references, not guessed.
+So there is nothing to "convert." Two live possibilities, and this doesn't distinguish between them:
+
+- `ucc.local` is Felix's development/local bench (used throughout Phase 1–2), and the DocType exists
+  on whatever site the legacy Custom HTML Block deployment actually runs against, if that's a
+  different site.
+- The DocType has never existed anywhere, meaning `load_rows()` has always hit its `except Exception`
+  fallback in production too — `resolve_default([])` on an empty row list resolves to
+  `default_show_everything`, so role-based dashboard visibility restriction may never have actually
+  applied. Every user has always seen every workspace and criterion.
+
+**Practical consequence either way**: the DocType needs to be **created fresh** on `ucc.local` (and
+possibly reconciled with a production site later, if a different one turns out to have real
+configured rows). This doesn't change anything about the ported Python logic in
+`permissions/access.py` — it's already correctly generic and its fail-open path is already the
+best-tested part of it. It does change two things about the DocType artefact:
+
+1. **Folder depth — unrelated to this finding, still open.** Frappe resolves a DocType's path from
+   its `module` field (`ucc_intelligence/ucc_intelligence/<module_name>/doctype/ucc_dashboard_access/`).
+   Phase 1 only confirmed the 2-level path for `api.py`/`tests/`. **Still need:**
+   `cat ucc_intelligence/modules.txt` and `ls ucc_intelligence/ucc_intelligence/` from the real bench.
+2. **`autoname` and `permissions` — now a design decision, not a live-schema lookup.** There's no
+   existing DocType to dump and copy from. Proposed, not assumed:
+   - `autoname`: `hash` (Frappe's default for a DocType with no single obviously-unique field; the
+     legacy code doesn't require `role` to be unique — `union_of` would harmlessly double-apply a
+     duplicate row for the same role).
+   - `permissions`: read/write/create restricted to `System Manager` (this DocType controls who sees
+     what in the platform; it should not be broadly editable).
+   **Need Felix's sign-off on both**, not a live dump — this is now a real decision, not verification.
+
+Everything else in the draft (all eleven fields, the Select's two option strings — `Show everything`
+/ `Show nothing`) is still confirmed from the Server Script's own field references, unaffected by
+this finding. See `docs/migration/phase-2-doctype-draft/README.md`, updated to match.
 
 ## 6. `ignore_permissions=True` — confirmed, carried forward with a review marker
 
@@ -175,8 +192,14 @@ one wasn't in scope this round), not glossed over.
 
 ## 13. What's still needed from you
 
-1. **Two facts for the DocType** (§5): `cat ucc_intelligence/modules.txt`, `ls ucc_intelligence/ucc_intelligence/`,
-   and the `frappe.get_doc("DocType", "UCC Dashboard Access").as_dict()` dump from
-   `ucc-sms.orb.local`. Everything else about Phase 2 is done without needing this.
-2. Once that's in: I place the DocType at its confirmed path, complete its `autoname`/`permissions`
-   from the real dump, and this becomes a normal commit — no new decision needed.
+1. **One fact, unaffected by the DocType finding** (§5): `cat ucc_intelligence/modules.txt` and
+   `ls ucc_intelligence/ucc_intelligence/` from the real bench, to place the DocType folder correctly.
+2. **Two design decisions, now that there's no live schema to copy** (§5): sign off on the proposed
+   `autoname: hash` and `permissions: System Manager only`, or give different ones.
+3. **Optional but worth knowing**: is `ucc.local` the same site the legacy Custom HTML Block actually
+   runs against, or a separate development/local bench? Doesn't block placing the DocType either way,
+   but affects whether "role-based visibility has possibly never been configured anywhere" is a fact
+   about production or just about this dev site.
+
+Once 1 and 2 are answered: I place the DocType at its confirmed path with the agreed `autoname`/
+`permissions`, and this becomes a normal commit — no further decision needed.

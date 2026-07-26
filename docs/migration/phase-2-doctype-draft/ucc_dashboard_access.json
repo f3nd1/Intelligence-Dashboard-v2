@@ -7,7 +7,7 @@
 	"issingle": 0,
 	"track_changes": 1,
 	"engine": "InnoDB",
-	"autoname": "<<CONFIRM: e.g. field:role, or hash -- not determinable from the Server Script>>",
+	"autoname": "hash",
 	"fields": [
 		{
 			"fieldname": "role",
@@ -84,5 +84,13 @@
 			"label": "Notes"
 		}
 	],
-	"permissions": "<<CONFIRM: which roles may read/write -- security-relevant, not guessed>>"
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1
+		}
+	]
 }

@@ -199,8 +199,19 @@ nothing; a user reaching a hidden area another way is still stopped by Frappe's 
 permissions. The client is fail-open — an 8-second timeout or any error yields a fully composed UI.
 
 Note for the port: this script (unlike the criterion scripts) does use
-`frappe.get_all(..., ignore_permissions=True)` against `Has Role`, and its configuration DocType
-exists only as a manually-created site object — it is not in this repository.
+`frappe.get_all(..., ignore_permissions=True)` against `Has Role`.
+
+**Correction (2026-07-26, verified against the real bench):** the configuration DocType was assumed
+to exist as a manually-created site object, based only on the Server Script's own docstring — never
+actually checked against a live site until now. `bench console` on `ucc.local` returned
+`DoesNotExistError: DocType UCC Dashboard Access not found`. Whether this DocType exists on whatever
+site the legacy Custom HTML Block deployment actually runs against (if different from `ucc.local`,
+which Felix has used as a development/local bench throughout Phase 1–2) is still unconfirmed — see
+`docs/migration/phase-2-plan.md` §5 (updated). If the DocType has never existed anywhere, the
+practical consequence is that `load_rows()` has always hit its `except Exception` fallback in
+production too, and `resolve_default([])` on an empty row list always resolves to
+`default_show_everything` — i.e. role-based visibility restriction may never have actually applied;
+every user has always seen every workspace and criterion.
 
 ---
 
