@@ -11,9 +11,9 @@ exactly as before. Hiding a tab does not grant or remove access to anything;
 a user who reaches a hidden area by other means is still stopped by Frappe.
 
 Configuration DocType: UCC Dashboard Access (see
-ucc_intelligence/ucc_intelligence/doctype/ucc_dashboard_access/ once that
-path is confirmed against the live site's module layout -- see
-docs/migration/phase-2-plan.md).
+ucc_intelligence/ucc_intelligence/sophia/doctype/ucc_dashboard_access/).
+Newly created, app-managed -- verified 2026-07-26 that no such DocType
+previously existed on ucc.local.
 """
 
 import frappe

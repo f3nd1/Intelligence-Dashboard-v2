@@ -1,7 +1,7 @@
 {
 	"doctype": "DocType",
 	"name": "UCC Dashboard Access",
-	"module": "<<CONFIRM: module name from ucc_intelligence/modules.txt>>",
+	"module": "Sophia",
 	"custom": 0,
 	"istable": 0,
 	"issingle": 0,

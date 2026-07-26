@@ -1,9 +1,9 @@
 # Phase 2 Plan — Migrate access and shared runtime services
 
-**Status: code written and self-verified (2026-07-26); one deliverable (the app-managed DocType)
-staged as a draft — see §5. Live-bench check on 2026-07-26 found the DocType doesn't exist on
-`ucc.local`, revising that deliverable from "convert existing" to "create fresh."** Per CLAUDE.md §9
-Phase 2 goal: "Move shared permission and runtime logic before moving dashboards."
+**Status: all six required-work bullets built and placed at confirmed real paths (2026-07-26) — see
+§5. Phase 2 as a whole is not DONE**: two of the five CLAUDE.md §9 exit criteria remain genuinely
+unmet, not glossed over — see §12. Per CLAUDE.md §9 Phase 2 goal: "Move shared permission and runtime
+logic before moving dashboards."
 
 ## 0. Scope — confirmed
 
@@ -63,50 +63,34 @@ Same list as `phase-1-plan.md` §2: `custom-html-block/`, `server-scripts/` (all
 cutover), `src/`, `dist/`, `archive/`, `reference/`, `documentation/`. Phase 2 adds a second,
 independently-running implementation; it does not touch or disable the first.
 
-## 5. The one remaining item — the app-managed DocType (revised 2026-07-26)
+## 5. The app-managed DocType — placed (2026-07-26)
 
-Original plan: reuse the existing "UCC Dashboard Access" DocType, convert it to app-managed, keep
-fields/behaviour exactly as-is. That assumed the DocType exists on the live site — never actually
-checked until now, only inferred from the Server Script's own docstring.
+Original plan: reuse the existing "UCC Dashboard Access" DocType, convert it to app-managed. Verified
+via `bench console` on `ucc.local` that no such DocType previously existed
+(`DoesNotExistError`) — the assumption came from the Server Script's own docstring, never checked
+against a live site until this session. Revised to: create fresh, matching the Server Script's
+documented field shape. Felix confirmed (2026-07-26): `ucc.local` is his development/test site;
+production will be checked separately, not blocking this.
 
-**Verified on `ucc.local` via `bench console`:**
+Felix confirmed the two open facts:
 
-```
-DoesNotExistError: DocType UCC Dashboard Access not found
-```
+- **Module folder**: `cat ucc_intelligence/modules.txt` → `Sophia`; `ls ucc_intelligence/ucc_intelligence/`
+  → includes `sophia` (lowercase — Frappe's scrubbed folder name for the `Sophia` module listed in
+  `modules.txt`).
+- **`autoname`/`permissions`**: proposed defaults approved as-is — `autoname: hash`,
+  `permissions`: `System Manager` only (read/write/create/delete).
 
-So there is nothing to "convert." Two live possibilities, and this doesn't distinguish between them:
+**Placed at** `ucc_intelligence/ucc_intelligence/sophia/doctype/ucc_dashboard_access/`
+(`ucc_dashboard_access.json`, `ucc_dashboard_access.py`, `__init__.py` at each new folder level —
+`sophia/`, `sophia/doctype/`, and the doctype's own folder, none of which existed in this repo
+before). The JSON's `module` field is `"Sophia"` (matching `modules.txt`'s Title Case entry, not the
+scrubbed folder name — standard Frappe convention). All eleven fields and the Select's two option
+strings (`Show everything` / `Show nothing`) are unchanged from the Server Script's own field
+references. The staging directory (`docs/migration/phase-2-doctype-draft/`) is deleted, as its own
+README said it would be once this happened.
 
-- `ucc.local` is Felix's development/local bench (used throughout Phase 1–2), and the DocType exists
-  on whatever site the legacy Custom HTML Block deployment actually runs against, if that's a
-  different site.
-- The DocType has never existed anywhere, meaning `load_rows()` has always hit its `except Exception`
-  fallback in production too — `resolve_default([])` on an empty row list resolves to
-  `default_show_everything`, so role-based dashboard visibility restriction may never have actually
-  applied. Every user has always seen every workspace and criterion.
-
-**Practical consequence either way**: the DocType needs to be **created fresh** on `ucc.local` (and
-possibly reconciled with a production site later, if a different one turns out to have real
-configured rows). This doesn't change anything about the ported Python logic in
-`permissions/access.py` — it's already correctly generic and its fail-open path is already the
-best-tested part of it. It does change two things about the DocType artefact:
-
-1. **Folder depth — unrelated to this finding, still open.** Frappe resolves a DocType's path from
-   its `module` field (`ucc_intelligence/ucc_intelligence/<module_name>/doctype/ucc_dashboard_access/`).
-   Phase 1 only confirmed the 2-level path for `api.py`/`tests/`. **Still need:**
-   `cat ucc_intelligence/modules.txt` and `ls ucc_intelligence/ucc_intelligence/` from the real bench.
-2. **`autoname` and `permissions` — now a design decision, not a live-schema lookup.** There's no
-   existing DocType to dump and copy from. Proposed, not assumed:
-   - `autoname`: `hash` (Frappe's default for a DocType with no single obviously-unique field; the
-     legacy code doesn't require `role` to be unique — `union_of` would harmlessly double-apply a
-     duplicate row for the same role).
-   - `permissions`: read/write/create restricted to `System Manager` (this DocType controls who sees
-     what in the platform; it should not be broadly editable).
-   **Need Felix's sign-off on both**, not a live dump — this is now a real decision, not verification.
-
-Everything else in the draft (all eleven fields, the Select's two option strings — `Show everything`
-/ `Show nothing`) is still confirmed from the Server Script's own field references, unaffected by
-this finding. See `docs/migration/phase-2-doctype-draft/README.md`, updated to match.
+**Not verified**: this repo has no bench, so the JSON/controller are validated only for well-formedness
+(valid JSON, `py_compile` clean) — `bench migrate` on the real site is the actual test.
 
 ## 6. `ignore_permissions=True` — confirmed, carried forward with a review marker
 
@@ -145,6 +129,10 @@ the app.
 
 ## 9. Tests to run on the real bench
 
+- `bench --site ucc-sms.orb.local migrate` — must pick up and create the new `UCC Dashboard Access`
+  DocType from `sophia/doctype/ucc_dashboard_access/`. The module folder name is confirmed
+  (`ls ucc_intelligence/ucc_intelligence/` already showed `sophia`), but this is still the first real
+  test that Frappe actually creates the DocType from these files, not just that the folder exists.
 - `bench --site ucc-sms.orb.local run-tests --app ucc_intelligence` — `test_api.py` (Phase 1,
   unaffected) and the new `test_access.py` smoke test
 - Existing repo self-checks, unaffected baseline: `python3 tools/validate_package.py` (94/101, known
@@ -190,16 +178,9 @@ one wasn't in scope this round), not glossed over.
 
 ---
 
-## 13. What's still needed from you
+## 13. Remaining before Phase 2 can be called done
 
-1. **One fact, unaffected by the DocType finding** (§5): `cat ucc_intelligence/modules.txt` and
-   `ls ucc_intelligence/ucc_intelligence/` from the real bench, to place the DocType folder correctly.
-2. **Two design decisions, now that there's no live schema to copy** (§5): sign off on the proposed
-   `autoname: hash` and `permissions: System Manager only`, or give different ones.
-3. **Optional but worth knowing**: is `ucc.local` the same site the legacy Custom HTML Block actually
-   runs against, or a separate development/local bench? Doesn't block placing the DocType either way,
-   but affects whether "role-based visibility has possibly never been configured anywhere" is a fact
-   about production or just about this dev site.
-
-Once 1 and 2 are answered: I place the DocType at its confirmed path with the agreed `autoname`/
-`permissions`, and this becomes a normal commit — no further decision needed.
+All of Phase 2's own decisions are answered — nothing left to ask for this phase's scope. What
+remains is verification that needs a live `bench migrate`/`run-tests`, per §9, plus the two exit
+criteria in §12 that are out of Phase 2's reach until Phase 3 exists as a consumer and until
+administrator diagnostics are specifically exercised. Both are named, not silently dropped.
