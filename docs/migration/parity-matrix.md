@@ -98,7 +98,7 @@ scaffold rows.
 |---|---|---|---|---|---|
 | P1 | App exists and installs/uninstalls cleanly | — (new) | — | `ucc_intelligence/` | `bench --site <dev> install-app` then `uninstall-app`, both exit 0 |
 | P2 | One module | — (new) | — | `ucc_intelligence/ucc_intelligence/` | Module appears in the app's `modules.txt` |
-| P3 | One role-restricted workspace | conceptually X1 | `[REBUILD]` | workspace fixture | Visible with the role, hidden without |
+| P3 | One role-restricted workspace | conceptually X1 | `[REBUILD]` | **Descoped from Phase 1** (Felix, 2026-07-26) — not built, not tracked. `phase-1-plan.md` §6 | N/A |
 | P4 | Health-check whitelisted method | — (new) | — | `ucc_intelligence/api.py` | `frappe.call` returns `ok` |
 | P5 | Zep adapter interface stub | — (new) | — | **Deferred out of Phase 1** — CLAUDE.md §9 Phase 1's required-work list has no memory/Zep item; that's Phase 10 ("Support one of the following after a documented decision" / "Implement provider interface"). See `phase-1-plan.md` §1. | N/A this phase |
 
