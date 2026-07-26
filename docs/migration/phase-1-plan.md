@@ -205,3 +205,69 @@ Restating only the §19 items this specific phase touches, not the full list alr
 For everything else in §19 (AI provider, Zep, Moodle, Jira, retention, role matrix beyond this one
 workspace, automatic-action approval levels) — none is material to Phase 1's five required-work
 bullets, so none is raised here; they remain open in `parity-matrix.md` §7.
+
+---
+
+## 12. Ready-to-apply snippets (still not applied — see note)
+
+These three pieces are hand-written application code, not scaffold structure — nothing here is
+something `bench new-app` generates, so preparing them now doesn't conflict with CLAUDE.md §7's rule
+that the scaffold itself must come from the installed Frappe version. They are **not yet placed
+into a real app tree**, because no app tree exists in this environment (§5 — this container has
+neither `bench` nor `frappe` installed) and no target site/bench has been named. Drop them in as-is
+once `bench new-app ucc_intelligence` has run.
+
+### 12.1 Health-check method — `ucc_intelligence/ucc_intelligence/api.py`
+
+```python
+import frappe
+
+
+@frappe.whitelist()
+def health_check():
+	"""Confirm the app is installed and reachable. No business data, no auth bypass."""
+	return {
+		"ok": True,
+		"app": "ucc_intelligence",
+		"user": frappe.session.user,
+	}
+```
+
+### 12.2 Test — `ucc_intelligence/ucc_intelligence/tests/test_api.py`
+
+```python
+import frappe
+from frappe.tests.utils import FrappeTestCase
+
+from ucc_intelligence.ucc_intelligence.api import health_check
+
+
+class TestHealthCheck(FrappeTestCase):
+	def test_health_check_returns_ok(self):
+		result = health_check()
+		self.assertTrue(result["ok"])
+		self.assertEqual(result["app"], "ucc_intelligence")
+		self.assertEqual(result["user"], frappe.session.user)
+```
+
+### 12.3 Workspace visibility — restrict via the Workspace doctype's own Role field
+
+No custom permission code is needed for "workspace visibility follows roles" — Frappe Workspaces
+have a native `roles` child table (Workspace → Role field) that hides the workspace from users
+without at least one listed role. Create the workspace through the Desk UI (Workspace list → New,
+or Edit on an existing one → add the role under "Roles"), then export it as a fixture:
+
+```bash
+bench --site <site> export-fixtures --app ucc_intelligence
+```
+
+This produces `ucc_intelligence/fixtures/workspace.json` (or the equivalent Frappe-version-specific
+export path) — do not hand-author that JSON; export it from a working Desk configuration so its
+shape matches the installed Frappe version, per the same §7 rule as the rest of the scaffold.
+
+### 12.4 What is still blocked
+
+Applying §12.1–§12.3 for real, and checking any of §10's five boxes, still needs: `bench new-app`
+run against a real bench, a named dev/staging site, and confirmation of who runs these commands
+(§5). Nothing above changes that — it only removes "what does the health check look like" from the
+list of things blocking Step 3 once bench access exists.
