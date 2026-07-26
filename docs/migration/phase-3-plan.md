@@ -1,7 +1,9 @@
 # Phase 3 Plan — Migrate Analytics frontend shell
 
-Plan only. **No code written yet.** Per CLAUDE.md §9 Phase 3 goal: "Replace the Custom HTML Block
-shell with a Frappe Desk Page while preserving the visual and navigation behaviour."
+**Status: code written (2026-07-26), self-verified without a bench — see §11. Not yet run on the real
+site.** Per CLAUDE.md §9 Phase 3 goal: "Replace the Custom HTML Block shell with a Frappe Desk Page
+while preserving the visual and navigation behaviour." Proceeded on the stated defaults (Decision A:
+Analytics only; Decision B: Explore deferred) — Felix said "go ahead" without objecting to either.
 
 ## 0. Two scope decisions this plan does not make silently
 
@@ -208,3 +210,82 @@ same as any other doctype/page removal).
 Everything else in this plan (page-scoped CSS loading, once-per-session access-check revalidation,
 porting fragilities as-is rather than fixing them) has a stated default and doesn't block starting —
 say so if any default is wrong.
+
+---
+
+## 11. What was built (2026-07-26)
+
+Route came back as `sophia-analytics` (Felix's real bench output), folder `sophia_analytics` — same
+hyphen/underscore split as the Phase 2 DocType. No `.py` controller was generated (confirmed: this
+Frappe version doesn't require one for a standard client-side Page).
+
+**Files, all at the confirmed real path**
+`ucc_intelligence/ucc_intelligence/sophia/page/sophia_analytics/`:
+
+- `sophia_analytics.json`, `__init__.py` (×2, one per new folder level) — the real bench-generated
+  files, reproduced here so this repo's copy is complete, same reasoning as Phase 2's DocType.
+- `sophia_analytics.js` — the actual port.
+- `sophia_analytics.css` — byte-identical copy of `custom-html-block/CSS.css`.
+
+**How the port was done, not just described**: manual retyping of ~1,300 dense lines risks silent
+transcription errors, so this wasn't hand-copied through the chat interface. The platform-shell
+(`custom-html-block/JAVASCRIPT.js:266-435`) and unified-engine (`:2144-2703`) modules were extracted
+programmatically by exact line range, and exactly two mechanical substitutions were applied via
+scripted string replacement with an assertion that the *pre-change* text matched the live source
+verbatim before any substitution ran (so a silent drift in the legacy file would have raised an error,
+not produced a wrong port):
+
+1. `root_element` / document-wide `#uccIntelligencePlatform` lookup → the Page's own wrapper-derived
+   element, turning each top-level IIFE into a named function (`initPlatformShell(root)`,
+   `initAnalyticsEngine(platform)`) called once from `on_page_load`.
+2. `method:"ucc_dashboard_access"` → `method:"ucc_intelligence.api.get_dashboard_access"` — the one
+   deliberate behavioural change, wiring this page to Phase 2's ported access-check instead of the
+   legacy Server Script, which is exactly what Phase 2 built it for.
+
+Diffing the pre/post transformation confirmed **no other line changed** — not chart renderers, not
+`metricRows`, not `callApi`, not the failure-ladder in `chartForLive`, none of it. This matches the
+finding in §2 of this plan: once the DOM shape is reproduced identically, the vast majority of the
+engine needed zero changes because it already addresses everything through `platform.querySelector`,
+not `document`.
+
+**HTML shell**: rebuilt from `HTML.html`'s actual Analytics section (verified against the live file,
+not from memory), with exactly the two Decision-A/B trims applied — the changelog/version button
+dropped (no changelog system ported) and the Explore/Ask workspace nav buttons dropped (those
+workspaces don't exist on this page; a button that shows a blank panel is worse than not having it).
+Everything else — brand copy, all seven criterion mount divs, the dashboard `<select>`, the
+shell-collapse toggle — is unchanged from the deployed markup.
+
+**`sophia_analytics.css`**: page-scoped by file-colocation convention (same basename as the page,
+same folder), not `app_include_css` — this is what neutralises the 222-unscoped-selector finding from
+§4 without renaming a single selector.
+
+## 12. Verification performed without a bench
+
+`tools/test_sophia_analytics_page.py` (14 checks, all passing) — re-extracts the same exact ranges
+from the live `custom-html-block/JAVASCRIPT.js` and `HTML.html`, re-applies the same two
+transformations, and diffs the result against the committed page files. This is a permanent,
+re-runnable check: if the legacy source or the ported file drifts later, this catches it — the same
+discipline as Phase 2's contract-parity test. Also: `node --check` on the assembled JS, a JSON
+round-trip check confirming the embedded shell HTML matches the intended trimmed markup exactly, and
+a byte-diff confirming the CSS copy is identical. Full existing regression suite re-run, baseline
+unchanged (94/101).
+
+**Not verified — needs the real bench**: everything in CLAUDE.md §9 Phase 3's actual exit criteria
+(§8) requires a rendered page — all seven criteria selectable and switching correctly, filters,
+loading states, readiness banners, diagnostics modal, responsive behaviour at real widths, and
+specifically whether `frappe.require("/assets/ucc_intelligence/js/shared.js", boot)` resolves to the
+right built asset path in this Frappe version (the one part of this port with no legacy precedent to
+extract from, since the Custom HTML Block never needed to load a separate script this way).
+
+## 13. What's needed from you now
+
+1. `bench build --app ucc_intelligence` (this page's CSS/JS are new files; a new/changed page's assets
+   need a build before they'll serve).
+2. `bench --site ucc-sms.orb.local migrate` (picks up the Page record if it isn't already active from
+   the Desk UI creation — likely a no-op, worth confirming).
+3. Visit `/app/sophia-analytics` and report: does it render at all, does `shared.js` load correctly
+   (check the browser console for a 404 on the `frappe.require` path), do the seven criteria switch
+   correctly, does the KPI/chart/table layout match the live Custom HTML Block side by side.
+4. If `frappe.require`'s asset path is wrong, tell me what the browser console actually shows and I'll
+   correct it — that's the one line in this port with no exact precedent in the legacy file to verify
+   against.
