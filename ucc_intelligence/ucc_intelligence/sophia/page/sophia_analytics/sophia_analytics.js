@@ -754,8 +754,14 @@ frappe.pages['sophia-analytics'].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
-	page.body.innerHTML = SHELL_HTML;
-	const root = page.body.querySelector("#uccIntelligencePlatform");
+	// page.body is jQuery-wrapped in this Frappe version, not a raw DOM node --
+	// confirmed by direct browser inspection (the same issue Dashboard Studio
+	// hit). [0] unwraps to the underlying element; the rest of this port uses
+	// plain DOM APIs throughout, so unwrap once here rather than switching the
+	// ported engine/shell code to jQuery.
+	const bodyEl = page.body[0] || page.body;
+	bodyEl.innerHTML = SHELL_HTML;
+	const root = bodyEl.querySelector("#uccIntelligencePlatform");
 
 	function boot() {
 		initPlatformShell(root);

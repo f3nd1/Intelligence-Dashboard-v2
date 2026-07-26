@@ -108,6 +108,18 @@ css_original = (ROOT / "custom-html-block" / "CSS.css").read_text(encoding="utf-
 css_ported = (PAGE_DIR / "sophia_analytics.css").read_text(encoding="utf-8")
 checks.append(report(css_original == css_ported, "sophia_analytics.css is byte-identical to custom-html-block/CSS.css"))
 
+# --- page.body regression guard ---
+# Confirmed via live browser inspection (2026-07-26): page.body is jQuery-
+# wrapped in this Frappe version, not a raw DOM node, so .innerHTML/
+# .querySelector on it directly throws. Guard against reintroducing that.
+wireup_match = re.search(r"frappe\.pages\['sophia-analytics'\]\.on_page_load[\s\S]*", ported)
+checks.append(report(bool(wireup_match), "on_page_load wiring found in the ported page"))
+if wireup_match:
+	wireup = wireup_match.group(0)
+	checks.append(report("page.body.innerHTML" not in wireup and "page.body.querySelector" not in wireup,
+		"page.body is not used directly as a DOM node (must be unwrapped first)"))
+	checks.append(report("page.body[0]" in wireup, "page.body is unwrapped via [0] before use as a DOM node"))
+
 passed = all(checks)
 print()
 print(f"{'PASS' if passed else 'FAIL'}: {sum(checks)}/{len(checks)} checks")
