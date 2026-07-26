@@ -1,0 +1,88 @@
+{
+	"doctype": "DocType",
+	"name": "UCC Dashboard Access",
+	"module": "<<CONFIRM: module name from ucc_intelligence/modules.txt>>",
+	"custom": 0,
+	"istable": 0,
+	"issingle": 0,
+	"track_changes": 1,
+	"engine": "InnoDB",
+	"autoname": "<<CONFIRM: e.g. field:role, or hash -- not determinable from the Server Script>>",
+	"fields": [
+		{
+			"fieldname": "role",
+			"fieldtype": "Link",
+			"options": "Role",
+			"label": "Role",
+			"reqd": 1
+		},
+		{
+			"fieldname": "default_when_unconfigured",
+			"fieldtype": "Select",
+			"options": "Show everything\nShow nothing",
+			"label": "Default When Unconfigured"
+		},
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled",
+			"default": "1"
+		},
+		{
+			"fieldname": "show_analytics",
+			"fieldtype": "Check",
+			"label": "Show Analytics"
+		},
+		{
+			"fieldname": "show_explore",
+			"fieldtype": "Check",
+			"label": "Show Explore"
+		},
+		{
+			"fieldname": "show_ask_ucc",
+			"fieldtype": "Check",
+			"label": "Show Ask UCC"
+		},
+		{
+			"fieldname": "show_criterion_1",
+			"fieldtype": "Check",
+			"label": "Show Criterion 1"
+		},
+		{
+			"fieldname": "show_criterion_2",
+			"fieldtype": "Check",
+			"label": "Show Criterion 2"
+		},
+		{
+			"fieldname": "show_criterion_3",
+			"fieldtype": "Check",
+			"label": "Show Criterion 3"
+		},
+		{
+			"fieldname": "show_criterion_4",
+			"fieldtype": "Check",
+			"label": "Show Criterion 4"
+		},
+		{
+			"fieldname": "show_criterion_5",
+			"fieldtype": "Check",
+			"label": "Show Criterion 5"
+		},
+		{
+			"fieldname": "show_criterion_6",
+			"fieldtype": "Check",
+			"label": "Show Criterion 6"
+		},
+		{
+			"fieldname": "show_criterion_7",
+			"fieldtype": "Check",
+			"label": "Show Criterion 7"
+		},
+		{
+			"fieldname": "notes",
+			"fieldtype": "Small Text",
+			"label": "Notes"
+		}
+	],
+	"permissions": "<<CONFIRM: which roles may read/write -- security-relevant, not guessed>>"
+}
