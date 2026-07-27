@@ -747,6 +747,74 @@ if(doctype)window.open(doctypeListRoute(doctype),"_blank","noopener");
 window.UCCLiveAnalytics=Object.freeze({config:CONFIG,registerResponseAdapter:registerResponseAdapter,registerChartPlugin:registerChartPlugin,refresh:function(criterion){const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(criterion)}"]`);if(dashboard)return loadLive(dashboard,true);},showTab:function(criterion,tab){const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(criterion)}"]`);if(dashboard)showTab(dashboard,tab);}});
 }
 
+/* ============================================================
+ * INSIGHTS PILOT -- feasibility spike only, see
+ * docs/migration/insights-pilot-findings.md. Additive: inserts one
+ * extra, clearly-labelled card next to the existing "No. of Student
+ * Applicants per Year" chart (id c411-applicants-year, Criterion 4,
+ * subcriterion 4.1.1). Never touches renderChart/CHART_PLUGINS or
+ * any other chart. Deliberately NOT a reusable embed component --
+ * this is a one-off spike and must not be read as settling
+ * dashboard_studio's still-open "Publish to Sophia" embed contract.
+ * Delete this whole block to remove the pilot cleanly.
+ * ============================================================ */
+const INSIGHTS_PILOT_CHART_ID = "c411-applicants-year";
+// Set once the real Insights chart exists on the bench (see the findings
+// doc, Step 3). Left blank, the pilot card shows a placeholder instead of
+// an iframe pointed at nothing.
+const INSIGHTS_PILOT_EMBED_URL = "";
+
+// sophia_analytics.css is a byte-identical copy of the legacy CSS.css
+// (regression-guarded by tools/test_sophia_analytics_page.py) -- adding
+// pilot-only rules there would break that guarantee, so this injects its
+// own tiny <style> instead. Deleting this pilot block removes it too.
+function injectInsightsPilotStyles() {
+	if (document.getElementById("ucc-insights-pilot-style")) return;
+	const style = document.createElement("style");
+	style.id = "ucc-insights-pilot-style";
+	style.textContent =
+		".ucc-insights-pilot-frame{width:100%;min-height:320px;border:0;display:block}";
+	document.head.appendChild(style);
+}
+
+function mountInsightsPilotCard(existingCard) {
+	if (!existingCard || existingCard.dataset.uccInsightsPilotSibling === "1") return;
+	injectInsightsPilotStyles();
+	const pilotCard = document.createElement("article");
+	pilotCard.className = "panel ucc-shared-panel ucc-demo-visual-card";
+	pilotCard.dataset.demoCard = "insights-pilot-" + INSIGHTS_PILOT_CHART_ID;
+	pilotCard.innerHTML =
+		'<div class="panel-head ucc-card-header"><div class="ucc-card-heading-copy">' +
+		"<h2>Insights pilot</h2>" +
+		'<p class="ucc-card-description">Feasibility spike -- same underlying data, rendered by Frappe Insights instead of the hand-rolled chart above. Not a replacement.</p>' +
+		"</div></div>" +
+		(INSIGHTS_PILOT_EMBED_URL
+			? '<iframe class="ucc-insights-pilot-frame" src="' + INSIGHTS_PILOT_EMBED_URL + '" loading="lazy" title="Insights pilot chart"></iframe>'
+			: '<div class="ucc-live-empty"><strong>Insights pilot not yet wired up</strong><span>INSIGHTS_PILOT_EMBED_URL is blank -- see docs/migration/insights-pilot-findings.md.</span></div>');
+	existingCard.insertAdjacentElement("afterend", pilotCard);
+	existingCard.dataset.uccInsightsPilotSibling = "1";
+}
+
+// The 4.1.1 tab's live chart cards are mounted lazily (only once that
+// section is actually opened -- see ensureLiveSectionCards above), so this
+// observes for the target card rather than assuming it exists at boot.
+function watchForInsightsPilotTarget(root) {
+	const selector = '[data-demo-card="' + INSIGHTS_PILOT_CHART_ID + '"]';
+	const existing = root.querySelector(selector);
+	if (existing) {
+		mountInsightsPilotCard(existing);
+		return;
+	}
+	const observer = new MutationObserver(function () {
+		const card = root.querySelector(selector);
+		if (card) {
+			mountInsightsPilotCard(card);
+			observer.disconnect();
+		}
+	});
+	observer.observe(root, { childList: true, subtree: true });
+}
+
 frappe.pages['sophia-analytics'].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -766,6 +834,7 @@ frappe.pages['sophia-analytics'].on_page_load = function (wrapper) {
 	function boot() {
 		initPlatformShell(root);
 		initAnalyticsEngine(root);
+		watchForInsightsPilotTarget(root);
 	}
 
 	if (window.UCCShared) {
