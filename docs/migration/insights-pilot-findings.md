@@ -1,15 +1,18 @@
 # Frappe Insights single-chart pilot — findings
 
-**Status as of 2026-07-27: pilot code shipped, live bench verification pending.**
+**Status as of 2026-07-27: pilot code shipped, live bench verification pending
+(bench access being sorted out on `ucc-sms-v2`). §7 (full 106-chart
+classification) is repo-only work, done and complete.**
 This is a feasibility spike, not a migration. Nothing here removes or replaces an
 existing renderer, and nothing here decides the long-term rendering direction —
 that call is Felix's, at the end of this doc.
 
-I have no live access to `ucc-sms.orb.local` / `ucc.local` in this session, same
-as every other phase this migration has gone through. Everything that requires
-running a bench command, clicking through the Insights UI, or logging in as a
-different user is written up as a precise procedure below, not a result — I'm
-not going to fabricate a pass/fail for anything I can't actually observe.
+§§1-6 need live bench/browser access I don't have in this session — everything
+there that requires running a bench command, clicking through the Insights UI,
+or logging in as a different user is written up as a precise procedure, not a
+result; I'm not going to fabricate a pass/fail for anything I can't actually
+observe. §7 is different: it's pure source-reading, fully verifiable from the
+repo alone, and is complete.
 
 ---
 
@@ -293,11 +296,12 @@ are firmly out of scope**, matching the task's own framing exactly. **92
 (`bar`+`donut`+`trend`+`admission-line`+`admission-column`) are plain
 aggregates like the pilot chart** — the closest thing to a "known-good"
 adoption pool. The remaining **106 (`lifecycle`/`funnel`/`matrix`/`radar`/
-`gauge`) are a genuine unknown** — I don't know Insights v2.2.3's actual
-supported chart type list without seeing the live UI, so I'm not going to
-guess whether they map cleanly or would need custom work; that's a question
-for a second, separate pilot if this one goes well, not something this
-single-chart spike answers.
+`gauge`) were originally left as a genuine unknown** in this doc's first
+version — **§7 below now classifies all 106 individually**, resolving that
+gap. Short version: 55 more turn out to be plain-aggregate candidates (total
+candidate pool 147/209), 37 turn out to have no Insights equivalent at all
+regardless of visual complexity (total non-candidates 48/209), and 14
+genuinely need a closer look before anyone decides (down from 106).
 - Each plain-aggregate chart's data isn't a raw table scan — most go through
   the same kind of derived-grouping logic `build_admission_intelligence()`
   does (status filtering, field-candidate resolution across DocTypes that
@@ -306,6 +310,19 @@ single-chart spike answers.
 - **If** filters need "separate wiring" per §4(a)'s likely answer, that's a
   second per-chart integration cost on top of the query itself — not a
   one-time platform cost.
+- §7's classification adds a cost dimension the type-name table above
+  couldn't show: 37 of the 106 "unknown" charts aren't reading from a
+  DocType at all — they're rendering request-time permission/availability
+  counts (available vs. unavailable sources/metrics), which live nowhere an
+  Insights SQL query can reach. Migrating those isn't "write a different
+  query," it's "these charts don't have an underlying table, full stop."
+  Separately, dozens of the remaining charts (the generic-fallback ones,
+  bucket D in §7) show whichever metric happens to land in a rotating
+  window keyed to the chart's position, not a metric chosen to match its
+  own title — so even a perfect Insights port of *today's* behaviour would
+  faithfully reproduce a title/data mismatch that arguably shouldn't be
+  preserved. Full adoption of these 106 is as much an information-design
+  decision (what should each card actually show) as an Insights migration.
 - Net: full adoption is not a weekend project. A realistic estimate is
   low-to-mid tens of engineer-hours across query-building, filter wiring
   investigation, and permission-model reconciliation, before any visual
@@ -326,12 +343,240 @@ This is Felix's call. What I'd weigh, once §1 and §4 have real answers:
   through a permission-checking proxy of our own — not something to work
   around chart-by-chart.
 - If §4(b) comes back genuinely permission-safe and §4(a) shows filters need
-  real but boundable wiring effort, the ~35 plain-aggregate charts become a
-  legitimate incremental-migration candidate, most naturally folded into
-  Phase 4 (since those charts' data already needs to move off the Server
-  Scripts into real app code anyway).
-- The ~20 bespoke chart types stay hand-rolled regardless — nothing here
-  changes that.
+  real but boundable wiring effort, the 147 plain-aggregate charts (92 from
+  the original type breakdown + 55 more identified in §7's full
+  classification) become a legitimate incremental-migration candidate, most
+  naturally folded criterion-by-criterion into Phase 4 (since those charts'
+  data already needs to move off the Server Scripts into real app code
+  anyway).
+- The 48 bespoke charts (11 with genuinely unique visual shapes + 37 that
+  aren't reading from a table at all, per §7) stay hand-rolled regardless —
+  nothing here changes that.
+- The 14 "needs a closer look" charts (§7) are small enough to just decide
+  individually when Phase 4 reaches the criterion they're in, rather than
+  needing their own investigation phase.
 
 I'd hold off recommending anything firmer than that until the two pending
 results in §4 are in.
+
+---
+
+## 7. Full classification of the 106 "unknown" charts
+
+Repo-only work, done while bench access is being sorted out on `ucc-sms-v2`.
+Same method as the pilot chart in §2: read the real source, don't infer from
+titles. Dispatched one read-only investigation per criterion (7 in total)
+against the actual Server Scripts, then combined the results below.
+
+### The mechanism (verified, not assumed)
+
+None of these 106 charts (`lifecycle`/`funnel`/`matrix`/`radar`/`gauge`) have
+a dedicated per-chart data mapping the way the pilot chart's `dataKey` does.
+`admission_intelligence` (used by §2's pilot chart and its siblings) is the
+**only** such dedicated block in the entire engine — confirmed by grep, one
+match in `JAVASCRIPT.js`. Every other chart, including all 106 here, goes
+through one shared fallback, `metricRows(result, chartIndex, chart)`
+(`JAVASCRIPT.js:2399-2432`), which buckets by matching the chart's **title
+text** against three regexes, in order, before falling through to a generic
+default:
+
+| Bucket | Title regex | What actually renders |
+|---|---|---|
+| A | `source availability\|evidence readiness\|source readiness` | 4 fixed rows built from `result.source_summary`/`result.metric_summary` — counts of how many of the criterion's declared sources/metrics resolved successfully for this user, this request |
+| B | `status distribution\|system health\|control health\|readiness` | 4 fixed rows: Available / Unavailable / Sources / Exceptions counts, again about the response itself |
+| C | `exception\|gap\|risk profile` | top 5 of `result.exceptions` (real per-criterion flagged-record counts) |
+| D | *(no match — the default)* | a **rotating window** of up to 5 items from `result.metrics`, chosen by the chart's position index within its section, **not by any match to the chart's own title** |
+
+### Two findings that apply across all seven criteria, verified independent of any one criterion's business logic
+
+1. **Buckets A and B (37 charts) are not reading from a database table at
+   all.** `source_summary`/`metric_summary` are meta-counts about which of
+   the criterion's *other* declared metrics/sources resolved this request —
+   computed at runtime from permission/connectivity outcomes, not stored
+   anywhere queryable. An Insights SQL query has nothing to point at here
+   regardless of how the chart is visually labelled ("Evidence Readiness
+   Matrix" sounds like a heatmap over real records; it's actually 4 numbers
+   about API response health). These are out of scope the same way
+   `decision`/`network`/`ladder` are, just for a different reason — not
+   because the visual shape is bespoke, but because there's no table behind
+   it to query.
+2. **Bucket D (58 charts) shows data chosen by position, not by meaning.**
+   A chart titled "Governance Evidence Matrix" doesn't necessarily show
+   governance-evidence data — it shows whichever metrics land in a
+   `(chartIndex * 5) % metrics.length` window for that criterion. This means
+   a byte-for-byte faithful Insights port of *today's* rendered content
+   would often reproduce a title that doesn't match its own data — worth
+   flagging as an information-design question distinct from the Insights
+   feasibility question.
+
+Given this, classification below is done **per criterion × bucket**, not
+per individual chart title — charts sharing a criterion and bucket share
+identical data provenance, so a single verified answer applies to all of
+them. Each criterion section states its underlying metrics/exceptions pool
+composition (with file:line) once, then classifies every chart in that
+pool.
+
+
+#### Criterion 1 -- Governance & Strategy
+
+**Metrics pool: 51 total, 39 ever `available`** (17 plain count + 20 plain filtered-count + 2 composite `field_compare` + 12 static `unsupported`, excluded once unavailable). Available pool is 95% plain (37/39). **Exceptions**: not used by any Criterion 1 chart in this set. Source: `server-scripts/UCC Analytics - Criterion 1.py:1161-1279`.
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `v190-c1-overview-06` | Evidence Readiness Matrix | `matrix` | A | Bespoke — not table-backed |
+| `v190-c1-overview-20` | Evidence Completeness | `lifecycle` | D | Plain aggregate |
+| `v190-c1-overview-27` | Target Achievement Gauge | `funnel` | D | Plain aggregate |
+| `v190-c1-overview-28` | Overall Criterion Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c1-111-03` | Leadership and Role Readiness | `funnel` | B | Bespoke — not table-backed |
+| `v190-c1-111-04` | Policy and Review Lifecycle | `lifecycle` | D | Plain aggregate |
+| `v190-c1-111-05` | Governance Evidence Matrix | `radar` | D | Plain aggregate |
+| `v190-c1-111-06` | Governance Action Completion | `matrix` | D | Plain aggregate |
+| `v190-c1-111-15` | Policy Approval Status | `gauge` | D | Plain aggregate |
+| `v190-c1-111-19` | Conflict and Independence Controls | `funnel` | D | Plain aggregate |
+| `v190-c1-111-22` | Governance Records Readiness | `matrix` | B | Bespoke — not table-backed |
+| `v190-c1-111-27` | Governance Source Readiness | `funnel` | A | Bespoke — not table-backed |
+| `v190-c1-111-28` | Governance Metric Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c1-121-03` | Strategic Target Readiness | `funnel` | B | Bespoke — not table-backed |
+| `v190-c1-121-04` | Plan-to-Review Lifecycle | `lifecycle` | D | Plain aggregate |
+| `v190-c1-121-06` | Strategic Action Completion | `matrix` | D | Plain aggregate |
+| `v190-c1-121-22` | Objective Ownership Coverage | `matrix` | D | Plain aggregate |
+| `v190-c1-121-27` | Strategy Source Readiness | `funnel` | A | Bespoke — not table-backed |
+| `v190-c1-121-28` | Strategy Metric Readiness | `lifecycle` | B | Bespoke — not table-backed |
+
+#### Criterion 2 -- Corporate Administration
+
+**Metrics pool: 79 total, 72 ever `available`** (72 plain count/sum/avg, 0 composite, 7 static `unsupported`). Available pool is 100% plain -- this criterion has zero composite/ratio metrics anywhere. **Exceptions (8 available of 15 defined)**: also 100% plain single-DocType filtered counts. Source: `server-scripts/UCC Analytics - Criterion 2.py:1351-1543`.
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `v190-c2-overview-03` | Administration System Health | `funnel` | B | Bespoke — not table-backed |
+| `v190-c2-overview-04` | People-to-Feedback Lifecycle | `lifecycle` | D | Plain aggregate |
+| `v190-c2-overview-05` | Corporate Exception Funnel | `radar` | C | Plain aggregate |
+| `v190-c2-overview-06` | Evidence Readiness Matrix | `matrix` | A | Bespoke — not table-backed |
+| `v190-c2-211-04` | Workforce Control Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c2-212-11` | Development Action Completion | `funnel` | D | Plain aggregate |
+| `v190-c2-221-11` | Communication Record Completeness | `funnel` | D | Plain aggregate |
+| `v190-c2-231-04` | Data Quality Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c2-232-04` | Knowledge Repository Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c2-241-11` | Improvement Action Linkage | `funnel` | D | Plain aggregate |
+| `v190-c2-242-04` | Student Satisfaction Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c2-243-04` | Staff Satisfaction Readiness | `lifecycle` | B | Bespoke — not table-backed |
+
+#### Criterion 3 -- Agent Management
+
+**Metrics pool: 56 total, 41 ever `available`** (35 plain + 6 composite `derived_sum`/`derived_percent`, which combine OTHER metrics' values rather than querying rows directly + 15 static `unsupported`). Available pool is 85% plain, 15% composite. **Exceptions (9 total)**: 7 plain + 2 composite (`ov-known-attention-total`, `c321-known-live-exceptions` -- both sums of other metrics, so a chart drawing on them can double-count). Source: `server-scripts/UCC Analytics - Criterion 3.py:1500-1820`.
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `v190-c3-overview-05` | Open Exception Profile | `radar` | C | Needs a closer look |
+| `v190-c3-overview-06` | Source Readiness | `matrix` | A | Bespoke — not table-backed |
+| `v190-c3-overview-07` | Agent Portfolio Status | `gauge` | D | Plain aggregate |
+| `v190-c3-overview-20` | Agent Evidence Completeness | `lifecycle` | D | Plain aggregate |
+| `v190-c3-overview-28` | Agent Target Achievement | `lifecycle` | D | Plain aggregate |
+| `v190-c3-311-05` | Approval and Background Check | `radar` | D | Plain aggregate |
+| `v190-c3-311-06` | Contract and NDA Readiness | `matrix` | B | Bespoke — not table-backed |
+| `v190-c3-311-07` | Agent Listing and Status | `gauge` | D | Plain aggregate |
+| `v190-c3-311-12` | Due-Diligence Evidence | `lifecycle` | D | Plain aggregate |
+| `v190-c3-311-15` | Selection Rating Completeness | `gauge` | D | Plain aggregate |
+| `v190-c3-311-20` | Contract Signature Coverage | `lifecycle` | D | Plain aggregate |
+| `v190-c3-311-22` | NDA Completion Status | `matrix` | D | Plain aggregate |
+| `v190-c3-311-27` | Selection Source Readiness | `funnel` | A | Bespoke — not table-backed |
+| `v190-c3-311-28` | Selection Metric Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c3-321-03` | Service Delivery Controls | `funnel` | D | Plain aggregate |
+| `v190-c3-321-04` | Performance Evaluation Distribution | `lifecycle` | D | Plain aggregate |
+| `v190-c3-321-06` | Complaints and Breaches | `matrix` | D | Plain aggregate |
+| `v190-c3-321-15` | Contract Renewal Coverage | `gauge` | D | Plain aggregate |
+| `v190-c3-321-22` | Monitoring Record Coverage | `matrix` | D | Plain aggregate |
+| `v190-c3-321-27` | Evaluation Source Readiness | `funnel` | A | Bespoke — not table-backed |
+| `v190-c3-321-28` | Evaluation Metric Readiness | `lifecycle` | B | Bespoke — not table-backed |
+
+#### Criterion 4 -- Student Protection (non-admission charts only)
+
+**Metrics pool (5 relevant sections): 44 total, 18 ever `available`** (18 plain, 0 composite, 26 static `unsupported` -- refund/movement workflows are largely unmapped). Available pool is 100% plain but *thin*: `c4-441-outcomes` in particular has only 1 of 9 metrics ever computed, so it renders near-empty regardless of backend. **Exceptions (4.6.1 only)**: 2 of 8 tagged ids ever surface after the availability filter, both plain. Source: `server-scripts/UCC Analytics - Criterion 4.py:1743-2323` (top-level `metrics`/`exceptions`, distinct from the separate `admission_intelligence` block the pilot chart uses).
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `c4-overview-flow` | Student Protection Control Flow | `lifecycle` | D | Plain aggregate |
+| `c4-overview-readiness` | Student Control Readiness | `radar` | B | Bespoke — not table-backed |
+| `c4-421-contract` | Student Contract Lifecycle | `lifecycle` | D | Plain aggregate |
+| `c4-421-readiness` | Student Contract Readiness | `radar` | B | Bespoke — not table-backed |
+| `c4-422-flow` | Fee and FPS Processing Flow | `lifecycle` | D | Plain aggregate |
+| `c4-441-outcomes` | Refund Request Outcomes | `funnel` | D | Plain aggregate |
+| `c4-461-lifecycle` | Attendance Intervention Lifecycle | `lifecycle` | D | Plain aggregate |
+| `c4-461-risk` | Attendance Risk Profile | `radar` | C | Plain aggregate |
+
+#### Criterion 5 -- Academic Quality
+
+**Metrics pool: ~78 total, ~57 ever `available`** (~55 plain + 2 composite `attention_count`/`requirement_gap_count`, overview section only + ~21 static `unsupported`). Available pool is 96% plain. **Exceptions (8 fixed ids, `operational_exception_ids`)**: 100% plain single-DocType filtered counts, one `frappe.get_list` call each. Source: `server-scripts/UCC Analytics - Criterion 5.py:2475-3049`.
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `c5-overview-health` | Criterion 5 System Health | `matrix` | B | Bespoke — not table-backed |
+| `c5-overview-exceptions` | Criterion 5 Exception Profile | `funnel` | C | Plain aggregate |
+| `c5-511-readiness` | Course Design Evidence Readiness | `radar` | A | Bespoke — not table-backed |
+| `c5-511-gaps` | Course Design Gap Profile | `funnel` | C | Plain aggregate |
+| `c5-512-cycle` | Course Review Lifecycle | `lifecycle` | D | Plain aggregate |
+| `c5-512-gaps` | Review Exception Profile | `funnel` | C | Plain aggregate |
+| `c5-521-flow` | Planning Readiness Flow | `lifecycle` | B | Bespoke — not table-backed |
+| `c5-521-gaps` | Planning Exception Profile | `funnel` | C | Plain aggregate |
+| `c5-522-readiness` | Delivery Evidence Readiness | `radar` | A | Bespoke — not table-backed |
+| `c5-522-gaps` | Delivery Exception Profile | `funnel` | C | Plain aggregate |
+| `c5-531-risk` | Partnership Risk Profile | `funnel` | C | Plain aggregate |
+| `c5-531-readiness` | Partnership Evidence Readiness | `matrix` | A | Bespoke — not table-backed |
+| `c5-54-readiness` | Feedback Evidence Readiness | `radar` | A | Bespoke — not table-backed |
+| `c5-54-gaps` | Feedback Exception Profile | `funnel` | C | Plain aggregate |
+| `c5-55-readiness` | Assessment Evidence Readiness | `radar` | A | Bespoke — not table-backed |
+| `c5-55-gaps` | Assessment Exception Profile | `funnel` | C | Plain aggregate |
+
+#### Criterion 6 -- Quality Assurance
+
+**Metrics pool: 53 total, 53 ever `available`** (41 plain flat count/sum/avg + 12 child-table traversal, walking a child table per parent record via `frappe.get_doc` -- single logical source but needs a parent/child join, not a flat `COUNT`; 0 composite/ratio, 0 unsupported). Source: `server-scripts/UCC Analytics - Criterion 6.py:1502-1700`.
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `v190-c6-overview-04` | Quality Calendar Completion | `lifecycle` | D | Plain aggregate (mostly) |
+| `v190-c6-overview-06` | Source Readiness | `matrix` | A | Bespoke — not table-backed |
+| `v190-c6-overview-14` | Quality Evidence Completeness | `matrix` | D | Plain aggregate (mostly) |
+| `v190-c6-611-05` | Audit Findings by Severity | `radar` | D | Plain aggregate (mostly) |
+| `v190-c6-611-06` | Corrective Action Closure | `matrix` | D | Plain aggregate (mostly) |
+| `v190-c6-621-03` | Review Input Completeness | `funnel` | D | Plain aggregate (mostly) |
+| `v190-c6-621-04` | Review Outputs | `lifecycle` | D | Plain aggregate (mostly) |
+| `v190-c6-621-07` | Review Status Distribution | `gauge` | B | Bespoke — not table-backed |
+| `v190-c6-631-06` | Improvement Action Status | `matrix` | D | Plain aggregate (mostly) |
+| `v190-c6-641-06` | Provider Evaluation Outcomes | `matrix` | D | Plain aggregate (mostly) |
+| `v190-c6-641-11` | Rating Completeness | `funnel` | D | Plain aggregate (mostly) |
+| `v190-c6-653-03` | 5×5 Risk Matrix | `funnel` | D | Plain aggregate (mostly) |
+| `v190-c6-653-07` | Risk Assessment Coverage | `gauge` | D | Plain aggregate (mostly) |
+
+#### Criterion 7 -- Outcomes
+
+**Metrics pool: 50 total, only 17 ever `available`** (15 plain + 1 plain-with-multi-field-AND + 1 composite coverage-rate + **33 (66%) static `unsupported`**). This is the sparsest criterion by far -- most cards drawing from this pool will show few or no real data points no matter what renders them. Source: `server-scripts/UCC Analytics - Criterion 7.py:1476-1600`.
+
+| Chart id | Title | Type | Bucket | Classification |
+|---|---|---|---|---|
+| `v190-c7-overview-06` | Outcome Evidence Readiness | `matrix` | A | Bespoke — not table-backed |
+| `v190-c7-overview-11` | Target Variance | `funnel` | D | Needs closer look (sparse) |
+| `v190-c7-overview-14` | Outcome Review Status | `matrix` | D | Needs closer look (sparse) |
+| `v190-c7-overview-28` | Underperforming Indicators | `lifecycle` | D | Needs closer look (sparse) |
+| `v190-c7-overview-29` | Missing Measurements | `radar` | D | Needs closer look (sparse) |
+| `v190-c7-overview-35` | Outcome Source Readiness | `funnel` | A | Bespoke — not table-backed |
+| `v190-c7-711-03` | Indicator Definition Coverage | `funnel` | D | Needs closer look (sparse) |
+| `v190-c7-711-04` | Indicator Ownership Coverage | `lifecycle` | D | Needs closer look (sparse) |
+| `v190-c7-711-05` | Target Definition Coverage | `radar` | D | Needs closer look (sparse) |
+| `v190-c7-711-06` | Actual Result Coverage | `matrix` | D | Needs closer look (sparse) |
+| `v190-c7-711-12` | Benchmark Readiness | `lifecycle` | B | Bespoke — not table-backed |
+| `v190-c7-711-14` | Underperformance Profile | `matrix` | D | Needs closer look (sparse) |
+| `v190-c7-711-15` | Missing Result Profile | `gauge` | D | Needs closer look (sparse) |
+| `v190-c7-711-31` | Measurement Source Readiness | `gauge` | A | Bespoke — not table-backed |
+| `v190-c7-711-36` | Outcome Action Closure | `lifecycle` | D | Needs closer look (sparse) |
+| `v190-c7-711-37` | Evidence Completeness | `radar` | D | Needs closer look (sparse) |
+| `v190-c7-711-38` | Data Quality Profile | `matrix` | D | Needs closer look (sparse) |
+
+#### Totals across all 106
+
+- Plain aggregate: 44
+- Bespoke — not table-backed: 37
+- Needs closer look (sparse): 13
+- Plain aggregate (mostly): 11
+- Needs a closer look: 1
+- **Total: 106**
