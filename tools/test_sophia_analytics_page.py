@@ -120,6 +120,29 @@ if wireup_match:
 		"page.body is not used directly as a DOM node (must be unwrapped first)"))
 	checks.append(report("page.body[0]" in wireup, "page.body is unwrapped via [0] before use as a DOM node"))
 
+# --- Insights pilot: additive-only guard ---
+# The pilot (docs/migration/insights-pilot-findings.md) must never touch the
+# existing chart-plugin registry or renderer, and must only ever target the
+# single pilot chart id -- if either of those stop being true the pilot has
+# stopped being a feasibility spike and started being a silent migration.
+pilot_match = re.search(r"INSIGHTS PILOT[\s\S]*?(?=frappe\.pages\['sophia-analytics'\]\.on_page_load)", ported)
+checks.append(report(bool(pilot_match), "Insights pilot block found in the ported page"))
+if pilot_match:
+	pilot_block = pilot_match.group(0)
+	rest_of_file = ported[: pilot_match.start()] + ported[pilot_match.end() :]
+	checks.append(report(
+		"CHART_PLUGINS." not in pilot_block and "registerChartPlugin(" not in pilot_block,
+		"Insights pilot block does not touch CHART_PLUGINS or register a chart plugin",
+	))
+	checks.append(report(
+		pilot_block.count('data-demo-card="') <= 1,
+		"Insights pilot block targets at most one existing chart card",
+	))
+	checks.append(report(
+		"watchForInsightsPilotTarget(root)" in rest_of_file,
+		"pilot mount is wired into boot() alongside the existing shell/engine init",
+	))
+
 passed = all(checks)
 print()
 print(f"{'PASS' if passed else 'FAIL'}: {sum(checks)}/{len(checks)} checks")
