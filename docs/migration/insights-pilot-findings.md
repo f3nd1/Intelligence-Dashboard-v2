@@ -447,6 +447,36 @@ re-run the full creation script explicitly against `ucc-sms-v2.orb.local`
 (matching what his decisive check used) as the next concrete test — not
 another blind fix, this one has real evidence behind it.
 
+**Update, 2026-07-28 (later again) — two-site theory ruled out cleanly**:
+`ls sites/` shows exactly one folder, `ucc-sms-v2.orb.local`, and Felix
+confirmed every console invocation tonight — including the one that made the
+records `bench execute` proved exist — used the full `ucc-sms-v2.orb.local`
+name throughout. No site mismatch anywhere. Persistence is fully proven
+(raw `mysql` CLI, `bench execute`, fresh console all agree the records are
+real), and the site-name theory doesn't hold up either. This genuinely is
+the web/API layer, as Felix suspected from the start.
+
+Traced the full call chain rather than guessing further: `insights.api.
+get_doc` → `frappe.client.get` (`frappe/client.py:93-112`) → `frappe.get_doc()`
++ `frappe.connect()` (`frappe/__init__.py:274-299`, `frappe/app.py:177-209`
+`init_request`). Every step is ordinary, correct code — `frappe.connect()`
+runs at the top of every single request. Nothing in the code itself explains
+a request failing to see data that provably exists.
+
+Given every *freshly-started, short-lived* process tonight (console,
+`bench execute`, raw `mysql`) succeeded, and only the *long-running web
+worker* process serving the actual browser fails, the leading hypothesis has
+shifted from "bug in Insights or the script" to "stale long-lived worker
+state" — a connection or process-level cache from before tonight's records
+(or possibly before Insights itself was fully fixed and built) existed.
+Recommended two things: a cheap check of `maintenance_mode` in
+`site_config.json` (a real conditional branch found directly in
+`app.py:212` `setup_read_only_mode`, unlikely by itself but free to rule
+out), and the actual test worth trying — `bench restart` (or the local
+equivalent) followed by a re-test. If that fixes it, there was never a code
+bug to find in Insights or this script; if it doesn't, the staleness is
+somewhere less obvious and worth another round with that ruled out too.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
