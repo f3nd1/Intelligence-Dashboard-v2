@@ -363,6 +363,32 @@ rollback. None of this touches the `items`/`layout` fix from the previous
 update, which was still a real, worth-fixing bug — it just wasn't the one
 actually causing the 404s reported this round.
 
+**Update, 2026-07-28 (yet later) — the commit fix alone didn't resolve it
+either**: rerun with fresh records (`ionf4ct5je`/`ionlk6l8mn`), script
+completed cleanly with a fully-populated `RESULT`, and both records still
+404'd via an authenticated `insights.api.get_doc` call moments later. Before
+guessing at a third fix, verified rather than assumed: read Frappe's actual
+`commit()` (`frappe/database/database.py:1173-1184`) — it's a real
+`self.sql("commit")` followed by `self.begin()` to open a fresh transaction,
+the same code path a web worker uses, no console-specific interception.
+Since the script's `RESULT` dict was fully populated (meaning execution
+reached the final `return`, after all four `commit()` calls), the commits
+almost certainly fired. That rules out "commit is a no-op in console" but
+doesn't by itself prove the records are visible to a completely different
+process — so rather than a third blind fix, added
+`stage_3_diagnose_persistence()` to the script: prints this session's
+`frappe.local.site`/`db_name`/actual connected database, checks
+`frappe.db.exists()` for both records in the *same* session (Felix's own
+suggested first test), and gives the exact `bench --site ucc-sms-v2 execute
+frappe.db.exists --args '[...]'` command — a genuinely separate process,
+the same way `bench execute` inits a fresh site connection per invocation —
+as the decisive cross-process test. If that returns `True`, the problem is
+in the web/API layer, not the database, and worth digging into
+`insights.api.get_doc` specifically or site-routing for whatever domain the
+browser is actually pointed at. If it also returns `False`, still a
+persistence problem, and the site name printed by the diagnostic is the
+next thing to cross-check against the browser's actual site.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending

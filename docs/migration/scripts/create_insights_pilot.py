@@ -459,6 +459,54 @@ def stage_2_create():
     }
 
 
+def stage_3_diagnose_persistence(result):
+    """The commit fix (frappe.db.commit() at each milestone in stage_2_create)
+    didn't resolve the 404s on a prior run -- confirmed frappe.db.commit()
+    itself is a real SQL COMMIT (frappe/database/database.py:1173-1184, not
+    guessed), and the RESULT dict being fully populated means the code path
+    that calls commit() did run. That rules out "commit is a no-op in
+    console" but does NOT prove these records are visible outside this
+    session -- print exactly what's needed to settle that, in this session,
+    right now, per Felix's own diagnostic question.
+    """
+    if not result:
+        return
+    print("\n=== STAGE 3: persistence diagnostics ===")
+    print(f"This console session's site: {frappe.local.site!r}")
+    print(f"This console session's db_name (frappe.conf): {frappe.conf.get('db_name')!r}")
+    print(f"This console session's actual connected database: {frappe.db.sql('select database()')[0][0]!r}")
+    same_session_dashboard = frappe.db.exists("Insights Dashboard v3", result["dashboard"])
+    same_session_chart = frappe.db.exists("Insights Chart v3", result["chart"])
+    print(f"frappe.db.exists('Insights Dashboard v3', {result['dashboard']!r}) in THIS session: {same_session_dashboard}")
+    print(f"frappe.db.exists('Insights Chart v3', {result['chart']!r}) in THIS session: {same_session_chart}")
+    print(
+        f"""
+If both came back True just now: this session's transaction has the records
+committed. The decisive next test is from a COMPLETELY SEPARATE process --
+not this console session, not even a new console session started from the
+same shell without exiting this one first (exiting THIS one is exactly what
+triggers _console_cleanup's rollback, so don't exit yet). From a fresh
+terminal, run:
+
+    bench --site ucc-sms-v2 execute frappe.db.exists --args '["Insights Dashboard v3", "{result['dashboard']}"]'
+    bench --site ucc-sms-v2 execute frappe.db.exists --args '["Insights Chart v3", "{result['chart']}"]'
+
+`bench execute` inits a brand-new site connection per invocation
+(frappe/commands/utils.py:execute -> frappe.init+frappe.connect), the same
+way a real web worker does -- if THIS returns True but your browser's
+insights.api.get_doc still 404s, the records are genuinely persisted and the
+bug is somewhere in the web/API layer (site routing for the domain you're
+browsing, a permission check, something in insights.api.get_doc itself) --
+not a database transaction issue anymore, and worth reporting back so I can
+dig into that layer specifically rather than the database layer again. If
+`bench execute` ALSO returns False, that's decisive the other way -- still a
+persistence problem, and worth re-checking whether the site name really
+matches everywhere (this session reported {frappe.local.site!r} above --
+confirm that's the exact site name your browser is actually pointed at).
+"""
+    )
+
+
 def run():
     ok = stage_0_verify_schema()
     relevant, schema = stage_1_discover_insights_schema()
@@ -470,6 +518,7 @@ def run():
         return None
     result = stage_2_create()
     print(f"\n=== RESULT ===\n{result}")
+    stage_3_diagnose_persistence(result)
     print(
         """
 One more thing worth checking once you have the URL: if the Data Source is a
