@@ -78,11 +78,32 @@ are in the docstrings below. Worth knowing before running this:
    (a different DB connection, same as any other Frappe web worker). Fixed
    by committing at each milestone below rather than trusting the session to
    stay open. If you're instead running this via
-   `bench --site ucc-sms-v2 execute <path>.run` (a single process that exits
+   `bench --site <site> execute <path>.run` (a single process that exits
    after `run()` returns), this isn't a concern the same way, but the
    explicit commits are harmless either way.
+6. **`--site ucc-sms-v2` (what every instruction up to this point, including
+   this file's own examples, used) is very possibly the WRONG site name.**
+   After the commit fix still didn't resolve persistence, a `bench execute`
+   check using `--site ucc-sms-v2.orb.local` instead found records that a
+   raw-SQL check against (presumably) plain `ucc-sms-v2` could not. If this
+   bench has two separate site folders under `sites/` -- `ucc-sms-v2` and
+   `ucc-sms-v2.orb.local` -- every prior run of this script (pasted into a
+   console opened with bare `ucc-sms-v2`) would have written real, committed
+   rows into the *empty* `ucc-sms-v2` site, while the browser -- almost
+   certainly resolving whatever `*.orb.local` hostname it's actually being
+   accessed through -- reads from `ucc-sms-v2.orb.local` instead. That would
+   explain every single symptom so far without needing anything wrong in
+   `insights.api.get_doc` or the web layer at all: commits genuinely work,
+   the row genuinely persists, it's just in the wrong site's database the
+   whole time. Confirm with `ls sites/` from the bench root before assuming
+   this is it, then always invoke `bench --site <name>` with whatever that
+   listing actually shows -- this docstring no longer hardcodes one, and
+   Stage 3 below prints `frappe.local.site` (the live, unambiguous truth for
+   whatever session you're actually in) rather than assuming a name.
 
-Usage: paste this whole file into `bench --site ucc-sms-v2 console`.
+Usage: paste this whole file into `bench --site <your-site-name> console` --
+confirm the exact site name with `ls sites/` first if there's any doubt
+which one is correct (see point 6 above).
 
 Run STAGE 0 and STAGE 1 first (read-only, safe, fast) -- they cross-check
 this specific install against what was verified from GitHub, since a local
@@ -117,10 +138,12 @@ CHART_TYPE = "Line"  # or "Bar" -- see note above
 
 def raw_sql_row_exists(doctype, name):
     """Bypass Frappe's Python DB layer entirely -- shell out to a genuinely
-    separate mysql/mariadb CLI process, the same way `bench --site
-    ucc-sms-v2 mariadb` does (frappe/database/__init__.py:96-136's
-    get_command: tries the "mariadb" binary before falling back to "mysql",
-    reads connection details from frappe.conf) -- and ask it directly
+    separate mysql/mariadb CLI process, the same way `bench --site <name>
+    mariadb` does (frappe/database/__init__.py:96-136's get_command: tries
+    the "mariadb" binary before falling back to "mysql", reads connection
+    details from frappe.conf -- so this always targets whatever site THIS
+    running script is actually connected to, never a hardcoded name) --
+    and ask it directly
     whether a row exists. This is the same class of check already confirmed
     by hand via raw SQL (table verified empty); running it from inside this
     script, right after each frappe.db.commit() call, pinpoints exactly
@@ -554,8 +577,8 @@ same shell without exiting this one first (exiting THIS one is exactly what
 triggers _console_cleanup's rollback, so don't exit yet). From a fresh
 terminal, run:
 
-    bench --site ucc-sms-v2 execute frappe.db.exists --args '["Insights Dashboard v3", "{result['dashboard']}"]'
-    bench --site ucc-sms-v2 execute frappe.db.exists --args '["Insights Chart v3", "{result['chart']}"]'
+    bench --site {frappe.local.site} execute frappe.db.exists --args '["Insights Dashboard v3", "{result['dashboard']}"]'
+    bench --site {frappe.local.site} execute frappe.db.exists --args '["Insights Chart v3", "{result['chart']}"]'
 
 `bench execute` inits a brand-new site connection per invocation
 (frappe/commands/utils.py:execute -> frappe.init+frappe.connect), the same

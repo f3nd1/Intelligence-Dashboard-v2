@@ -417,6 +417,36 @@ patched `db_insert`, a non-standard commit/connection setup) rather than
 anything explainable from the vanilla Frappe/Insights source alone. Waiting
 on this round's output.
 
+**Update, 2026-07-28 (final for this thread so far) — persistence confirmed,
+root cause has moved to the site name itself**: `bench --site
+ucc-sms-v2.orb.local execute frappe.db.exists --args [...]` (a genuinely
+separate process from any console session) found both records. Persistence
+is not the problem — `frappe.db.commit()` works exactly as it should.
+
+What jumped out immediately: that command used `--site
+ucc-sms-v2.orb.local`. Every instruction up to this point — mine included,
+in this very script's own docstring and usage line — said bare `--site
+ucc-sms-v2`. If this bench has two separate site folders under `sites/`
+(`ucc-sms-v2` and `ucc-sms-v2.orb.local`), every prior run of this script
+(pasted into a console opened against bare `ucc-sms-v2`, per my own
+instructions) would have written real, committed rows into the *empty*
+`ucc-sms-v2` site, while the browser — almost certainly resolving whatever
+`*.orb.local` hostname it's actually being accessed through — reads from
+`ucc-sms-v2.orb.local` instead. That would account for every symptom in
+this entire thread without anything being wrong in `insights.api.get_doc`
+or the web layer at all: commits genuinely work, rows genuinely persist,
+they've just been landing in the wrong site's database the whole time.
+
+Removed every hardcoded `ucc-sms-v2` from the script's runnable output —
+`stage_3_diagnose_persistence()`'s example `bench execute` commands and
+`raw_sql_row_exists()` now derive everything from `frappe.local.site` (the
+live, unambiguous truth for whatever session is actually running), and the
+docstring's usage line now says to confirm the real site name via `ls
+sites/` rather than assuming one. Asked Felix to confirm that listing and
+re-run the full creation script explicitly against `ucc-sms-v2.orb.local`
+(matching what his decisive check used) as the next concrete test — not
+another blind fix, this one has real evidence behind it.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
