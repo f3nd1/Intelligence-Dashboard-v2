@@ -183,6 +183,34 @@ repo)**:
    card on the 4.1.1 tab, and that the original chart is completely
    unaffected.
 
+**Update, 2026-07-28 — environment changed, §1's `ibis` blocker is resolved**:
+`ucc.local` was deleted and rebuilt as `ucc-sms-v2`; Insights is now v3.12.2
+(not v2.2.3 above) and `bench build --app insights` completes clean on the
+new site. Manual click-through in the Insights Query Builder proved
+unreliable via browser automation, so Data Source/Query/Chart creation moved
+to a script instead: **`docs/migration/scripts/create_insights_pilot.py`**
+— paste into `bench --site ucc-sms-v2 console`. It does NOT hardcode
+Insights' internal schema (v3 is enough of a rewrite from v2 that guessing
+field names from older docs isn't safe) — it discovers the real DocType/field
+structure first and prints it, and separately verified two things from the
+repo alone that the original bullet list above got slightly wrong assuming
+parity with the legacy JS variable names:
+
+- `academic_year` is used as a **hardcoded literal** in
+  `server-scripts/UCC Analytics - Criterion 4.py:2397`, never verified to
+  exist the way `nationality`/`program`/`agent` are (those go through
+  `resolve_field()` with a candidate list first). If it's not a real field on
+  `Student Applicant`, `group_count_rows()` silently buckets every row under
+  `"Not specified"` rather than erroring — the script's Stage 0 checks this
+  against the live schema before anything else runs.
+- The base query (no filters selected) has **no WHERE clause at all** —
+  `applied_filters()` only populates once a real request payload sets a
+  filter, confirmed by reading the function directly, not assumed.
+
+Script isn't run yet (still no bench access in this session) — waiting on
+its Stage 0/1 discovery output before writing the actual creation call, same
+round-trip as every other bench-dependent step in this doc.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
