@@ -321,29 +321,70 @@ def stage_2_create():
         # per Chart created; it's not a duplicate of the pilot query.
         print(f"Note: Insights auto-created a separate blank data_query ({chart.data_query}) -- expected, not a bug.")
 
+    # items shape verified from frontend/src2/dashboard/dashboard.ts:62-71 and
+    # frontend/src2/types/workbook.types.ts:131-142 (Layout / WorkbookDashboardChart)
+    # -- the previous version of this script had this WRONG: flat x/y/width/
+    # height keys and no "layout" wrapper, and no "i" (unique widget id) at
+    # all. That's very likely why the chart never rendered (404 on
+    # insights.api.get_doc even as Administrator, reported after the first
+    # run): VueGridLayout needs a stable per-item "i" and the real key names
+    # are w/h nested under layout, not width/height at the top level. Real
+    # shape: {"type": "chart", "chart": <name>, "layout": {"i": <unique str>,
+    # "x", "y", "w", "h"}}.
+    chart_layout_item = {
+        "type": "chart",
+        "chart": chart_name,
+        "layout": {"i": "pilot-chart-1", "x": 0, "y": 0, "w": 10, "h": 8},
+    }
+
     existing_dashboard = frappe.db.get_value("Insights Dashboard v3", {"title": PILOT_TITLE, "workbook": workbook}, "name")
     if existing_dashboard:
         print(f"Reusing existing Dashboard: {existing_dashboard}")
         dashboard_name = existing_dashboard
         dashboard = frappe.get_doc("Insights Dashboard v3", dashboard_name)
+        # Self-heal: always recompute items from the CURRENT chart_name and
+        # correct shape, rather than trusting whatever was stored by an
+        # earlier (possibly wrong-shaped, or now-stale-chart-referencing) run.
+        current_items = frappe.parse_json(dashboard.items) or []
+        if current_items != [chart_layout_item]:
+            print(f"  -> stored items differ from expected, correcting: {current_items} -> {[chart_layout_item]}")
+            dashboard.items = [chart_layout_item]
+            dashboard.save()
     else:
-        # items shape: backend (insights_dashboard_v3.py's set_linked_charts/
-        # is_filter_column) only ever reads item["type"] and item["chart"] --
-        # x/y/width/height below are a best-effort grid-layout guess (common
-        # 12-column-grid convention), NOT verified against the real frontend
-        # type (couldn't find a dashboard-items TS type file to confirm the
-        # exact key names). If the dashboard's own grid renders oddly, that's
-        # a cosmetic issue, not a functional one for this pilot -- the public
-        # URL and the chart's data will still work either way, since nothing
-        # server-side validates these layout keys.
-        items = [{"type": "chart", "chart": chart_name, "x": 0, "y": 0, "width": 12, "height": 8}]
         dashboard = frappe.new_doc("Insights Dashboard v3")
         dashboard.workbook = workbook
         dashboard.title = PILOT_TITLE
-        dashboard.items = items
+        dashboard.items = [chart_layout_item]
         dashboard.insert()
         dashboard_name = dashboard.name
         print(f"Created Dashboard: {dashboard_name}")
+
+    # Verify the wiring server-side the same way insights.api.get_doc would
+    # for a real viewer, instead of trusting the write succeeded silently --
+    # this is exactly the check that would have caught the previous bug
+    # before it reached the browser.
+    dashboard.reload()
+    stored_items = frappe.parse_json(dashboard.items) or []
+    print(f"Dashboard.items after save: {stored_items}")
+    linked_chart_names = [i["chart"] for i in stored_items if i.get("type") == "chart"]
+    if chart_name not in linked_chart_names:
+        print(f"STOP -- chart_name {chart_name!r} not found in dashboard.items {stored_items!r} after save.")
+        return None
+    try:
+        frappe.get_doc("Insights Chart v3", chart_name)
+        print(f"Verified: Insights Chart v3 {chart_name!r} resolves via frappe.get_doc (mirrors insights.api.get_doc's direct-fetch path).")
+    except frappe.DoesNotExistError:
+        print(f"STOP -- Insights Chart v3 {chart_name!r} does not exist via frappe.get_doc. This would 404 for every viewer, admin included.")
+        return None
+    # linked_charts (Insights Dashboard Chart v3 child table) is what
+    # get_public_charts() in insights/api/shared.py actually queries to decide
+    # guest access to an individual chart record -- it's auto-derived from
+    # items by set_linked_charts() on every save, but confirm it actually took.
+    linked_charts_child_table = [d.chart for d in dashboard.linked_charts]
+    print(f"Dashboard.linked_charts (child table, drives guest chart-fetch access): {linked_charts_child_table}")
+    if chart_name not in linked_charts_child_table:
+        print(f"STOP -- {chart_name!r} not in linked_charts child table -- guest access to this chart's record would still fail even though items looks right.")
+        return None
 
     if not dashboard.is_public:
         dashboard.update_access({"is_public": 1, "is_shared_with_organization": 0, "people_with_access": []})

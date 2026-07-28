@@ -288,6 +288,49 @@ Neither finding changes §4(b)'s status to answered — the actual
 logged-out/restricted-user test is still what's needed — but it does mean
 the likely outcome is no longer purely speculative.
 
+**Update, 2026-07-28 (later still) — dashboard wiring bug found and fixed**:
+Felix ran a genuine zero-cookie permission test against the real bench and
+found a partial, informative result: `insights.api.shared.get_dashboard_name`
+returned 200 fully anonymous (confirms the earlier finding — some
+public-dashboard paths skip permission checks entirely by design), but
+`insights.api.get_doc` for the pilot Chart record itself returned **404**
+(not 403) both logged out *and* as Administrator — meaning the record
+genuinely couldn't be resolved by name, not merely permission-blocked.
+
+Root cause, found by reading the real frontend source rather than continuing
+to guess (the previous script version had flagged this exact uncertainty):
+`frontend/src2/dashboard/dashboard.ts:62-71` and
+`frontend/src2/types/workbook.types.ts:131-142` show the actual
+`WorkbookDashboardChart` shape is `{"type": "chart", "chart": <name>,
+"layout": {"i": <unique string>, "x", "y", "w", "h"}}` — layout fields
+**nested under a `layout` key**, named `w`/`h` (not `width`/`height`), plus a
+**required unique `i`** (widget instance id, consumed by the grid layout
+library) that the script omitted entirely. The previous version wrote flat
+`x/y/width/height` with no `layout` wrapper and no `i` — malformed enough
+that the frontend's chart-resolution logic broke, consistent with the 404.
+
+Fixed with the verified shape, and added two things that would have caught
+this before it reached the browser: (1) after wiring, the script now fetches
+the chart via `frappe.get_doc()` server-side the same way
+`insights.api.get_doc`'s direct-fetch path does, and stops with a clear
+message if that fails: "This would 404 for every viewer, admin included";
+(2) it separately checks `Dashboard.linked_charts` (the `Insights Dashboard
+Chart v3` child table, auto-derived from `items` by
+`set_linked_charts()` — confirmed this is literally what
+`insights/api/shared.py`'s `get_public_charts()` queries to decide guest
+access to an individual chart record) actually contains the chart, since
+`items` looking right doesn't guarantee the derived child table does too.
+The reuse-existing-dashboard branch now also self-heals: it recomputes
+`items` from the current chart every run and corrects it if the stored value
+differs, rather than trusting a possibly-still-wrong prior write.
+
+Net effect on the permission question so far: still open, same as before,
+but the reason it couldn't be answered completely (the chart never actually
+rendered) should now be fixed. Waiting on Felix's re-test of the full
+picture — does the chart render at all now, and does the earlier
+`insights_for_public_access`-skips-filtering finding actually manifest as
+unfiltered real data for a genuinely logged-out viewer.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
