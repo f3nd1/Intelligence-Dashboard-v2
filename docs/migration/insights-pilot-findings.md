@@ -477,6 +477,62 @@ equivalent) followed by a re-test. If that fixes it, there was never a code
 bug to find in Insights or this script; if it doesn't, the staleness is
 somewhere less obvious and worth another round with that ruled out too.
 
+**Update, 2026-07-28 (still later) — worker restart ruled out too; traced
+the permission layer and ruled that out as well**: no `maintenance_mode`
+flag, and a full `bench restart` followed by a genuinely fresh page reload
+still produced the identical `DoesNotExistError`. That rules out stale
+worker state as cleanly as raw SQL ruled out non-persistence.
+
+Felix's sharpest remaining question was whether Insights' own permission
+layer raises `DoesNotExistError` as a deliberate obscurity measure instead
+of `PermissionError` — a real pattern some apps use. Checked
+`insights/hooks.py` and found real `has_permission`/
+`permission_query_conditions` registrations for both doctypes
+(`insights.permissions.has_doc_permission` /
+`get_permission_query_conditions`), so this was a genuinely live
+possibility, not a dead end to wave off. Read `insights/permissions.py` in
+full: `has_doc_permission` short-circuits `return True` immediately for
+`self.is_admin` — consistent with Administrator access — and even when it
+doesn't, a failure there surfaces as `frappe.PermissionError`, which
+`insights.api.get_doc` explicitly catches and checks `is_public(...)` for
+before ever re-raising. That's a different, distinguishable exception from
+`DoesNotExistError`.
+
+More decisively: read `frappe.db.get_value()`/`get_values()`
+(`frappe/database/database.py:469-650`, which `Document.load_from_db()`
+actually calls) and confirmed neither ever references
+`permission_query_conditions` or `has_permission` anywhere — those hooks
+are a `get_list`/report-view mechanism only, never consulted for a
+single-document fetch by name. The exact error text Felix reported
+(`"Insights Chart v3 qinaqei0rn not found"`) matches
+`frappe/model/document.py:179-182`'s `DoesNotExistError` message format
+verbatim, confirming `load_from_db()`'s raw `frappe.db.get_value(doctype,
+name, "*")` call is itself coming back empty inside the web request — a
+permission-masquerade theory doesn't fit that mechanism.
+
+So: two different Frappe DB calls against the identical row — `frappe.db.
+exists()` (succeeds, proven via `bench execute`) and `frappe.db.get_value(
+..., "*")` inside `frappe.get_doc()` (fails, inside the real web request) —
+disagree, and every layer of business logic in between has now checked out
+clean. The next test isolates whether this is really about the *web request
+context* specifically, by calling the exact same public method the browser
+calls, but from a known-clean process:
+
+```bash
+bench --site ucc-sms-v2.orb.local execute insights.api.get_doc --args '["Insights Chart v3", "<chart_name>"]'
+bench --site ucc-sms-v2.orb.local execute insights.api.get_doc --args '["Insights Dashboard v3", "<dashboard_name>"]'
+```
+
+If that succeeds, the bug is conclusively specific to the real HTTP request
+path (something about session/auth context or request parsing that
+`bench execute` doesn't reproduce) — not the business logic, which is now
+fully verified. If it fails identically even here, that's even more
+telling: the exact same `frappe.get_doc()` call fails the same way outside
+a browser entirely, which would point at something narrower — worth then
+running `DESCRIBE \`tabInsights Chart v3\`;` via `bench mariadb` to check
+for a schema anomaly specifically affecting `SELECT *` (as opposed to the
+`SELECT name`-style query `frappe.db.exists()` runs).
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
