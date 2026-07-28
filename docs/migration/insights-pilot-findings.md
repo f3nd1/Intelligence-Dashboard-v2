@@ -256,6 +256,38 @@ and made it a one-constant change either way. Not run yet — same round-trip,
 waiting on the local session to execute it and report the created record
 names + the actual public URL.
 
+**Update, 2026-07-28 (later) — zero-rows bug found and fixed**: running the
+script surfaced `Insights Table v3` for `tabStudent Applicant` at
+`stored=0, sync_mode="Full", last_synced_on=None` — never synced, hence the
+query returning zero rows. Read `insights_table_v3.py` and
+`insights_data_source_v3.py` in full rather than guessing at a fix:
+`InsightsTablev3.get_ibis_table()` (`:136-155`) routes through a DuckDB
+warehouse copy that needs importing *unless* `use_live_connection=True`, in
+which case it calls `InsightsDataSourcev3.get_ibis_table()` (`:441-447`)
+directly — for a MariaDB/Site-DB source that's just
+`remote_db.table(table_name)`, a live handle on the site's own DB connection,
+no sync required. Set `query.use_live_connection = 1` in the script instead
+of building a sync/wait-for-background-job path — simpler, and it matches
+the legacy engine's own per-request-live-query behaviour more faithfully
+than a periodically-synced copy would anyway. The reuse-existing-query branch
+now self-heals a query left over from before this fix rather than silently
+reusing one still pointed at the empty warehouse copy.
+
+One more finding along the way, worth having on record before §4(b) actually
+runs: `apply_user_permissions()` (`insights_table_v3.py:287-289`) opens with
+`if frappe.flags.get("insights_for_public_access"): return t` — row/column
+permission filtering is **unconditionally skipped** for requests served
+through the public-dashboard flag, live or warehouse mode doesn't matter.
+That's no longer a risk to test for, that's read directly from the code.
+Separately, even for non-public requests, filtering is gated by
+`Insights Settings.apply_user_permissions` (Insights' own default is 1, but
+the script now checks the real value on this install) — and even when on,
+it enforces plain Frappe DocType read permission, a different and usually
+broader question than `ucc_dashboard_access`'s criterion-level gating.
+Neither finding changes §4(b)'s status to answered — the actual
+logged-out/restricted-user test is still what's needed — but it does mean
+the likely outcome is no longer purely speculative.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending

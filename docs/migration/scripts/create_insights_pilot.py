@@ -27,6 +27,32 @@ are in the docstrings below. Two things worth knowing before running this:
    the same "public-link bypass" risk flagged in
    docs/migration/insights-pilot-findings.md's Step 4(b) -- worth having in
    mind before actually sharing this URL anywhere, even as a pilot.
+3. Confirmed why the query returned zero rows on the first run:
+   `Insights Table v3` had `stored=0, last_synced_on=None` -- with the
+   default `use_live_connection=False`, `InsightsTablev3.get_ibis_table()`
+   (insights_table_v3.py:136-155) routes through a DuckDB warehouse copy
+   that has to be synced/imported first. Setting `use_live_connection=1` on
+   the Query instead skips the warehouse entirely --
+   `InsightsDataSourcev3.get_ibis_table()` (insights_data_source_v3.py:
+   441-447) for a MariaDB/Site-DB source is just `remote_db.table(name)`, a
+   direct live handle over the site's own DB connection. No sync needed, and
+   it matches the legacy engine's own behaviour (a fresh `frappe.get_list`
+   per request, not a cached/batch copy) more faithfully anyway. Stage 2
+   below sets this.
+   Also found in the same code path, worth flagging loudly rather than
+   burying: `apply_user_permissions()` (insights_table_v3.py:287-289) opens
+   with `if frappe.flags.get("insights_for_public_access"): return t` --
+   row/column permission filtering is **explicitly skipped entirely**
+   whenever a request is served through the public-dashboard flag, live or
+   warehouse mode doesn't matter. That's not speculation about Step 4(b)
+   anymore, that's the actual code. Even when that flag isn't set, filtering
+   is gated by `Insights Settings.apply_user_permissions` (defaults to 1 in
+   Insights' own fixtures, but confirm the real value on this install --
+   Stage 1 now checks it) -- and even when ON, it enforces plain Frappe
+   DocType read permission, which is a different, usually broader question
+   than `ucc_dashboard_access`'s criterion-level gating. Don't assume parity
+   either way; Step 4(b) still needs the actual logged-out/restricted-user
+   test.
 
 Usage: paste this whole file into `bench --site ucc-sms-v2 console`.
 
@@ -88,6 +114,32 @@ def stage_0_verify_schema():
     total = frappe.db.count(PILOT_DOCTYPE)
     blank = frappe.db.count(PILOT_DOCTYPE, filters={PILOT_FIELD: ["in", [None, ""]]})
     print(f"total {PILOT_DOCTYPE} rows: {total}, rows with blank {PILOT_FIELD}: {blank}")
+
+    table_name = "tab" + PILOT_DOCTYPE
+    table_row = frappe.get_all(
+        "Insights Table v3",
+        filters={"table": table_name},
+        fields=["name", "data_source", "stored", "sync_mode", "last_synced_on"],
+    )
+    print(f"Insights Table v3 record for {table_name}: {table_row}")
+    if table_row and not table_row[0]["stored"]:
+        print(
+            "  -> stored=0 (never synced). Not fixing via sync -- Stage 2 uses "
+            "use_live_connection=1 on the Query instead, which bypasses the "
+            "warehouse/sync path entirely for a Site DB source. See module "
+            "docstring point 3."
+        )
+
+    # Directly relevant to whether a public Insights chart could ever match
+    # ucc_dashboard_access's blocked-source behaviour (findings doc Step 4(b)).
+    # apply_user_permissions gates row/column filtering for authenticated
+    # requests; it's unconditionally skipped for public-dashboard requests
+    # regardless of this setting (insights_table_v3.py:287-289).
+    settings = frappe.db.get_singles_dict("Insights Settings")
+    print(
+        f"Insights Settings.apply_user_permissions = {settings.get('apply_user_permissions')!r}, "
+        f"enable_permissions = {settings.get('enable_permissions')!r}"
+    )
     return True
 
 
@@ -162,6 +214,12 @@ def stage_2_create():
     if existing_query:
         print(f"Reusing existing Query: {existing_query}")
         query_name = existing_query
+        # Self-heal a query created by an earlier version of this script
+        # (before use_live_connection was set) rather than silently reusing
+        # one that's still routed through the unsynced warehouse.
+        if not frappe.db.get_value("Insights Query v3", query_name, "use_live_connection"):
+            frappe.db.set_value("Insights Query v3", query_name, "use_live_connection", 1)
+            print(f"  -> was use_live_connection=0, fixed to 1")
     else:
         # Operation shapes verified from frontend/src2/types/query.types.ts:
         #   Source   = { type: 'source', table: { type: 'table', data_source, table_name } }
@@ -200,10 +258,19 @@ def stage_2_create():
         query.workbook = workbook
         query.title = PILOT_TITLE
         query.is_builder_query = 1
+        # Skips the DuckDB warehouse/import path entirely -- for a Site DB
+        # source, InsightsDataSourcev3.get_ibis_table() just opens a live
+        # ibis handle on the site's own MariaDB connection
+        # (insights_data_source_v3.py:441-447). No sync/import needed, and
+        # every execution reads current data, same as the legacy engine's own
+        # per-request frappe.get_list() call. See module docstring point 3
+        # for why the default (use_live_connection=0, routed through the
+        # warehouse) returned zero rows on the first attempt.
+        query.use_live_connection = 1
         query.operations = operations
         query.insert()
         query_name = query.name
-        print(f"Created Query: {query_name}")
+        print(f"Created Query: {query_name} (use_live_connection=1)")
 
     # Sanity-check the query actually runs and returns grouped rows before
     # building a Chart on top of it -- fail loud here rather than silently
