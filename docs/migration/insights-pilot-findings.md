@@ -211,6 +211,51 @@ Script isn't run yet (still no bench access in this session) — waiting on
 its Stage 0/1 discovery output before writing the actual creation call, same
 round-trip as every other bench-dependent step in this doc.
 
+**Update, 2026-07-28 (later) — real schema confirmed from the local bench
+session's Stage 0/1/1b run**: `Student Applicant.academic_year` is a real
+Link field (62 rows, 0 blank, sample values 2021–2025), and the existing
+`"Site DB"` Data Source should be reused, not duplicated. The local session
+also found this Insights install has both old and v3 schemas side by side,
+and asked for the exact `Insights Query v3`/`Insights Chart v3` creation
+script. Rather than write that from memory of Insights' v2 API (a materially
+different, ibis-based rewrite in v3), I read the actual v3.12.2 source on
+GitHub directly (`frappe/insights`, tag `v3.12.2` — Python controllers +
+frontend TypeScript operation/chart-config types, cited by file:line in the
+script) and found two things the task's own assumptions got wrong:
+
+- **`Insights Query v3.operations`** is a JSON list of typed steps, not a
+  flat DocField structure. A `source` step's `table.table_name` must be the
+  **raw SQL table name with the `tab` prefix** (`"tabStudent Applicant"`,
+  confirmed via `insights_table_v3.py`'s `get_table_name`/`bulk_create`) —
+  not the DocType name. A `summarize` step's count measure needs the special
+  sentinel `column_name: "count"` + `aggregation: "count"`
+  (`ibis_utils.py`'s `translate_measure`) to get a real `COUNT(*)`-equivalent
+  row count, rather than counting an arbitrary named column.
+- **`Insights Chart v3` has no `public_key` field, and its `is_public` field
+  (which does exist) is never read anywhere in its controller** — dead for
+  sharing purposes. The real public-link mechanism lives on **`Insights
+  Dashboard v3`** (`is_public` + `share_link`, served at
+  `/insights/shared/dashboard/<name>` — confirmed via that doctype's own
+  preview-generation code, which builds that exact URL). Getting an
+  embeddable link therefore requires wrapping the chart in a minimal
+  dashboard and publishing *that*, not the chart directly.
+- Also worth flagging early, ahead of §4(b)'s actual test:
+  `Insights Dashboard v3.get_distinct_column_values` explicitly allows Guest
+  (unauthenticated) access once `is_public=1` — a public dashboard is
+  visible to anyone with the link, logged in or not, by design.
+
+`docs/migration/scripts/create_insights_pilot.py` now has real Stage 2
+creation logic (Query → Chart → Dashboard → publish) built from this
+verified schema, plus a note on the chart-type mismatch: the task asked for
+`chart_type = bar`, but the actual legacy chart being piloted
+(`c411-applicants-year`) is type `admission-line` — an actual line chart,
+not a bar chart (`server-scripts/UCC Analytics - Criterion 4.py:2397` via
+`renderAdmissionLine()`). Defaulted to `CHART_TYPE = "Line"` as the closer
+visual match, flagged the discrepancy rather than silently picking either,
+and made it a one-constant change either way. Not run yet — same round-trip,
+waiting on the local session to execute it and report the created record
+names + the actual public URL.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
