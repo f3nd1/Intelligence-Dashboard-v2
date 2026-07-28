@@ -1,18 +1,25 @@
 # Frappe Insights single-chart pilot — findings
 
-**Status as of 2026-07-27: pilot code shipped, live bench verification pending
-(bench access being sorted out on `ucc-sms-v2`). §7 (full 106-chart
-classification) is repo-only work, done and complete.**
-This is a feasibility spike, not a migration. Nothing here removes or replaces an
-existing renderer, and nothing here decides the long-term rendering direction —
-that call is Felix's, at the end of this doc.
+**Status as of 2026-07-28: pilot complete.** Query, Chart, and Dashboard all
+built and verified against real live data on `ucc-sms-v2.orb.local`. §4(b)
+(permissions) has a definitive, tested result — see §6 for the recommendation.
+§4(a) (filters) was never actually run — flagged explicitly in that section
+rather than left ambiguous. §7 (full 106-chart classification) is repo-only
+work, done and complete.
 
-§§1-6 need live bench/browser access I don't have in this session — everything
-there that requires running a bench command, clicking through the Insights UI,
-or logging in as a different user is written up as a precise procedure, not a
-result; I'm not going to fabricate a pass/fail for anything I can't actually
-observe. §7 is different: it's pure source-reading, fully verifiable from the
-repo alone, and is complete.
+This is a feasibility spike, not a migration. Nothing here removes or
+replaces an existing renderer, and nothing here decides the long-term
+rendering direction — that call is Felix's, per §6.
+
+I had no live bench/browser access in this session throughout — every result
+in §§1-4 that needed one came from Felix running commands and reporting back
+verbatim, not from anything fabricated here. §3's build log is long because
+getting to a working pilot took real, sequential debugging (six distinct
+issues found and fixed, one symptom resolved without a fully confirmed root
+cause — see §6's reliability caveat) rather than working on the first try;
+left in full rather than cleaned up after the fact, since the debugging path
+itself is part of what this pilot demonstrates about working with Insights
+v3.
 
 ---
 
@@ -566,7 +573,14 @@ query itself changes.
    what you see, including whether Insights' own chart/query editor exposes
    any variable/parameter option at all.
 
-**Result**: _pending_.
+**Result**: _still pending — never actually run_. The multi-day persistence
+debugging saga in §3's updates consumed the pilot's live-testing time before
+this test was reached. The reasoning above (no mechanism today for this
+page's filter strip to reach an embedded Insights chart without deliberate
+wiring) stands as an educated expectation, not a tested result — flagging
+that distinction explicitly rather than letting it read as answered. Whoever
+picks this up next should actually run the 4-step test above before treating
+filter behaviour as known.
 
 ### 4(b) Permissions — the important one
 
@@ -607,8 +621,30 @@ the task calls this the single most important thing to answer here.
    to be flagged as unacceptable regardless of what the restricted-user test
    shows.
 
-**Result**: _pending — this is the one finding that should most directly
-drive the go/no-go decision below._
+**Result**: **Confirmed — the worst outcome, and it's Insights' actual
+design, not a bug.** Felix ran the real test with genuinely zero-cookie
+requests (`credentials: "omit"`, no session at all) against both records:
+
+```
+insights.api.get_doc(Insights Dashboard v3, tt5b9kk0bn) -> 200, full record
+insights.api.get_doc(Insights Chart v3, tt51l7mma3)     -> 200, full record + query config
+```
+
+A completely unauthenticated visitor with nothing but the link gets full
+read access — not just the rendered chart, the underlying query
+configuration too. This matches, and now empirically confirms, the code
+finding from §3's updates: `apply_user_permissions()`
+(`insights_table_v3.py:287-289`) explicitly skips row/column permission
+filtering entirely whenever a request is served through the public-dashboard
+flag. There is no partial protection, no per-user scoping, nothing
+equivalent to `ucc_dashboard_access`'s blocked-source behaviour once a
+dashboard is marked public — "public" in Insights means genuinely,
+unconditionally public.
+
+This is the answer the whole pilot existed to get, and it's a hard
+constraint, not a tuning knob: **anything published as a public Insights
+dashboard is visible to anyone with the URL, permanently, regardless of the
+underlying data's sensitivity or `ucc_dashboard_access`'s role gating.**
 
 ---
 
@@ -685,29 +721,90 @@ genuinely need a closer look before anyone decides (down from 106).
 
 ## 6. Recommendation, not a decision
 
-This is Felix's call. What I'd weigh, once §1 and §4 have real answers:
+The pilot is functionally complete: query, chart, and dashboard all work
+against real live data, and §4(b) — the question this whole spike existed to
+answer — has a definitive, tested result. This is Felix's call to make, not
+mine; here's the honest tradeoff as it actually stands, not as it was hoped
+to stand going in.
 
-- If §4(b) comes back with silent data exposure or a public-link bypass,
-  that's a hard stop on wider adoption until Insights is reconfigured with
-  real row-level security tied to the signed-in user, or embeds are served
-  through a permission-checking proxy of our own — not something to work
-  around chart-by-chart.
-- If §4(b) comes back genuinely permission-safe and §4(a) shows filters need
-  real but boundable wiring effort, the 147 plain-aggregate charts (92 from
-  the original type breakdown + 55 more identified in §7's full
-  classification) become a legitimate incremental-migration candidate, most
-  naturally folded criterion-by-criterion into Phase 4 (since those charts'
-  data already needs to move off the Server Scripts into real app code
-  anyway).
-- The 48 bespoke charts (11 with genuinely unique visual shapes + 37 that
-  aren't reading from a table at all, per §7) stay hand-rolled regardless —
-  nothing here changes that.
-- The 14 "needs a closer look" charts (§7) are small enough to just decide
-  individually when Phase 4 reaches the criterion they're in, rather than
-  needing their own investigation phase.
+### What Insights is good at, confirmed tonight
 
-I'd hold off recommending anything firmer than that until the two pending
-results in §4 are in.
+Once the environment issues were actually understood (§1's `ibis` fix, §3's
+`use_live_connection` fix, the dashboard `items`/`layout` shape, the
+persistence saga below), building the pilot chart itself was genuinely
+straightforward — a Query with a `summarize` step and a Chart pointed at it,
+versus the hand-rolled SVG renderer this replaces. For the 147 plain-
+aggregate charts identified across §5/§7, Insights would very likely be
+**less code to build and maintain** than the current `renderBars`/
+`renderTrend`/etc. string-building functions, once someone knows the real
+`operations`/`layout` schemas (now documented in
+`docs/migration/scripts/create_insights_pilot.py`, verified against the real
+v3.12.2 source rather than guessed).
+
+### What Insights is missing, confirmed tonight — the actual blocker
+
+**A public Insights dashboard has no row- or column-level access control at
+all.** §4(b)'s test was unambiguous: a genuinely unauthenticated request
+(zero cookies) against a public dashboard's chart returned the full record,
+including the underlying query configuration — not a degraded or partial
+view, the same thing an authenticated user sees. `apply_user_permissions()`
+skips entirely for public-dashboard requests, by Insights' own design, not
+by misconfiguration. There is nothing here equivalent to
+`ucc_dashboard_access`'s blocked-source notice, no partial redaction, no
+"public but still scoped" middle ground — public means public, permanently,
+to anyone who has or guesses the URL.
+
+That is a hard constraint on how Insights can be used for anything backed by
+data `ucc_dashboard_access` currently gates: **any chart published as a
+public Insights dashboard is exactly as exposed as if that data were posted
+on a public webpage**, regardless of which roles can see it in Sophia today.
+Non-public Insights sharing (team membership, `DocShare`-based per-user
+sharing — both real mechanisms found in `insights/permissions.py`) stays
+inside Frappe's login wall, but that's a fundamentally different product
+shape from "embed a chart in the existing Analytics page," which is what
+this pilot actually spiked.
+
+### An honest caveat on tonight's own reliability
+
+Worth stating plainly: the multi-hour persistence debugging (§3's updates)
+never landed on a single, fully-confirmed root cause. Every specific
+hypothesis chased — console rollback, dashboard `items` shape, site-name
+mismatch, stale worker processes, a permission-layer 404-as-obscurity
+pattern — was each individually verified true or false against real evidence,
+and each real bug found along the way (`items`/`layout` shape,
+`use_live_connection`, missing commits) is now fixed and documented. But the
+very last symptom — `insights.api.get_doc` 404ing on records proven to exist
+by three independent methods, then working again after a `bench restart` and
+some elapsed time, with no single mechanism ever pinned to explain the
+"working again" part — resolved without full understanding of why. That's
+not nothing: if this recurs on a differently-timed future attempt, it's
+worth knowing tonight's fix was empirical, not root-caused, before assuming
+Insights is now simply reliable to build on.
+
+### Recommendation
+
+- Given §4(b)'s result, publishing individual analytics charts as public
+  Insights dashboards is **not viable as-is** for anything currently gated
+  by `ucc_dashboard_access` — this would need either Insights reconfigured
+  with real per-user row-level security (a real, documented mechanism in
+  `insights/permissions.py`, but it requires being logged in — it does not
+  extend to public/guest links), or charts served through a
+  permission-checking proxy of Sophia's own, not something to work around
+  chart-by-chart.
+- That constraint is about the **public-sharing mechanism**, not Insights as
+  a query/chart-building tool. If a future direction only ever shows
+  Insights charts to logged-in, permission-checked Sophia users (e.g.
+  server-side, proxied through `ucc_intelligence`'s own API rather than a
+  public dashboard URL), tonight's finding doesn't rule that out — it just
+  wasn't what this pilot tested, since the pilot specifically spiked the
+  public-embed path.
+- §4(a) (filters) is still genuinely untested — don't treat the "likely
+  stays frozen" reasoning in that section as a result.
+- The 147 plain-aggregate charts (92 original + 55 from §7) remain the
+  right adoption pool *if* a permission-safe embedding path is found later.
+  The 48 bespoke charts (11 uniquely-shaped + 37 not table-backed, per §7)
+  stay hand-rolled regardless. The 14 "needs a closer look" charts are small
+  enough to decide individually whenever Phase 4 reaches their criterion.
 
 ---
 
