@@ -1,0 +1,201 @@
+# Phase 4 Plan — Migrate Criterion 1 (first of seven)
+
+**Status: plan only, no code written yet.** Per CLAUDE.md §9 Phase 4 goal: "Move the seven Analytics
+Server Scripts into version-controlled Python modules without changing result semantics." This plan
+covers **Criterion 1 only** — CLAUDE.md's suggested order (1 → 3 → 7 → 2 → 6 → 4 → 5) explicitly says
+"adjust based on actual complexity discovered," so before committing to that order for all seven I
+checked it against the real files rather than taking it on faith. Findings below; short version:
+nothing found that argues against starting with Criterion 1.
+
+## 0. Three decisions this plan does not make silently
+
+**Decision A — one whitelisted method per criterion, or one generic dispatcher?**
+
+CLAUDE.md §11.1 suggests a single endpoint, `ucc_intelligence.api.analytics.get_criterion_summary`.
+The current deployed reality is seven separate Server Script methods
+(`ucc_analytics_criterion_1` through `_7`), each with genuinely different business logic beneath a
+shared shape (see §3). A generic dispatcher (`get_criterion_summary(criterion="1", ...)`) would need
+runtime branching to seven different implementations regardless — it doesn't remove any code, it just
+moves the branch point.
+
+**Recommending: one whitelisted method per criterion** (`ucc_intelligence.api.analytics.get_criterion_1`,
+`get_criterion_2`, ...) for now — matches the existing 1:1 structure exactly, no dispatcher to keep in
+sync as each criterion is ported one at a time over multiple phases, and nothing stops a thin
+`get_criterion_summary` wrapper being added later, once all seven exist, if a single stable public
+surface turns out to matter. Building that wrapper now, before six of the seven implementations exist,
+would be exactly the kind of premature abstraction CLAUDE.md's own guidance elsewhere warns against.
+
+**Decision B — does Criterion 1's port change what the frontend calls, in the same change?**
+
+Phase 3's shipped page currently calls the legacy Server Script directly
+(`method:"ucc_analytics_criterion_1"` — unchanged from `custom-html-block/JAVASCRIPT.js`, since Phase 3
+only swapped the *access-check* endpoint, not the per-criterion data calls; see
+`docs/migration/phase-3-plan.md` §3).
+
+**Recommending: ship Criterion 1's port dark** — build and test the new method, but leave the frontend
+pointed at the legacy Server Script until parity is actually confirmed on your bench. Cutting the
+frontend over is then a separate, one-line, easily-reverted change made once you've compared live
+responses and are satisfied, not bundled into the same commit as an unverified port. Matches how every
+prior phase in this migration has worked (Phase 2's DocType, Phase 3's page — both additive until
+explicitly confirmed, nothing switched over speculatively).
+
+**Decision C — how much of the shared evaluation engine to extract now vs. later**
+
+Real finding, not assumed (see §3): beneath each criterion's own metric/question catalogue sits a
+suite of lower-level helpers (`fetch_rows`, `resolve_field`, `evaluate_metric`, `row_matches`, etc.)
+that look shared across all seven scripts. I checked this directly rather than guessing, and the
+picture is mixed — some functions are byte-identical across all seven, some are identical in most but
+diverge in a few, some are genuinely criterion-specific. Extracting the wrong thing as "shared" would
+silently change behaviour for whichever criterion actually differs.
+
+**Recommending**: extract only what's *verified* identical as part of Criterion 1's port
+(`lower_text`, `is_truthy` — confirmed byte-identical across all seven, zero risk), leave the
+"mostly-identical-but-not-quite" functions (`clean_text`, `field_exists`, `resolve_field`,
+`safe_fields`) as Criterion-1-local for now, and re-check each one against its own byte-for-byte
+diff *at the point each later criterion is actually ported* — pulling a function into
+`analytics/engine.py` only once two or more real criteria are confirmed to need the exact same code,
+not preemptively. This is slower than extracting everything now on the assumption it's all shared, but
+avoids the exact class of mistake CLAUDE.md's own Phase 5 guidance warns about (Criterion 4/5 "special
+cases" existing precisely because something looked shared and wasn't).
+
+**This plan is written assuming all three recommendations above. Say so before I write code if any
+should go differently — none of them are hard to change.**
+
+---
+
+## 1. What Phase 4 required work actually is (CLAUDE.md §9)
+
+- Copy Criterion 1's logic into an app module.
+- Remove Server Script assumptions (`frappe.form_dict`, global-scope execution) where a clearer
+  function signature is possible.
+- Preserve normal Frappe permission enforcement — same `frappe.get_list` calls, same
+  try/except-classify-as-`permission_denied` pattern, nothing bypassed.
+- Define a validated request payload and a stable response contract.
+- Add unit/integration tests.
+- Compare legacy and new responses on the same test data.
+- Document known intentional differences.
+
+## 2. Order check — why Criterion 1 first, verified not assumed
+
+| Criterion | Lines | Top-level functions |
+|---|---:|---:|
+| 1 | 1,846 | 22 |
+| 2 | 1,827 | 18 |
+| 3 | 2,286 | 25 |
+| 4 | 3,288 | 33 |
+| 5 | 3,398 | 26 |
+| 6 | 2,210 | 23 |
+| 7 | 2,061 | 19 |
+
+Raw size alone would put Criterion 2 marginally ahead of Criterion 1 (fewer lines, fewer functions),
+but the gap is small (19 lines, 4 functions) and size isn't the only signal — Criterion 4 is already
+known (from the Insights pilot work) to carry a large special-cased block
+(`build_admission_intelligence`, ~450 lines) that inflates its function count without being
+representative of the other six. Criterion 1 has no equivalent special block by the same
+`grep -n "^def "` scan — its 22 functions are the plain engine-plus-catalogue shape described in §3,
+nothing extra bolted on. Combined with CLAUDE.md's explicit "use Criterion 1 as the pilot," and no
+concrete finding here that argues against it, keeping Criterion 1 first.
+
+## 3. What's actually in Criterion 1 — mapped to real code
+
+`server-scripts/UCC Analytics - Criterion 1.py`, 1,846 lines, 22 functions, splits into two layers:
+
+**Request parsing (`:24-60`)** — `payload` (JSON, from `frappe.form_dict.get("payload")`) →
+`action`/`subcriterion`/`filters`/`metric_id`/`page`/`page_size`/`row_limit`, each clamped/defaulted.
+Diffed this exact block against Criterion 3's: the *only* difference is the default `subcriterion`
+string (`"1.1.1"` vs `"3.1.1"`). `ALLOWED_ACTIONS` is identical across six of seven criteria
+(`["summary", "source_status", "policy_registry", "requirement_registry", "question_registry",
+"drilldown"]`); Criterion 3 alone adds `"question_catalogue"`. This parsing block is a genuine,
+low-risk extraction candidate — planned as `analytics/request.py`, parameterised by
+`default_subcriterion` and `allowed_actions`, built and verified against Criterion 1 first.
+
+**Evaluation engine + catalogue (`:786-1846`)** — the helper suite plus Criterion 1's own metric,
+requirement, and question definitions, ending in `standardise_response_contract` (already ported,
+byte-identical, in `analytics/contracts.py` from Phase 2 — Criterion 1's copy will be diffed against
+that ported version, not re-ported). Hash-compared the shared-looking helpers across all seven files
+directly rather than assuming:
+
+| Function | Result |
+|---|---|
+| `lower_text`, `is_truthy` | **Byte-identical across all 7** — safe to extract now |
+| `clean_text` | Identical in 1,2,3,5,6,7; Criterion 4 differs |
+| `field_exists` | Two variants: {1,2,3} vs {4,5,6,7} |
+| `resolve_field` | Mostly identical; Criterion 4 and Criterion 5 each have their own variant |
+| `safe_fields` | Three variants: {1,2}, {3,5,6,7}, {4} |
+| `compare`, `row_matches`, `resolve_field_groups` | Genuinely diverge per criterion, or missing entirely in some (Criteria 6/7 have no `row_matches` at all) — staying criterion-local |
+
+This is the evidence behind Decision C above — a real, mixed picture, not "everything's shared" or
+"nothing's shared."
+
+## 4. Files touched / untouched
+
+**New**:
+- `ucc_intelligence/ucc_intelligence/analytics/request.py` — shared payload parsing (Decision C).
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_1.py` — Criterion 1's engine + catalogue,
+  ported.
+- `ucc_intelligence/ucc_intelligence/api/analytics.py` — new module, one whitelisted method:
+  `get_criterion_1(payload=None)`.
+- `tools/test_ucc_intelligence_criterion_1.py` (or similar) — see §6.
+
+**Untouched**: `custom-html-block/`, `server-scripts/` (including `UCC Analytics - Criterion 1.py`
+itself — stays live and unmodified, per Decision B), `src/`, `dist/`, `archive/`, and every other
+already-ported Phase 2/3 file. `sophia_analytics.js` is not touched this phase (Decision B) —
+verified this holds by re-checking the diff against the `cb77320` baseline at every commit, same
+standing invariant as every prior phase.
+
+## 5. What's needed from you / your bench
+
+1. **Confirm or override Decisions A/B/C above.**
+2. **Test data for parity** — the one thing I genuinely cannot do from this repo. I can (and will)
+   verify the *port is structurally faithful to the legacy source* the same way Phase 3 did — extract
+   the exact function bodies by range, apply only the specific, asserted transformations, diff the
+   result against the committed file. That proves the code says the same thing. It does **not** prove
+   the code *computes* the same thing against real data, because I have no bench to run either version
+   against. Once the port is written, I'll hand you the exact `bench execute` calls to run both the
+   legacy Server Script and the new method with the same payload against the same site, and you
+   compare the JSON. Flagging this now rather than implying "parity" is achieved by code-reading alone.
+3. Once ported and reviewed: `bench build --app ucc_intelligence` + `bench migrate`, then the parity
+   comparison above.
+
+## 6. Verification plan
+
+Two layers, matching what I can and can't do without a bench:
+
+- **Structural fidelity (I can do this)**: same extraction-and-diff technique as Phase 3 — pull the
+  exact line ranges for each function being ported, assert the *pre-transformation* text matches the
+  live legacy source verbatim (so drift in the legacy file raises an error rather than silently
+  producing a wrong port), apply only the named transformations (global-scope → function signature,
+  `frappe.form_dict` → parameter), diff against the committed file. Extends
+  `tools/test_ucc_intelligence_criterion_1.py` in the same spirit as the existing
+  `tools/test_ucc_intelligence_access.py` / `test_ucc_intelligence_contracts.py`.
+- **Live parity (needs you)**: `bench execute` calls comparing legacy vs. new method output on the
+  same payload/data, per §5.2.
+
+## 7. Exit criteria — copied from CLAUDE.md §9 Phase 4, per-criterion
+
+- [ ] API contract test passes.
+- [ ] Legacy-versus-new parity test is signed off (needs your bench — §5).
+- [ ] Permission tests pass (same `frappe.get_list`/`is_permission_error` pattern as legacy, verified
+      unchanged).
+- [ ] Frontend rendering matches expected behaviour — not applicable until Decision B's cutover step,
+      tracked separately.
+- [ ] No production-only field name is silently assumed.
+- [ ] Diagnostics identify missing DocTypes or field mismatches clearly.
+
+## 8. Rollback
+
+Nothing here touches `custom-html-block/` or `server-scripts/`, and per Decision B the frontend keeps
+calling the legacy method throughout this phase — a revert is a plain `git revert` of the new files,
+with zero live-behaviour impact since nothing user-facing points at the new code yet. The eventual
+frontend cutover (a later, separate, deliberate step) would need its own one-line rollback note when
+it happens.
+
+---
+
+## 9. What I need from you before writing code
+
+1. Decisions A, B, C above — go ahead with the recommendations, or say what should differ.
+2. Anything else you want folded into Criterion 1's scope, or held back.
+
+Once confirmed, next step is reading Criterion 1 in full (I've only mapped its shape so far, not
+read every line) before writing the actual port.
