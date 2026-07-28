@@ -91,6 +91,10 @@ release). If either turns up something unexpected, STOP and report back
 before Stage 2 rather than pushing through with a mismatch.
 """
 
+import os
+import shutil
+import subprocess
+
 import frappe
 
 PILOT_DOCTYPE = "Student Applicant"
@@ -109,6 +113,49 @@ PILOT_TITLE = "Sophia Pilot - Student Applicants per Year"
 # (frontend/src2/types/chart.types.ts:4,57,70), so this is a one-line switch
 # either way -- change CHART_TYPE below if "Bar" is actually what's wanted.
 CHART_TYPE = "Line"  # or "Bar" -- see note above
+
+
+def raw_sql_row_exists(doctype, name):
+    """Bypass Frappe's Python DB layer entirely -- shell out to a genuinely
+    separate mysql/mariadb CLI process, the same way `bench --site
+    ucc-sms-v2 mariadb` does (frappe/database/__init__.py:96-136's
+    get_command: tries the "mariadb" binary before falling back to "mysql",
+    reads connection details from frappe.conf) -- and ask it directly
+    whether a row exists. This is the same class of check already confirmed
+    by hand via raw SQL (table verified empty); running it from inside this
+    script, right after each frappe.db.commit() call, pinpoints exactly
+    which commit (if any) the row fails to survive, rather than only being
+    able to check well after the fact in a separate session.
+
+    Uses MYSQL_PWD (an env var passed only to this one subprocess) rather
+    than a --password= CLI arg, so the password never appears in `ps aux` --
+    a small improvement over bench mariadb's own approach, not a security
+    problem with it. Never logs the password itself.
+    """
+    binary = shutil.which("mariadb") or shutil.which("mysql")
+    if not binary:
+        return "NO_CLIENT_FOUND (neither mariadb nor mysql binary on PATH)"
+    table = "tab" + doctype
+    escaped_name = name.replace("'", "''")
+    sql = f"SELECT COUNT(*) FROM `{table}` WHERE name = '{escaped_name}'"
+    args = [binary, f"--user={frappe.conf.db_name}"]
+    if frappe.conf.get("db_socket"):
+        args.append(f"--socket={frappe.conf.db_socket}")
+    elif frappe.conf.get("db_host"):
+        args.append(f"--host={frappe.conf.db_host}")
+        if frappe.conf.get("db_port"):
+            args.append(f"--port={frappe.conf.db_port}")
+    args += [frappe.conf.db_name, "--skip-column-names", "-e", sql]
+    env = dict(os.environ)
+    if frappe.conf.get("db_password"):
+        env["MYSQL_PWD"] = frappe.conf.db_password
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, env=env, timeout=15)
+        if result.returncode != 0:
+            return f"CLI_ERROR: {result.stderr.strip()[:300]}"
+        return result.stdout.strip()
+    except Exception as e:
+        return f"EXCEPTION: {e}"
 
 
 def stage_0_verify_schema():
@@ -312,6 +359,7 @@ def stage_2_create():
     # succeeded so far instead of losing all of it to the same rollback.
     frappe.db.commit()
     print("Committed (Query).")
+    print(f"Raw-SQL (separate mysql process) row count for Query {query_name!r}: {raw_sql_row_exists('Insights Query v3', query_name)}")
 
     # Sanity-check the query actually runs and returns grouped rows before
     # building a Chart on top of it -- fail loud here rather than silently
@@ -364,6 +412,8 @@ def stage_2_create():
 
     frappe.db.commit()
     print("Committed (Chart).")
+    print(f"Raw-SQL (separate mysql process) row count for Chart {chart_name!r}: {raw_sql_row_exists('Insights Chart v3', chart_name)}")
+    print(f"Raw-SQL (separate mysql process) row count for Query {query_name!r} (re-check after Chart commit): {raw_sql_row_exists('Insights Query v3', query_name)}")
 
     # items shape verified from frontend/src2/dashboard/dashboard.ts:62-71 and
     # frontend/src2/types/workbook.types.ts:131-142 (Layout / WorkbookDashboardChart)
@@ -405,6 +455,8 @@ def stage_2_create():
 
     frappe.db.commit()
     print("Committed (Dashboard + items).")
+    print(f"Raw-SQL (separate mysql process) row count for Dashboard {dashboard_name!r}: {raw_sql_row_exists('Insights Dashboard v3', dashboard_name)}")
+    print(f"Raw-SQL (separate mysql process) row count for Chart {chart_name!r} (re-check after Dashboard commit): {raw_sql_row_exists('Insights Chart v3', chart_name)}")
 
     # Verify the wiring server-side the same way insights.api.get_doc would
     # for a real viewer, instead of trusting the write succeeded silently --
@@ -441,6 +493,20 @@ def stage_2_create():
 
     frappe.db.commit()
     print("Committed (is_public).")
+    print(f"Raw-SQL (separate mysql process) FINAL row count for Dashboard {dashboard_name!r}: {raw_sql_row_exists('Insights Dashboard v3', dashboard_name)}")
+    print(f"Raw-SQL (separate mysql process) FINAL row count for Chart {chart_name!r}: {raw_sql_row_exists('Insights Chart v3', chart_name)}")
+    print(
+        "If any of the raw-SQL counts printed above ever show 1 and a LATER "
+        "one for the same record shows 0, that pinpoints exactly which "
+        "commit() the row failed to survive past -- something between those "
+        "two points is reverting it. If EVERY raw-SQL count is 0 from the "
+        "very first check onward, the row never reached the table at all, "
+        "even within this same process -- which would mean frappe.db.commit() "
+        "is not actually persisting inserts issued via Document.insert() on "
+        "this install, a much stranger finding worth its own investigation "
+        "(a customised hook, a monkey-patched db_insert, or a non-standard "
+        "commit/connection setup) rather than another guess from here."
+    )
 
     dashboard.reload()
     constructed_url = frappe.utils.get_url(f"/insights/shared/dashboard/{dashboard_name}")

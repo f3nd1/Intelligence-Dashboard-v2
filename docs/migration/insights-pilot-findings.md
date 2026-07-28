@@ -389,6 +389,34 @@ browser is actually pointed at. If it also returns `False`, still a
 persistence problem, and the site name printed by the diagnostic is the
 next thing to cross-check against the browser's actual site.
 
+**Update, 2026-07-28 (yet later still) — decisive: the row never reaches the
+table at all, even via raw SQL**. Felix ran `bench --site ucc-sms-v2
+mariadb` (a genuinely separate process, real `mysql` client, zero Frappe
+Python/ORM involved) and checked directly: `is_virtual`/`istable` both `0`
+for both DocTypes (ruling out a virtual-doctype explanation I'd floated and
+checked against the vanilla v3.12.2 source first), the specific row —
+empty set, and `SELECT COUNT(*) FROM \`tabInsights Dashboard v3\`` — **0**.
+Not just this run's row missing: the entire table is empty, across every
+attempt so far, despite the script printing "Created Dashboard: ..." each
+time with no errors.
+
+Added `raw_sql_row_exists()` to the script: shells out to a genuinely
+separate `mysql`/`mariadb` CLI process (mirroring `bench mariadb`'s own
+connection resolution, `frappe/database/__init__.py:96-136`) via
+`subprocess`, using `MYSQL_PWD` rather than a `--password=` arg so the
+credential never shows in `ps aux`. Now called immediately after each of
+the four `frappe.db.commit()` calls, checking every record's row count via
+a completely independent OS process and DB connection *during* the same
+script run — not a manual follow-up check afterward, and not
+same-transaction visibility via `frappe.get_doc()`. This should pinpoint
+precisely which commit (if any) a row fails to survive, or confirm the more
+unusual possibility flagged in the script itself: that `frappe.db.commit()`
+genuinely isn't persisting `Document.insert()` writes on this install at
+all, which would point at something install-specific (a customised hook, a
+patched `db_insert`, a non-standard commit/connection setup) rather than
+anything explainable from the vanilla Frappe/Insights source alone. Waiting
+on this round's output.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
