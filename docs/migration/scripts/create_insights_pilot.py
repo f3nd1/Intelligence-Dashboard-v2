@@ -5,7 +5,7 @@ Written by a repo-only Claude Code session with no bench/site access. Insights
 isn't vendored in this repo, so its v3.12.2 schema was verified by reading the
 real, unabridged source at https://github.com/frappe/insights (tag v3.12.2) --
 not guessed from older Insights docs or training data. File:line citations
-are in the docstrings below. Two things worth knowing before running this:
+are in the docstrings below. Worth knowing before running this:
 
 1. The task that requested this assumed "Insights Chart v3" has an
    `is_public`/`public_key` field for embedding. Half right, half wrong --
@@ -53,6 +53,34 @@ are in the docstrings below. Two things worth knowing before running this:
    than `ucc_dashboard_access`'s criterion-level gating. Don't assume parity
    either way; Step 4(b) still needs the actual logged-out/restricted-user
    test.
+4. Dashboard `items` shape: the real `WorkbookDashboardChart` type
+   (`frontend/src2/types/workbook.types.ts:131-142`,
+   `frontend/src2/dashboard/dashboard.ts:62-71`) nests grid position under a
+   `layout` key (`{"i": <unique str>, "x", "y", "w", "h"}`) and requires that
+   unique `i` -- not flat `x/y/width/height` with no wrapper, which is what
+   an earlier version of this script guessed and which is malformed enough
+   to break the frontend's chart resolution (404 on `insights.api.get_doc`
+   for the chart, even as Administrator). Fixed below; also now verifies
+   `Dashboard.linked_charts` (the auto-derived `Insights Dashboard Chart v3`
+   child table that `insights/api/shared.py`'s `get_public_charts()` actually
+   queries for guest chart access) contains the chart, not just that `items`
+   looks right.
+5. **If you're pasting this into an interactive `bench console` session,
+   the writes below will not survive you closing that session unless
+   something commits them.** Confirmed in Frappe's own source
+   (`frappe/commands/utils.py:_console_cleanup`, registered via `atexit`):
+   closing a console session calls `frappe.db.rollback()` explicitly, by
+   design. Without a commit, every record this script creates lives only
+   inside that session's open transaction -- reads from that *same* session
+   (including this script's own verification checks) see it fine, which is
+   exactly why a prior run could show every check passing and then have both
+   the Chart and the Dashboard 404 moments later from a real browser request
+   (a different DB connection, same as any other Frappe web worker). Fixed
+   by committing at each milestone below rather than trusting the session to
+   stay open. If you're instead running this via
+   `bench --site ucc-sms-v2 execute <path>.run` (a single process that exits
+   after `run()` returns), this isn't a concern the same way, but the
+   explicit commits are harmless either way.
 
 Usage: paste this whole file into `bench --site ucc-sms-v2 console`.
 
@@ -272,6 +300,19 @@ def stage_2_create():
         query_name = query.name
         print(f"Created Query: {query_name} (use_live_connection=1)")
 
+    # bench console does NOT auto-commit between statements, and its own
+    # exit handler explicitly ROLLS BACK anything uncommitted
+    # (frappe/commands/utils.py:_console_cleanup -> frappe.db.rollback()) --
+    # confirmed in Frappe's own source, not Insights'. Without an explicit
+    # commit, every record this script creates is only visible within this
+    # same console session (which is why the script's own verification
+    # checks below can pass) and disappears the moment the session closes,
+    # even though nothing here ever errored. Commit at each milestone rather
+    # than only at the very end, so a later STOP still preserves whatever
+    # succeeded so far instead of losing all of it to the same rollback.
+    frappe.db.commit()
+    print("Committed (Query).")
+
     # Sanity-check the query actually runs and returns grouped rows before
     # building a Chart on top of it -- fail loud here rather than silently
     # shipping a chart with no data.
@@ -321,6 +362,9 @@ def stage_2_create():
         # per Chart created; it's not a duplicate of the pilot query.
         print(f"Note: Insights auto-created a separate blank data_query ({chart.data_query}) -- expected, not a bug.")
 
+    frappe.db.commit()
+    print("Committed (Chart).")
+
     # items shape verified from frontend/src2/dashboard/dashboard.ts:62-71 and
     # frontend/src2/types/workbook.types.ts:131-142 (Layout / WorkbookDashboardChart)
     # -- the previous version of this script had this WRONG: flat x/y/width/
@@ -359,6 +403,9 @@ def stage_2_create():
         dashboard_name = dashboard.name
         print(f"Created Dashboard: {dashboard_name}")
 
+    frappe.db.commit()
+    print("Committed (Dashboard + items).")
+
     # Verify the wiring server-side the same way insights.api.get_doc would
     # for a real viewer, instead of trusting the write succeeded silently --
     # this is exactly the check that would have caught the previous bug
@@ -391,6 +438,9 @@ def stage_2_create():
         print("Set Dashboard is_public = 1")
     else:
         print("Dashboard already public")
+
+    frappe.db.commit()
+    print("Committed (is_public).")
 
     dashboard.reload()
     constructed_url = frappe.utils.get_url(f"/insights/shared/dashboard/{dashboard_name}")

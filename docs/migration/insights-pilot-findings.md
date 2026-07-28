@@ -331,6 +331,38 @@ picture — does the chart render at all now, and does the earlier
 `insights_for_public_access`-skips-filtering finding actually manifest as
 unfiltered real data for a genuinely logged-out viewer.
 
+**Update, 2026-07-28 (later still) — the real bug, found and fixed**: the
+`items`-shape fix above wasn't it. Felix reran with a fresh Dashboard
+(`qinmiinfrs`) and Chart (`qinaqei0rn`), and both 404'd — not just the chart,
+the *dashboard itself*, moments after the console script printed it as
+created, both logged out and as Administrator, using the exact names the
+script had just printed. That ruled out a naming/lookup-signature issue (a
+malformed reference would break the chart lookup specifically, not the
+dashboard record itself) and pointed at something session-scoped instead.
+
+Confirmed in Frappe's own core source, not Insights': `bench console`'s exit
+handler (`frappe/commands/utils.py:_console_cleanup`, registered via
+`atexit`) calls `frappe.db.rollback()` explicitly, by design, whenever a
+console session closes. The script never called `frappe.db.commit()`
+anywhere. Every record it created lived only inside that console session's
+own open MariaDB transaction — invisible to any other connection (a real
+browser request hits a completely separate web-worker connection) until
+committed, and explicitly discarded the moment the session ended. This
+explains both mysteries from the previous round at once: the script's own
+in-session verification checks (`frappe.get_doc()` calls right after
+`insert()`) passed because they read within the *same* transaction, and a
+separately-issued request moments later couldn't find anything because
+nothing had actually been durably written.
+
+Fixed by adding `frappe.db.commit()` at four milestones (after Query
+creation+verification, after Chart creation, after Dashboard+items are
+wired, after `is_public` is set) rather than one commit at the very end —
+so a script that stops early on one of its own `STOP` checks still preserves
+whatever succeeded up to that point instead of losing all of it to the same
+rollback. None of this touches the `items`/`layout` fix from the previous
+update, which was still a real, worth-fixing bug — it just wasn't the one
+actually causing the 404s reported this round.
+
 ---
 
 ## 4. Filter and permission tests — procedures, results pending
