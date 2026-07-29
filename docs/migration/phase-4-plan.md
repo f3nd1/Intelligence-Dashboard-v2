@@ -526,3 +526,71 @@ match).
 - Same open permission-path follow-up as Criteria 1, 3, and 7.
 - Frontend still calls the legacy Server Script directly (Decision B).
 - Criteria 6, 4, 5 not started.
+
+## 15. What was built (Criterion 6 port, this round)
+
+Read the full 2210-line `server-scripts/UCC Analytics - Criterion 6.py` before porting. Same
+pprint-style static block (61-1128, 252 of 1058 non-blank lines not 4-space-indented — byte-verbatim,
+same rationale as Criteria 2 and 7). The per-line-graceful conversion introduced for Criterion 2 was
+used again as the default technique; checked explicitly this time whether the `run()`-body range had
+any irregular pockets of its own (like Criterion 2's "warnings" list) — none found, so the graceful
+fallback never actually triggers for this criterion, but it costs nothing to keep as the standard.
+
+The read surfaced the most structurally distinct engine of the four criteria ported so far:
+
+- **A genuine parent/child metric split** — `evaluate_metric` dispatches to `evaluate_parent_metric`
+  (the familiar shape) or `evaluate_child_metric` based on mode. For `child_count`/
+  `child_parent_count`/`child_any_missing`, `evaluate_child_metric` calls
+  `frappe.get_doc(parent_doctype, parent_name)` **per matched parent row** — not just
+  `frappe.get_list` — to walk that parent's child table (`doc.get(table_field)`) and evaluate
+  conditions per child row. No other criterion ported so far touches child tables or calls
+  `frappe.get_doc` at all; the port's smoke test needed a new `frappe.get_doc` stub and, on the first
+  run, was missing `frappe.db.exists` too (Criterion 6's `resolve_source` uses the same
+  exists-then-get_meta flow as Criterion 7's, not Criteria 1/2/3's plain get_meta-first flow) — same
+  mistake made and caught the same way as it was for Criterion 7's test.
+- **`requirement_registry` aggregates across every subcriterion**, not just the requested one (legacy
+  lines 2177-2193 loop `for criterion_key in QUESTION_REGISTRY`, unscoped by the request's
+  `subcriterion`). Every other ported criterion's `requirement_registry` stays scoped to the current
+  subcriterion — this is a genuine behavioural difference between criteria in the legacy system, not
+  something to "fix" to match the others. Caught by reading the dispatch block carefully rather than
+  assuming it matched the pattern from Criteria 1/2/3/7, and specifically tested (request 6.1.1's
+  registry, assert it contains a 6.2.1 question id).
+- `filter_diagnostics = {}` (legacy line ~1371) is the same module-global-but-request-fresh shape
+  flagged in Criteria 3 and 7 — third time this pattern has recurred, becomes a `run()` local via the
+  same technique.
+- `to_number` strips `","`/`"SGD"`/`"$"` (like Criterion 7's, unlike Criteria 1-3's plain `float()`).
+
+**Files added**:
+
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_6.py` — the port, with the static-block
+  exception, the parent/child split, and the cross-subcriterion `requirement_registry` behaviour
+  documented in the module docstring.
+- `tools/test_ucc_intelligence_criterion_6.py` — same two-layer technique, with a synthetic dataset
+  built specifically to exercise every child-table mode: `child_count` (with chained `not_in`/
+  `date_before_today` conditions), `child_any_missing`, and `child_parent_count` across two different
+  child-table fields on the same parent DocType, plus the `requirement_registry` cross-subcriterion
+  check. **23/23 checks pass** (after fixing the missing `frappe.db.exists` stub found on first run).
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — added `CRITERION_6_ALLOWED_ACTIONS` and
+  `get_criterion_6()`, same shape as the others.
+
+**Verification performed**:
+
+- `tools/test_ucc_intelligence_criterion_6.py`: 23/23.
+- Full existing regression suite re-run, including all four prior criterion tests (1: 19/19, 2: 24/24,
+  3: 28/28, 7: 28/28): all pass.
+- `git diff --stat cb77320 -- custom-html-block/ server-scripts/ src/ dist/ archive/` — empty.
+- `python3 -m py_compile` clean on all new/changed Python files.
+
+**Known limitations / not yet done**:
+
+- Live parity against real data not yet run for Criterion 6 — same procedure as before. Recommend
+  covering 6.1.1 (all three child modes), and at least one of 6.3.1/6.4.1 (the only subcriteria using
+  `average`/`sum`/`number_gte`/`number_lt`), since those are the modes this port's smoke test doesn't
+  reach (only tested against the "all"/"equals"/"in" family in prior criteria's tests, not this
+  criterion's specific numeric-threshold operators).
+- Same open permission-path follow-up as Criteria 1, 2, 3, and 7.
+- Frontend still calls the legacy Server Script directly (Decision B).
+- Criteria 4, 5 not started.
