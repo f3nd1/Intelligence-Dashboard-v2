@@ -461,3 +461,68 @@ not a broadened one (that shared version was generalised from Criterion 7's copy
 - Same open permission-path follow-up as Criteria 1 and 3.
 - Frontend still calls the legacy Server Script directly (Decision B).
 - Criteria 2, 6, 4, 5 not started.
+
+## 14. What was built (Criterion 2 port, this round)
+
+Read the full 1827-line `server-scripts/UCC Analytics - Criterion 2.py` before porting. Same
+static-block finding as Criterion 7 (pprint-style, 498 of 905 non-blank lines in
+POLICY_REGISTRY..STANDARD_FIELDS indented to something other than a multiple of 4 spaces — copied
+byte-verbatim, same rationale), plus one new wrinkle this read surfaced:
+
+- **The irregular indentation isn't confined to the static block.** The result dict's `"warnings"`
+  list (legacy lines 1795-1798) is *also* pprint-style — 3 of its 4 lines aren't 4-space-indented —
+  even though it sits inside the otherwise cleanly-indented `run()`-body range. Rather than carve out
+  another special-cased sub-range (what the Criterion 7 approach would have required), the conversion
+  step was made **per-line** instead of per-block: any line whose indent is a clean multiple of 4 is
+  tab-converted as usual; any line that isn't is left exactly as in the legacy source. This is more
+  robust than Criterion 7's all-or-nothing per-block decision — it would have caught this same wrinkle
+  without needing to spot it by eye first, and it's the technique used for all remaining criteria going
+  forward. Checked, not assumed: confirmed the `"warnings"` line lands in the port with exactly one
+  added tab and its original single-space indentation otherwise untouched.
+- **Checked for the `row_cache`-style module-global risk flagged in Criteria 3 and 7 — none found
+  here.** `fetch_rows` has no request-scoped cache dict in this criterion. Every module-scope loop and
+  intermediate variable still becomes a local of `run()` via the standard technique regardless (the
+  correct general handling for a function called repeatedly in a warm worker), but there was no
+  specific cache-leak bug to avoid this time. Worth continuing to check per-criterion rather than
+  assuming either way.
+
+Other architectural facts confirmed by the read: single-pass `evaluate_metric`, closest in shape to
+Criterion 1's of the three criteria ported so far (`resolve_field_groups`, `metric_required_fields`,
+`row_matches` all present); exceptions via `EXCEPTION_METRIC_IDS` (like Criterion 1 and 7); no
+requirement registry (like Criterion 3 and 7); **eight subcriteria** configured
+(2.1.1/2.1.2/2.2.1/2.3.1/2.3.2/2.4.1/2.4.2/2.4.3) — more than any criterion ported so far, though only
+2 were needed for adequate mode coverage in the smoke test. Criterion 2's own `is_permission_error`
+does not check `"403"` (same broadened-by-reuse case as Criterion 1 and 3, not Criterion 7's exact
+match).
+
+**Files added**:
+
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_2.py` — the port, with the static-block and
+  warnings-list indentation exceptions documented in the module docstring.
+- `tools/test_ucc_intelligence_criterion_2.py` — same two-layer technique with the per-line-graceful
+  conversion; covers `all`/`equals`/`in`/`unsupported` (subcriterion 2.1.1, including an unstubbed
+  source to exercise the unavailable path) and `conditions`/`average_fields` (subcriterion 2.4.2,
+  `contains` + `in` condition chaining, and an averaged numeric field gated by the same condition).
+  **24/24 checks pass.**
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — added `CRITERION_2_ALLOWED_ACTIONS` and
+  `get_criterion_2()`, same shape as the others.
+
+**Verification performed**:
+
+- `tools/test_ucc_intelligence_criterion_2.py`: 24/24.
+- Full existing regression suite re-run, including all three prior criterion tests (Criterion 1 still
+  19/19, Criterion 3 still 28/28, Criterion 7 still 28/28): all pass.
+- `git diff --stat cb77320 -- custom-html-block/ server-scripts/ src/ dist/ archive/` — empty.
+- `python3 -m py_compile` clean on all new/changed Python files.
+
+**Known limitations / not yet done**:
+
+- Live parity against real data not yet run for Criterion 2 — same procedure as §11/§13. Recommend
+  covering at least 2.1.1, one of the `average_fields`/`conditions` subcriteria (2.4.1/2.4.2/2.4.3),
+  and 2.2.1 (the only subcriterion using `all_required`), since those exercise the widest mode spread.
+- Same open permission-path follow-up as Criteria 1, 3, and 7.
+- Frontend still calls the legacy Server Script directly (Decision B).
+- Criteria 6, 4, 5 not started.
