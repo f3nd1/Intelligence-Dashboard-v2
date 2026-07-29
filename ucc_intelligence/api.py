@@ -1,6 +1,6 @@
 import frappe
 
-from ucc_intelligence.analytics import criterion_1, criterion_2, criterion_3, criterion_6, criterion_7
+from ucc_intelligence.analytics import criterion_1, criterion_2, criterion_3, criterion_4, criterion_6, criterion_7
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 
@@ -13,6 +13,12 @@ CRITERION_2_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
 	"question_registry", "drilldown",
 ]
+
+# Criterion 4 is a partial, Insights-informed implementation (admission_intelligence
+# only, see analytics/criterion_4.py's module docstring) -- only "summary" does
+# anything meaningful right now, so that's all that's allowed rather than
+# claiming support for actions with no real data behind them yet.
+CRITERION_4_ALLOWED_ACTIONS = ["summary"]
 
 CRITERION_3_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
@@ -79,6 +85,24 @@ def get_criterion_2():
 		criterion_label="Criterion 2",
 	)
 	return criterion_2.run(**parsed)
+
+
+@frappe.whitelist()
+def get_criterion_4():
+	"""Partial, Insights-informed Criterion 4 implementation --
+	admission_intelligence only (4 KPIs + 6 chart series). Not a port of
+	server-scripts/UCC Analytics - Criterion 4.py -- see
+	ucc_intelligence/ucc_intelligence/analytics/criterion_4.py's module
+	docstring for the architecture and what's still open. Not yet called by
+	the frontend -- sophia_analytics.js still calls the legacy Server Script
+	directly."""
+	parsed = parse_payload(
+		frappe.form_dict.get("payload"),
+		default_subcriterion="4.1.1",
+		allowed_actions=CRITERION_4_ALLOWED_ACTIONS,
+		criterion_label="Criterion 4",
+	)
+	return criterion_4.run(**parsed)
 
 
 @frappe.whitelist()
