@@ -130,12 +130,25 @@ This is the evidence behind Decision C above — a real, mixed picture, not "eve
 ## 4. Files touched / untouched
 
 **New**:
+- `ucc_intelligence/ucc_intelligence/analytics/engine.py` — the two/three low-level value helpers
+  verified byte-identical (or majority-identical, matching Criterion 1's own copy) across all seven
+  legacy scripts (Decision C).
 - `ucc_intelligence/ucc_intelligence/analytics/request.py` — shared payload parsing (Decision C).
 - `ucc_intelligence/ucc_intelligence/analytics/criterion_1.py` — Criterion 1's engine + catalogue,
   ported.
-- `ucc_intelligence/ucc_intelligence/api/analytics.py` — new module, one whitelisted method:
-  `get_criterion_1(payload=None)`.
-- `tools/test_ucc_intelligence_criterion_1.py` (or similar) — see §6.
+- `tools/test_ucc_intelligence_criterion_1.py` — see §6.
+
+**Corrected mid-build, not as originally planned**: this section originally said the new whitelisted
+method would live in a new `ucc_intelligence/ucc_intelligence/api/analytics.py` module, following
+CLAUDE.md §7's illustrative package layout. That's wrong for this install, the same class of mistake
+as Phase 3's `public/` nesting bug — `api.py` already exists as a **flat module** (Phase 1), and
+`sophia_analytics.js` calls `method:"ucc_intelligence.api.get_dashboard_access"`, confirming it. Adding
+an `api/` *directory* alongside the existing `api.py` *file* would be a Python import conflict, not
+just an aspirational-vs-real mismatch. Caught this before committing anything broken: `get_criterion_1`
+is added to the existing `ucc_intelligence/ucc_intelligence/api.py` instead, alongside `health_check`
+and `get_dashboard_access`. Revisiting whether `api.py` should become a real package is a real
+question once several more criteria are added and the file gets unwieldy — not decided here, and not
+blocking this phase.
 
 **Untouched**: `custom-html-block/`, `server-scripts/` (including `UCC Analytics - Criterion 1.py`
 itself — stays live and unmodified, per Decision B), `src/`, `dist/`, `archive/`, and every other
@@ -199,3 +212,83 @@ it happens.
 
 Once confirmed, next step is reading Criterion 1 in full (I've only mapped its shape so far, not
 read every line) before writing the actual port.
+
+---
+
+## 10. What was built (Criterion 1 port, this round)
+
+**Files added**:
+
+- `ucc_intelligence/ucc_intelligence/analytics/engine.py` — `clean_text`/`lower_text`/`is_truthy`,
+  extracted verbatim from the legacy script, hash-verified byte-identical (`lower_text`, `is_truthy`)
+  or majority-identical (`clean_text`, 6 of 7 scripts) across all seven criteria before being shared
+  (Decision C). Criterion 4's own `clean_text` differs and must be re-checked, not assumed compatible,
+  when Criterion 4 is ported.
+- `ucc_intelligence/ucc_intelligence/analytics/request.py` — shared payload parsing
+  (`parse_payload`), parameterised by `default_subcriterion` and `allowed_actions` — the only two
+  things that differ between Criterion 1's and Criterion 3's equivalent blocks.
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_1.py` — the port itself. Static
+  config/registry block (legacy lines 63-784) copied verbatim at module scope; the engine and
+  response-assembly code (legacy lines 801-1566, 1773-1842) wrapped one indentation level deeper
+  inside `run(action, subcriterion, filters, metric_id, page, page_size, row_limit)`, reusing the
+  already-ported `is_permission_error` / `standardise_response_contract` from `analytics.contracts`
+  (Phase 2) instead of redefining them. Four deliberate differences from the legacy script are
+  documented in the module docstring; everything else — every metric, question, condition, field
+  candidate list, and the evaluation engine's control flow — is unchanged.
+- `tools/test_ucc_intelligence_criterion_1.py` — two-layer self-check (see §6): re-extracts the same
+  legacy line ranges at test time, asserts they still match the live source verbatim, then diffs the
+  transformed result against the committed files; plus a stubbed-`frappe` smoke test that runs
+  `criterion_1.run()` end to end against a small synthetic dataset (mixed available/unavailable
+  sources, one "conditions"-mode metric, one "field_compare"-mode metric, drilldown, and an unknown
+  `metric_id` error case). **19/19 checks pass.**
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — added `get_criterion_1()`, a `@frappe.whitelist()`
+  method that parses the payload via `request.parse_payload` and calls `criterion_1.run(**parsed)`.
+  **Correction mid-build**: the original plan (below) said this would live in a new
+  `api/analytics.py` module, following CLAUDE.md §7's illustrative layout. That's wrong for this
+  install — `api.py` already exists as a *flat module* from Phase 1 (`sophia_analytics.js` calls
+  `ucc_intelligence.api.get_dashboard_access`, a dotted path only possible if `api` is a module, not a
+  package), so a new `api/` *directory* alongside it would be a Python import conflict, not just an
+  aspirational-vs-real mismatch. Caught before anything broken was committed; `get_criterion_1` was
+  added to the existing `api.py` instead. Whether `api.py` should become a real package once several
+  more criteria are added is a real question for later, not decided here.
+
+**Two self-check bugs found and fixed while getting to 19/19** (both in the test/docstring, not the
+ported logic):
+
+1. The "no Server Script response-object assumption left" check failed because the module docstring
+   *mentioned* the legacy response-object assignment in prose, tripping the same substring check meant
+   to catch it in code. Reworded the docstring to describe the behaviour without using the literal
+   string.
+2. The "`engine.py` matches Criterion 1's legacy copies verbatim" check failed because `engine.py` was
+   written with PEP8-style double blank lines between top-level functions, while the legacy source (and
+   the test's raw extraction) uses single blank lines. Reformatted `engine.py` to single blank lines to
+   match the verbatim extraction, consistent with how the static block elsewhere in `criterion_1.py`
+   preserves the legacy file's original spacing rather than reformatting it.
+
+**Verification performed**:
+
+- `tools/test_ucc_intelligence_criterion_1.py`: 19/19 (structural fidelity + stubbed smoke test).
+- Full existing regression suite re-run: `test_dashboard_access.py`, `test_sophia_analytics_page.py`,
+  `test_ucc_intelligence_access.py`, `test_ucc_intelligence_contracts.py` all still pass.
+  `test_drop_server_message.py` and `validate_package.py` (94/101) fail — confirmed via `git stash` to
+  be **pre-existing failures on the baseline**, unrelated to this round's changes (both concern
+  Criterion 5/6 build-manifest matters, not touched here).
+- `git diff --stat cb77320 -- custom-html-block/ server-scripts/ src/ dist/ archive/` — empty. Legacy
+  directories remain byte-for-byte untouched.
+- `python3 -m py_compile` clean on all new/changed Python files.
+
+**Known limitations / not yet done**:
+
+- **Live parity against real data has not been run** — that needs your bench. Structural fidelity
+  (the port says the same thing as the legacy script) is verified here; computational parity (it
+  *computes* the same thing against real records) is not, per §5/§6's original split. Once you're
+  ready, the comparison is: run the legacy `ucc_analytics_criterion_1` Server Script and the new
+  `ucc_intelligence.api.get_criterion_1` method with the same `payload` against the same site/user,
+  diff the JSON (the `api_method` field intentionally still reads `"ucc_analytics_criterion_1"` in
+  both, for exactly this byte-comparison).
+- Frontend still calls the legacy Server Script directly (Decision B — shipped dark, not cut over).
+- Criteria 2-7 not started. Each will need its own check of which `analytics/engine.py` helpers it can
+  actually reuse (Decision C's method), not an assumption that they all match Criterion 1's.
