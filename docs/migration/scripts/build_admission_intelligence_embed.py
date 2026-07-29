@@ -1,12 +1,39 @@
-"""Create the 5 remaining Insights Query v3 / Chart v3 records for
-Criterion 4's admission_intelligence (Option B: Sophia embeds live
-Insights queries directly, confirmed with Felix after the real permission
-test in test_insights_private_permissions.py proved private query
-execution respects real per-user Frappe permissions -- 0 rows restricted,
-6 rows with real access, on the actual bench).
+"""Create ONE more Insights Query v3 / Chart v3 record for Criterion 4's
+admission_intelligence (Option B: Sophia embeds live Insights queries
+directly, confirmed with Felix after the real permission test in
+test_insights_private_permissions.py proved private query execution
+respects real per-user Frappe permissions -- 0 rows restricted, 6 rows
+with real access, on the actual bench).
 
-1 of 6 series already exists and is proven (the original pilot chart,
-title "Sophia Pilot - Student Applicants per Year", dataKey
+**Scoped down deliberately, 2026-07-29**: rather than building and
+self-QA'ing all 6 series in one pass, this round builds just ONE more --
+`enrolled_by_year` -- alongside the already-proven `applicants_by_year`,
+so the pattern can be reviewed live on the real page before committing to
+the other 4. `applicants_by_country`, `programmes`, `agents`, and
+`counselling_to_admission` are deliberately NOT built by this run (their
+verified operation specs are still defined below, in DEFERRED_SERIES /
+build_counselling_duration, just not called from run() yet) -- picking
+this back up later is a one-line change (move a spec from
+DEFERRED_SERIES to ACTIVE_SERIES, or add the build_counselling_duration()
+call back into run()), not a rewrite.
+
+`enrolled_by_year` was chosen as "one more" because it's the lowest-risk
+of the remaining 5: same table and the SAME already-verified
+`academic_year` field as `applicants_by_year` (62 rows, 0 blank,
+confirmed on this bench by the earlier pilot), plus one `filter` operation
+(verified against real Insights source, see below) -- nothing depends on
+a field candidate that hasn't been checked against this site's live
+schema yet, unlike the other 4.
+
+The runtime module (admission_intelligence_embed.py) and the frontend
+wiring already tolerate a partial build gracefully -- a chart whose Query
+v3 record doesn't exist yet reports `status: "unavailable"` and renders
+the existing generic empty state, not an error and not a permission
+notice. No code changes were needed there for this scope-down; only this
+script's ACTIVE_SERIES list changed.
+
+`applicants_by_year` already exists and is proven (the original pilot
+chart, title "Sophia Pilot - Student Applicants per Year", dataKey
 applicants_by_year) -- this script does NOT recreate it, only verifies it
 still resolves and executes, same as everything else here.
 
@@ -58,10 +85,8 @@ site name via `ls sites/` first, same as every script tonight):
 
     exec(open("docs/migration/scripts/build_admission_intelligence_embed.py").read())
 
-Runs STAGE 1 (create/reuse) through STAGE 4 (2-chart restricted-permission
-test) automatically. Each STAGE prints its own pass/fail so a partial
-failure (e.g. counselling_to_admission's mutate not resolving) doesn't
-hide whether the other 4 succeeded.
+Runs STAGE 1 (create/reuse) through STAGE 4 (restricted-permission test on
+the one new chart) automatically. Each STAGE prints its own pass/fail.
 """
 
 import frappe
@@ -89,7 +114,11 @@ CHART_TITLES = {
 }
 
 # From criterion_4.py's build_admission_intelligence() field-candidate lists.
-SIMPLE_SERIES = [
+# ACTIVE_SERIES is built by this run; DEFERRED_SERIES is kept (specs already
+# verified against real Insights operation shapes) but NOT called from run()
+# -- see the module docstring's "Scoped down deliberately" note. Moving one
+# back into ACTIVE_SERIES later is the only change needed to resume.
+ACTIVE_SERIES = [
 	{
 		"data_key": "enrolled_by_year",
 		"doctype": APPLICANT_DOCTYPE,
@@ -98,6 +127,9 @@ SIMPLE_SERIES = [
 		"filter": {"column": "application_status", "operator": "=", "value": "Admitted"},
 		"chart_type": "Line",
 	},
+]
+
+DEFERRED_SERIES = [
 	{
 		"data_key": "applicants_by_country",
 		"doctype": APPLICANT_DOCTYPE,
@@ -337,18 +369,18 @@ def stage_3_verify_execute_as_admin():
 
 def stage_4_permission_test(execute_results):
 	"""Re-run the exact restricted-user / control-user pattern from
-	test_insights_private_permissions.py against 2 of the 5 NEWLY built
-	charts (not the original pilot one) -- confirms the proven-safe pattern
-	holds for genuinely new Query records, not just the one already proven."""
+	test_insights_private_permissions.py against enrolled_by_year -- the one
+	genuinely new Query record this scoped-down round creates -- confirms the
+	proven-safe pattern holds for it specifically, not just the original
+	pilot chart. Scoped to 1 chart, not 2, to match ACTIVE_SERIES; extend
+	this list when more series move out of DEFERRED_SERIES."""
 	print("\n" + "=" * 70)
-	print("STAGE 4 -- restricted-vs-control permission test on 2 new charts")
+	print("STAGE 4 -- restricted-vs-control permission test on the new chart")
 	print("=" * 70)
 
-	candidates = [dk for dk in ("enrolled_by_year", "applicants_by_country") if execute_results.get(dk, {}).get("status") == "pass"]
-	if len(candidates) < 2:
-		candidates = [dk for dk, r in execute_results.items() if r.get("status") == "pass" and dk != "applicants_by_year"][:2]
+	candidates = [dk for dk in ("enrolled_by_year",) if execute_results.get(dk, {}).get("status") == "pass"]
 	if not candidates:
-		print("No successfully-executing new chart available to test. Skipping Stage 4.")
+		print("enrolled_by_year did not execute successfully in Stage 3 -- nothing new to test. Skipping Stage 4.")
 		return {}
 
 	test_user_email = "insights-permission-test@ucc-intelligence.local"
@@ -379,7 +411,7 @@ def stage_4_permission_test(execute_results):
 		return any(u.user == email for u in frappe.share.get_users(dt, dn))
 
 	permission_results = {}
-	for data_key in candidates[:2]:
+	for data_key in candidates:
 		title = CHART_TITLES[data_key]
 		query_name = frappe.db.get_value("Insights Query v3", {"title": title}, "name")
 		print("\n--- %s (query %s) ---" % (data_key, query_name))
@@ -424,7 +456,7 @@ def stage_4_permission_test(execute_results):
 		print("Verdict for %s: %s" % (data_key, verdict))
 		permission_results[data_key] = {"restricted_rows": restricted_rows, "control_rows": control_rows, "verdict": verdict}
 
-	for dt, dn in [("Insights Query v3", frappe.db.get_value("Insights Query v3", {"title": CHART_TITLES[dk]}, "name")) for dk in candidates[:2]]:
+	for dt, dn in [("Insights Query v3", frappe.db.get_value("Insights Query v3", {"title": CHART_TITLES[dk]}, "name")) for dk in candidates]:
 		if is_shared(dt, dn, test_user_email):
 			frappe.share.remove(dt, dn, test_user_email)
 	if frappe.db.exists("User", test_user_email):
@@ -456,11 +488,13 @@ def run():
 	print("Insights Settings.apply_user_permissions = %r (MUST be 1 for any of this to enforce permissions)" % settings.get("apply_user_permissions"))
 
 	print("\n" + "=" * 70)
-	print("STAGE 2 -- create the 5 remaining Query/Chart records")
+	print("STAGE 2 -- create ACTIVE_SERIES only (%s); %d series deferred pending review" % (
+		", ".join(spec["data_key"] for spec in ACTIVE_SERIES), len(DEFERRED_SERIES) + 1))
 	print("=" * 70)
-	for spec in SIMPLE_SERIES:
+	for spec in ACTIVE_SERIES:
 		build_simple_series(spec, data_source, workbook)
-	build_counselling_duration(data_source, workbook)
+	print("\nDeferred, not built this round: %s, counselling_to_admission -- see module docstring." % (
+		", ".join(spec["data_key"] for spec in DEFERRED_SERIES)))
 
 	execute_results = stage_3_verify_execute_as_admin()
 	permission_results = stage_4_permission_test(execute_results)

@@ -812,3 +812,27 @@ Everything checkable without bench access has been checked and passes. Everythin
 access is handed off as one complete, ready-to-run script
 (`docs/migration/scripts/build_admission_intelligence_embed.py`) plus the live browser check, per the
 task's explicit instruction not to do this in multiple back-and-forth rounds.
+
+### Update, 2026-07-29 (later same day) — scoped down to 2 of 6 pending review
+
+Felix: build/self-QA all 6 in one pass was too much to review at once. Rescoped
+`build_admission_intelligence_embed.py` to build only ONE more chart this round —
+`enrolled_by_year` (lowest risk: reuses the already-verified `academic_year` field, adds one
+verified `filter` operation) — alongside the already-existing `applicants_by_year`. The other 4
+(`applicants_by_country`, `programmes`, `agents`, `counselling_to_admission`) have their verified
+specs kept in the script (`DEFERRED_SERIES`, and `build_counselling_duration()` still defined) but
+are not built or self-QA'd this round — resuming later is moving a spec back into `ACTIVE_SERIES`,
+not redoing the verification work.
+
+No changes were needed in `admission_intelligence_embed.py` (the runtime module) or the frontend
+wiring — both already degrade gracefully when a chart's Query v3 record doesn't exist yet
+(`status: "unavailable"`, generic empty state, not an error and not a false permission notice), so a
+2-of-6 build is safely reviewable on the real page without touching anything beyond the
+chart-creation script itself.
+
+**Also confirmed, not yet decided**: Criterion 5 has NOT been given the Option B treatment and
+nothing should be assumed about it — that's a separate future call, not implied by Criterion 4's
+direction. And the original CLAUDE.md scope beyond the 7 criteria — Ask UCC, Zep/conversation memory,
+document/policy search, monitoring, controlled AI actions — is all still unstarted; everything built
+across every phase so far is foundation work under CLAUDE.md's Phase 0-6 umbrella, not a signal those
+later phases have begun.
