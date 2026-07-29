@@ -594,3 +594,141 @@ The read surfaced the most structurally distinct engine of the four criteria por
 - Same open permission-path follow-up as Criteria 1, 2, 3, and 7.
 - Frontend still calls the legacy Server Script directly (Decision B).
 - Criteria 4, 5 not started.
+
+## 16. Direction change for Criteria 4 and 5 — Insights-informed, not verbatim ports
+
+**Confirmed with Felix, 2026-07-29: Criteria 1, 2, 3, 6, and 7 stay exactly as already built** (the
+verbatim-extraction technique documented in §§10-15). **Criteria 4 and 5 switch approach entirely.**
+This section records why and what changed; it does not revise anything already shipped for the other
+five.
+
+### Why
+
+A read-through of Criterion 4 (§ below) found it structurally unlike the other five in ways that made
+a verbatim port a poor fit specifically for this criterion: none of `analytics/engine.py`'s shared
+value helpers were reusable (its own `clean_text` uses `frappe.utils.cstr`, not `str()`), eleven
+module-level caches existed purely to make ~40 generically-evaluated metrics cheap per request, and a
+~130-line separate `admission_intelligence` subsystem — the exact chart the earlier Insights pilot
+(`docs/migration/insights-pilot-findings.md`) already spiked — sat alongside the generic engine. That
+pilot had already done real, live-verified work (`docs/migration/scripts/create_insights_pilot.py`
+confirmed `Student Applicant.academic_year` as a real field against the live bench) that a verbatim
+port would have thrown away in favour of re-deriving the same query from legacy Python.
+
+### The model: Insights authors, `ucc_intelligence` executes — live, every request
+
+**Not an embed.** The pilot's own permission test (`insights-pilot-findings.md` §4(b)) found a public
+Insights dashboard has zero row/column permission enforcement — a genuinely unauthenticated request
+got the full record. That rules out Insights' own dashboard/sharing mechanism for anything
+`ucc_dashboard_access` gates; it is not a configuration to fix, it is Insights' own design.
+
+Instead: Insights is a **design-time query-authoring and verification tool only**, with no runtime
+footprint. Someone builds and verifies a chart's query in the Insights UI against real data; the
+verified query is then **hand-translated once** into `ucc_intelligence`'s own Python, executed inside
+the same whitelisted API method every other criterion uses (`frappe.get_list`, no
+`ignore_permissions=True`). The query still runs live against the site database on every request —
+same as the legacy script always did — it is simply designed via Insights rather than hand-written
+from scratch. Permission enforcement is the two mechanisms already built and tested for every other
+criterion, nothing new: `ucc_dashboard_access` gates whether Criterion 4 mounts for this user at all,
+and ordinary Frappe DocType/row permissions apply to the `frappe.get_list` calls exactly as they did
+in the legacy script. No iframe, no Insights public link, no call into Insights' API at request time,
+no frontend change — the API response shape (`admission_intelligence.charts.applicants_by_year`, etc.)
+is unchanged, so `renderAdmissionLine()` keeps working as-is.
+
+A concrete benefit this buys over the pilot's iframe-embed spike: §4(a) of the pilot (filter
+behaviour) was left explicitly untested, with a documented expectation that an embedded chart would
+not receive the page's filter strip state, since an iframe has no mechanism to carry it. That concern
+doesn't apply here — `admission_intelligence` computes inside the same `run()` call as the rest of
+Criterion 4, so `filters.academic_year` reaches the query the same way every other criterion's filters
+always have. Tested directly (see below).
+
+### Scope, confirmed explicitly — not assumed from "use Insights for Criterion 4"
+
+**Only `admission_intelligence`** — the 4 KPIs and 6 chart series from legacy
+`build_admission_intelligence()` (`server-scripts/UCC Analytics - Criterion 4.py:2359-2489`) — moves
+to this approach. Criterion 4's other ~40 metrics/questions/requirements (contract, fee protection,
+movement, refund, support services, attendance) are **not** covered here and are **not** deferred to
+Insights either — they stay planned as regular hand-ported code, same verbatim technique as Criteria
+1/2/3/6/7, built later in the normal pattern. Until then, `run()` returns a contract-valid response
+(via the same `standardise_response_contract` every other criterion uses) with `admission_intelligence`
+populated and everything else defaulted empty.
+
+### What's actually verified vs. faithfully translated but not yet independently checked
+
+Stated plainly rather than implying uniform confidence across all six series:
+
+- **`applicants_by_year` and `enrolled_by_year`** are grounded in the pilot's own tested query:
+  `Student Applicant.academic_year` is a confirmed real Link field (62 rows, 0 blank, live bench), and
+  the base query genuinely has no `WHERE` clause until a filter is applied — both used directly, not
+  assumed.
+- **`applicants_by_country`, `programmes`, `agents`, and `counselling_to_admission`** were never
+  independently authored/verified in the Insights UI — the pilot only ever built the one chart. These
+  four are faithful translations of `build_admission_intelligence()`'s own field-candidate logic
+  (the same candidate lists the legacy script used), which is why a small, uncached `resolve_field`/
+  `get_meta` still exists in `criterion_4.py` even though the point of this approach was moving away
+  from defensive field probing — dropping that probing for a field nobody has confirmed exists would
+  trade verified behaviour for an unverified guess. These four should still go through the
+  author-and-verify-in-Insights step once Felix has bench time; whichever turn out to use a single
+  confirmed field can drop `resolve_field` the way `academic_year` already has.
+
+### What's dropped, and why that's not a loss
+
+The legacy script's eleven module-level caches (`meta_cache`, `resolved_field_cache`, `row_cache`,
+etc. — see §15's Criterion 6 write-up for where this pattern started) existed to keep ~40+
+generically-evaluated metrics cheap per request. Six purpose-built queries evaluated once per request
+have nothing to cache — the new `get_meta`/`resolve_field` are plain and uncached, correct by not
+needing the caching problem to exist in the first place.
+
+### What was built
+
+**Files added**:
+
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_4.py` — fresh implementation (not extracted
+  from the legacy script), computing `admission_intelligence`'s 4 KPIs and 6 chart series. Reuses
+  `analytics.engine`'s `clean_text`/`lower_text`/`is_truthy` and `analytics.contracts`'
+  `is_permission_error`/`standardise_response_contract` directly — the `cstr`-vs-`str()` divergence
+  that ruled out reuse in the abandoned verbatim-port attempt doesn't apply to fresh code, only to
+  byte-faithful reproduction of legacy behaviour.
+- `tools/test_ucc_intelligence_criterion_4.py` — not the structural-fidelity-plus-smoke-test shape
+  used for the other five (there's no legacy line range to diff against). Instead: synthetic
+  applicant/admission data, hand-computed expected values that mirror the legacy formulas exactly
+  (`success_rate = admitted/total*100`, group-by-count, duration averaging), plus source-unavailable,
+  permission-denied, filter-passthrough, and subcriterion-guard checks. **18/18 checks pass.**
+- `docs/migration/scripts/cleanup_insights_pilot.py` — unrelated to the migration approach itself: the
+  pilot's public `Insights Dashboard v3`/`Chart v3` records were confirmed exposed with zero
+  authentication (§4(b)) and needed cleaning up on their own, independent of which direction Criterion
+  4 took. Two-phase (find + unpublish, then an explicit separate delete step), following the same
+  commit-after-every-mutation discipline the pilot's own persistence debugging saga established was
+  necessary in `bench console`.
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — added `get_criterion_4()`. `CRITERION_4_ALLOWED_ACTIONS
+  = ["summary"]` only, not the usual six — the other actions (`drilldown`, `policy_registry`, etc.)
+  have no real data behind them yet at this partial scope, so they're not claimed as supported.
+
+**Verification performed**:
+
+- `tools/test_ucc_intelligence_criterion_4.py`: 18/18.
+- Full existing regression suite re-run, including all five verbatim-ported criteria's tests: all
+  still pass unchanged (Criterion 1: 19/19, Criterion 2: 24/24, Criterion 3: 28/28, Criterion 6:
+  23/23, Criterion 7: 28/28).
+- `git diff --stat cb77320 -- custom-html-block/ server-scripts/ src/ dist/ archive/` — empty.
+- `python3 -m py_compile` clean on all new/changed Python files.
+
+**Known limitations / not yet done**:
+
+- **`applicants_by_country`, `programmes`, `agents`, and `counselling_to_admission` still need the
+  author-and-verify-in-Insights step** — see above. Not blocking (they're faithful translations of
+  already-live legacy logic, not guesses), but not yet independently confirmed the way
+  `applicants_by_year` is.
+- Live parity against real data (comparing this module's output to the legacy Server Script's
+  `admission_intelligence` block for the same live data) has not been run — same bench-dependent step
+  every other criterion still needs, same procedure (§5/§6/§11).
+- Criterion 4's other ~40 metrics/questions/requirements are not built (by design, out of scope this
+  round — see above).
+- The pilot's cleanup script (`cleanup_insights_pilot.py`) has not been run — needs Felix's bench
+  access, same as every bench-dependent step in this migration.
+- Frontend still calls the legacy Server Script directly — no cutover decision has been made or is
+  implied by this work.
+- Criterion 5 not started — needs its own read-through first to confirm whether it has an
+  `admission_intelligence`-equivalent block before assuming the same approach applies unchanged.
