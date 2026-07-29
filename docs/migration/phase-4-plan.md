@@ -397,3 +397,67 @@ from Criterion 1, not just a different `CONFIG`:
   permission-denied source.
 - Frontend still calls the legacy Server Script directly (Decision B).
 - Criteria 7, 2, 6, 4, 5 not started.
+
+## 13. What was built (Criterion 7 port, this round)
+
+Read the full 2061-line `server-scripts/UCC Analytics - Criterion 7.py` before porting. Two real
+findings from that read, not assumed from Criteria 1/3's shape:
+
+- **The static config block (POLICY_REGISTRY..STANDARD_FIELDS, legacy lines 63-1188) is not
+  hand-authored in the C1/C3 4-space convention.** Checked, not assumed: 245 of its 1118 non-blank
+  lines have indentation that isn't a multiple of 4 spaces — it reads as `pprint`/formatter output,
+  with continuation lines aligned to bracket columns. The usual mechanical "spaces → tabs" step would
+  either throw (on the majority of lines) or silently misalign the block, so this block is copied
+  **byte-verbatim, unconverted** — a deliberate, evidence-based exception to the C1/C3 technique, not
+  a shortcut. The `run()` body (regular 4-space throughout, checked the same way) still gets the usual
+  tab conversion. Mixing the two within one file is syntactically fine in Python 3.
+- **The same `row_cache`-shaped correctness issue Felix flagged for Criterion 3 recurred here**:
+  `filter_diagnostics = {}` and `fetch_diagnostics = {}` (legacy lines ~1412-1413) are module-level
+  dicts in the Server Script, harmless there because the whole global scope re-executes per request.
+  Nesting the engine inside `run()` (same technique as before) gives every call fresh copies, so this
+  is handled correctly by construction — worth continuing to check for on each remaining criterion,
+  not assumed solved once and done.
+
+Other architectural facts confirmed by the read: single-pass metric evaluation (no derived-metric
+layer like Criterion 3); exceptions via a separate `EXCEPTION_METRIC_IDS` list (like Criterion 1, not
+Criterion 3's inline flags); a `required_value_coverage` metric mode not present in either earlier
+criterion; a `display_doctype()` helper (`SOURCE_DISPLAY_NAMES`) neither earlier criterion has;
+`resolve_source` checks `frappe.db.exists("DocType", ...)` before `frappe.get_meta`, a different
+resolution flow from Criterion 1/3's. Criterion 7's own legacy `is_permission_error` already checks
+for `"403"` — the one criterion where reusing `contracts.py`'s shared version is an **exact** match,
+not a broadened one (that shared version was generalised from Criterion 7's copy back in Phase 2).
+
+**Files added**:
+
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_7.py` — the port, with the static-block
+  exception above documented in the module docstring alongside the usual deliberate-differences list.
+- `tools/test_ucc_intelligence_criterion_7.py` — same two-layer technique, adapted: the structural
+  check compares the static block as raw (untransformed) text instead of tab-converted text, and
+  includes an explicit "is the block still irregular" sanity check so the byte-verbatim decision would
+  visibly fail loud if the legacy file were ever reformatted underneath it. The smoke test's stub gains
+  a `frappe.db.exists` fake (Criterion 7-specific) and covers `falsy`, `all_required` (7-field-group
+  form), `required_value_coverage`, `not_in`, and `sum` — the modes Criteria 1/3's tests don't reach.
+  **28/28 checks pass.**
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — added `CRITERION_7_ALLOWED_ACTIONS` and
+  `get_criterion_7()`, same shape as the other two.
+
+**Verification performed**:
+
+- `tools/test_ucc_intelligence_criterion_7.py`: 28/28.
+- Full existing regression suite re-run, including both prior criterion tests (Criterion 1 still
+  19/19, Criterion 3 still 28/28 — confirms the shared `api.py` edit didn't regress either): all pass.
+- `git diff --stat cb77320 -- custom-html-block/ server-scripts/ src/ dist/ archive/` — empty.
+- `python3 -m py_compile` clean on all new/changed Python files.
+
+**Known limitations / not yet done**:
+
+- Live parity against real data not yet run for Criterion 7 — same procedure as §11, only one
+  subcriterion (`7.1.1`) exists for this criterion so there's no additional subcriterion sweep needed,
+  but worth trying a `drilldown` on a `required_value_coverage` metric and a `sum` metric specifically
+  since those are the modes unique to this criterion.
+- Same open permission-path follow-up as Criteria 1 and 3.
+- Frontend still calls the legacy Server Script directly (Decision B).
+- Criteria 2, 6, 4, 5 not started.
