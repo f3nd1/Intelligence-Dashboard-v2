@@ -242,10 +242,17 @@ print("=" * 70)
 
 import frappe.share  # noqa: E402
 
+
+def is_shared_with_test_user(dt, dn):
+	# frappe.share.get_users(doctype, name) takes no `user` filter -- it returns every
+	# share for the document, so filter for our test user here.
+	return any(u.user == TEST_USER_EMAIL for u in frappe.share.get_users(dt, dn))
+
+
 for dt, dn in [("Insights Chart v3", chart_name), ("Insights Query v3", query_name)] + (
 	[("Insights Dashboard v3", dashboard_name)] if dashboard_name else []
 ):
-	if not frappe.share.get_users(dt, dn, user=TEST_USER_EMAIL):
+	if not is_shared_with_test_user(dt, dn):
 		frappe.share.add(dt, dn, user=TEST_USER_EMAIL, read=1)
 frappe.db.commit()
 
@@ -374,7 +381,7 @@ if CLEANUP_TEST_USER:
 	for dt, dn in [("Insights Chart v3", chart_name), ("Insights Query v3", query_name)] + (
 		[("Insights Dashboard v3", dashboard_name)] if dashboard_name else []
 	):
-		if frappe.share.get_users(dt, dn, user=TEST_USER_EMAIL):
+		if is_shared_with_test_user(dt, dn):
 			frappe.share.remove(dt, dn, TEST_USER_EMAIL)
 	if frappe.db.exists("User", TEST_USER_EMAIL):
 		frappe.delete_doc("User", TEST_USER_EMAIL, ignore_permissions=True, force=True)
