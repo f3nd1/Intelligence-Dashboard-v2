@@ -186,14 +186,30 @@ Two layers, matching what I can and can't do without a bench:
 
 ## 7. Exit criteria — copied from CLAUDE.md §9 Phase 4, per-criterion
 
-- [ ] API contract test passes.
-- [ ] Legacy-versus-new parity test is signed off (needs your bench — §5).
-- [ ] Permission tests pass (same `frappe.get_list`/`is_permission_error` pattern as legacy, verified
-      unchanged).
+**Criterion 1: complete as of 2026-07-29** (structural + computational parity both verified; see §10 and
+§11 below).
+
+- [x] API contract test passes. (`tools/test_ucc_intelligence_criterion_1.py`, 19/19.)
+- [x] Legacy-versus-new parity test is signed off. Verified live on Felix's bench, browser-console
+      comparison, real data, `subcriterion="1.1.1"`, full-access role: 27 oversight records, 202
+      stakeholder engagements, 675 risk register entries, management reviews, quality actions —
+      `EQUAL (excl. generated_at): true`. Legacy Server Script and
+      `ucc_intelligence.api.get_criterion_1` produce byte-identical output.
+- [ ] Permission tests pass — **open follow-up, not blocking**. What's verified: the happy-path
+      full-access parity above, and the stubbed smoke test's *unavailable-metadata* source (a DocType
+      that doesn't exist / isn't installed). What's **not yet verified against real data**: a genuine
+      *permission-denied* source — a role that lacks read access to one of Criterion 1's underlying
+      DocTypes (Risk Register and Mitigation Plans, Policies and Standards Type, etc.), which exercises
+      `is_permission_error`'s classification and the blocked-source notice path specifically. Recommended
+      before treating Criterion 1 as fully closed, not before moving on to Criterion 3: same
+      browser-console comparison as §10/§11, `subcriterion="1.1.1"`, logged in as a role missing one of
+      those DocTypes.
 - [ ] Frontend rendering matches expected behaviour — not applicable until Decision B's cutover step,
       tracked separately.
-- [ ] No production-only field name is silently assumed.
-- [ ] Diagnostics identify missing DocTypes or field mismatches clearly.
+- [x] No production-only field name is silently assumed. (Static config block ported verbatim from the
+      live legacy source, byte-diffed at test time — see §10.)
+- [x] Diagnostics identify missing DocTypes or field mismatches clearly. (Unchanged from legacy —
+      `source_status`/`resolve_source` logic ported verbatim; unavailable-source path smoke-tested.)
 
 ## 8. Rollback
 
@@ -280,15 +296,34 @@ ported logic):
   directories remain byte-for-byte untouched.
 - `python3 -m py_compile` clean on all new/changed Python files.
 
-**Known limitations / not yet done**:
+**Known limitations / not yet done at the time this section was written**: live parity against real
+data had not been run yet. See §11 — it has since been run and passed.
 
-- **Live parity against real data has not been run** — that needs your bench. Structural fidelity
-  (the port says the same thing as the legacy script) is verified here; computational parity (it
-  *computes* the same thing against real records) is not, per §5/§6's original split. Once you're
-  ready, the comparison is: run the legacy `ucc_analytics_criterion_1` Server Script and the new
-  `ucc_intelligence.api.get_criterion_1` method with the same `payload` against the same site/user,
-  diff the JSON (the `api_method` field intentionally still reads `"ucc_analytics_criterion_1"` in
-  both, for exactly this byte-comparison).
 - Frontend still calls the legacy Server Script directly (Decision B — shipped dark, not cut over).
 - Criteria 2-7 not started. Each will need its own check of which `analytics/engine.py` helpers it can
   actually reuse (Decision C's method), not an assumption that they all match Criterion 1's.
+
+## 11. Live parity result (Criterion 1) — 2026-07-29
+
+Felix ran the comparison from §5/§6 in the browser console on his own logged-in session (full-access
+role), matching exactly what the legacy frontend itself calls (`frappe.call({method: "...", args:
+{payload}})` for both the legacy Server Script and the new whitelisted method), diffing the JSON with
+`meta.generated_at` excluded (the one field expected to legitimately differ by call time):
+
+```
+payload: {"action":"summary","subcriterion":"1.1.1"}
+EQUAL (excl. generated_at): true
+```
+
+Real data volume covered: 27 oversight records, 202 stakeholder engagements, 675 risk register
+entries, plus management reviews and quality actions. Legacy `ucc_analytics_criterion_1` and
+`ucc_intelligence.api.get_criterion_1` produced byte-identical output.
+
+**Criterion 1 is closed**: structural fidelity (19/19, §10) and computational parity (this section)
+both verified. One thing is explicitly *not* covered by this result and is logged as an open
+follow-up rather than silently treated as done — see §7's permission-tests row: a genuine
+permission-denied source (a role lacking read access to one of Criterion 1's DocTypes) hasn't been
+exercised against real data yet, only the happy path and a stubbed unavailable-metadata case. Worth
+doing before Criterion 1 is fully signed off end-to-end, not blocking the move to Criterion 3.
+
+Next: Criterion 3 (per CLAUDE.md's suggested order — Criterion 1, then 3, 7, 2, 6, 4, 5).
