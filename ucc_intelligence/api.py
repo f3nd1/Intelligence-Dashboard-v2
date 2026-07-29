@@ -1,10 +1,15 @@
 import frappe
 
-from ucc_intelligence.analytics import criterion_1, criterion_3, criterion_7
+from ucc_intelligence.analytics import criterion_1, criterion_2, criterion_3, criterion_7
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 
 CRITERION_1_ALLOWED_ACTIONS = [
+	"summary", "source_status", "policy_registry", "requirement_registry",
+	"question_registry", "drilldown",
+]
+
+CRITERION_2_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
 	"question_registry", "drilldown",
 ]
@@ -53,6 +58,22 @@ def get_criterion_1():
 		criterion_label="Criterion 1",
 	)
 	return criterion_1.run(**parsed)
+
+
+@frappe.whitelist()
+def get_criterion_2():
+	"""Phase 4 port of `ucc_analytics_criterion_2`
+	(server-scripts/UCC Analytics - Criterion 2.py). Not yet called by the
+	frontend -- sophia_analytics.js still calls the legacy Server Script
+	directly (Decision B: ship dark, cut over once parity is confirmed on a
+	real bench). See ucc_intelligence/ucc_intelligence/analytics/criterion_2.py."""
+	parsed = parse_payload(
+		frappe.form_dict.get("payload"),
+		default_subcriterion="2.1.1",
+		allowed_actions=CRITERION_2_ALLOWED_ACTIONS,
+		criterion_label="Criterion 2",
+	)
+	return criterion_2.run(**parsed)
 
 
 @frappe.whitelist()
