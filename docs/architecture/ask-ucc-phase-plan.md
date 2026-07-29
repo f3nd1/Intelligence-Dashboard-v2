@@ -13,14 +13,114 @@ hangs off it.
 
 ---
 
-## 1. Ask UCC architecture — the tool-first flow, concretely
+## 1. Legacy Ask UCC, grounded — read before trusting the architecture below
+
+Same discipline as every Analytics criterion: inspect the deployed source before designing its
+replacement, not assumptions. The three legacy Server Scripts are in-repo and were read in full —
+`server-scripts/UCC Ask - Student Journey.py` (4208 lines), `- Recruitment Agent.py` (2153 lines),
+`- Quality Action.py` (911 lines) — plus the frontend call sites in `custom-html-block/JAVASCRIPT.js`.
+Several findings change what Section 2 below should actually propose, rather than just confirming it.
+
+### 1.1 The current system is almost entirely deterministic — "AI" barely exists today
+
+`answer` in all three modules' response shape is **always** template text built from ERPNext facts —
+never AI-generated prose. Only Student Journey ever calls OpenAI at all, and only to classify
+question *intent* and canonicalize the question text (a structured-output routing call) — not to
+generate the answer. `ai_used` in the response only reflects whether that routing call ran, and the
+frontend's "OpenAI interpreted the question, ERPNext supplied the facts" note (`JAVASCRIPT.js:1163`)
+can currently only ever fire from that one module.
+
+Concretely, of the three modules:
+
+- **Recruitment Agent and Quality Action have zero OpenAI/LLM code anywhere** (confirmed by grep —
+  zero matches for "openai"/"api_key" in either file). Intent detection is pure keyword/regex matching
+  over the question text. The frontend sends `conversation` and `openai_api_key` to these modules
+  anyway; both parameters are silently ignored server-side.
+- **Student Journey** reads an optional `openai_api_key` from the request, calls
+  `https://api.openai.com/v1/responses` server-side for intent routing only, and falls back to fully
+  deterministic behaviour if no key is supplied (or a placeholder key) — genuine progressive
+  enhancement, already matching CLAUDE.md §8.5's principle even in the legacy code.
+- **A live bug, worth confirming before assuming this path ever worked**: Student Journey's OpenAI
+  call builds `payload["model"]` from a module-level `OPENAI_MODEL` constant that is **never defined
+  anywhere in this 4208-line file** — and the reference sits *outside* the `try/except` wrapping the
+  actual HTTP call, so supplying a real key would raise an uncaught `NameError`, not a handled
+  fallback. This repo's copy of the script may not be byte-identical to whatever's actually deployed
+  (the same src-vs-deployed gap CLAUDE.md flags for Analytics) — worth a direct check against the live
+  Server Script text before concluding the AI path has *never* worked in production, but on the code
+  as committed here, it can't.
+
+**Why this matters for planning**: CLAUDE.md's Phase 8 vision (real AI explanation of retrieved facts,
+§2.1 steps 6-8 below) is not an incremental refinement of what exists today — it's a genuinely new
+capability. The current system's "AI" is closer to "sometimes-broken query classification" than
+"answers questions." Framing the new build as "adding proper AI on top of what's there" undersells
+the actual scope; it's closer to building the AI-explanation layer for the first time; while replacing
+already-working deterministic retrieval, which should be preserved and reused, not the AI part.
+
+### 1.2 Real per-module facts and request shapes — grounding Section 2's tool allowlists
+
+| Module | API method | Request fields read server-side | DocTypes actually read |
+|---|---|---|---|
+| Student Journey | `ucc_ask_student_journey` | `question`, `student_applicant`, `conversation` (JSON, used for routing only), `openai_api_key`, `student_roll_rows` | Student Applicant, Student, Student Admission UCC, Student Group, Assessment Result, Student Attendance, Student Leave Application, Course Schedule, Sales Invoice, File |
+| Recruitment Agent | `ucc_ask_recruitment_agent` | `question`, `agent_contract` | Agent Contract, Agent, Supplier Rating, Sales Invoice |
+| Quality Action | `ucc_ask_quality_action` | `question`, `quality_action` | Quality Action |
+
+This is the real starting point for Section 2's per-module tool allowlists — e.g. Student Journey's
+tools are concretely `get_admission_record`, `get_attendance_summary`, `get_assessment_results`,
+`get_leave_records`, `get_group_and_schedule`, `get_fee_status` (from Sales Invoice), each scoped to
+exactly the DocType(s) shown above, not a broader guess.
+
+### 1.3 Conversation history: client-maintained today, and only one module ever reads it
+
+The frontend keeps `state.history` in memory, truncates to the last 20 turns, and resends the whole
+thing as a JSON string on *every* request to *all three* modules (`JAVASCRIPT.js:1404-1479`) — nothing
+is persisted server-side anywhere in the three Python files (no history doctype, no child table
+writes). Only Student Journey's Python actually reads `conversation`, and only for its routing call
+(further capped to 10 messages × 1200 chars). This confirms Section 3's memory recommendation from a
+different angle: there is no existing server-side conversation persistence to migrate *away from* —
+`UCC AI Conversation`/`UCC AI Message` is new work, not a replacement for something already there, and
+the local-only recommendation isn't a downgrade from current behaviour, since current behaviour has no
+durable memory at all (the browser losing its tab loses the whole conversation today).
+
+### 1.4 The OpenAI key: exactly the weakness CLAUDE.md already names, confirmed precisely
+
+Client-side only, `sessionStorage` key `"uccAiOpenAIKey"`, entered via a modal the first time a
+free-form question needs it, skippable by the user (falls back to deterministic-only). No server-side
+key storage anywhere — no Settings doctype, no `frappe.conf` entry, no environment variable read in any
+of the three files. The frontend attaches this key to **every module's** request regardless of whether
+that module's Python ever reads it (only Student Journey does) — meaning today, two-thirds of Ask
+UCC's traffic sends a browser-held API key to the server for absolutely no reason. Migrating this to
+Phase 8's server-side `ai/client.py` (one place the key is ever touched, never sent from the browser at
+all) isn't just the CLAUDE.md-mandated direction (§1.1.9, Phase 8 exit criteria) — it removes a
+pointless request-shape hazard that exists today independent of the security argument.
+
+### 1.5 Permission handling: consistent with everything ported tonight, with one real gap
+
+No `ignore_permissions` anywhere in any of the three files — same `frappe.get_list`/`frappe.get_doc`
+pattern used throughout the Analytics ports. But errors (including permission errors) are swallowed by
+`safe_db_list`/`get_doc_safe`-style wrappers into empty results or `None`, not classified the way
+`analytics.contracts.is_permission_error` distinguishes `permission_denied` from `unavailable` today.
+Concretely: the legacy system cannot currently tell a user "you don't have access to this" versus "this
+record has no data" — it just shows nothing either way. Section 2's step 5 (source packaging with an
+explicit `permission_denied` status, reusing the same blocked-source notice already live in Sophia
+Analytics) is a genuine, needed improvement here, not a restatement of something the legacy system
+already does.
+
+### 1.6 HR module: confirmed still just a placeholder
+
+`JAVASCRIPT.js`'s module registry has a fourth entry, `hr_assistant`, marked `comingSoon: true` with no
+`apiMethod` at all — matches CLAUDE.md §3.4's table exactly ("Not yet implemented"). Nothing to ground
+here; noted so it isn't mistaken for a fourth legacy script that was missed.
+
+---
+
+## 2. Ask UCC architecture — the tool-first flow, concretely
 
 CLAUDE.md §8.2 specifies the pattern in the abstract (identity → authoritative tool → structured
 facts → optional AI explanation → sources shown). This section makes it concrete, mapped onto
 CLAUDE.md §7's own proposed module layout and reusing patterns already proven tonight rather than
 inventing new ones.
 
-### 1.1 The nine-step flow
+### 2.1 The nine-step flow
 
 1. **Identity & module-level permission resolution.** Before anything else, resolve whether this
    user's roles allow the "Ask UCC" workspace and the specific module (Student Journey / Recruitment
@@ -34,13 +134,14 @@ inventing new ones.
 2. **Context resolution.** The user picks a module and a record (a record picker, per CLAUDE.md
    Phase 6) — a Student Applicant, an Agent Contract, a Quality Action — or asks a follow-up that
    references the record already in context ("what about his attendance") via the current
-   conversation's own history (§2 below; not cross-session memory).
+   conversation's own history (§3 below; not cross-session memory).
 
 3. **Approved tool selection.** The question is routed to a **fixed, per-module allowlist of named
-   retrieval functions** — never a generic "run this doctype query" capability. E.g. Student Journey
-   might expose `get_admission_status(student)`, `get_attendance_summary(student)`,
-   `get_fee_status(student)` as the *complete* set of things that module can ever look up. This is
-   the direct implementation of Phase 8's "AI must not query arbitrary DocTypes... must not accept a
+   retrieval functions** — never a generic "run this doctype query" capability. Student Journey's
+   allowlist (§1.2's real DocTypes, not a guess) would be exactly `get_admission_record`,
+   `get_attendance_summary`, `get_assessment_results`, `get_leave_records`,
+   `get_group_and_schedule`, `get_fee_status` — the *complete* set of things that module can ever
+   look up. This is the direct implementation of Phase 8's "AI must not query arbitrary DocTypes... must not accept a
    user-provided method path" — the model picks a tool *name* from an enum, it never constructs or
    supplies a query itself.
 
@@ -78,7 +179,7 @@ inventing new ones.
    ids, model, token/cost, latency. No full prompt or PII by default (§12.4, Phase 8) — metadata, not
    content, unless a specific investigation need is documented.
 
-### 1.2 Progressive enhancement is not optional here
+### 2.2 Progressive enhancement is not optional here
 
 §8.5: "the application must still provide useful deterministic analytics if the OpenAI service... is
 unavailable." Concretely for Ask UCC: steps 1-5 (record picker → tool call → facts + sources) must
@@ -88,7 +189,7 @@ later; it's the same shape Sophia Analytics already has today (raw facts render 
 layer exists), so building it this way from day one costs nothing extra and avoids a Phase 8-shaped
 retrofit.
 
-### 1.3 Where this lives (filling in CLAUDE.md §7's own scaffold, not inventing a new one)
+### 2.3 Where this lives (filling in CLAUDE.md §7's own scaffold, not inventing a new one)
 
 ```
 ucc_intelligence/ucc_intelligence/
@@ -107,7 +208,7 @@ ucc_intelligence/ucc_intelligence/
     usage.py              # step 9
 ```
 
-### 1.4 Proposed response contract (new shape — the Analytics contract doesn't fit a chat turn)
+### 2.4 Proposed response contract (new shape — the Analytics contract doesn't fit a chat turn)
 
 ```json
 {
@@ -116,7 +217,7 @@ ucc_intelligence/ucc_intelligence/
   "message_id": "...",
   "ai_status": "available | unavailable | disabled | error",
   "answer": {"text": "...", "model": "...", "generated_at": "..."} ,
-  "facts": [{"tool": "get_admission_status", "doctype": "Student Applicant", "record": "...", "fields": {}, "retrieved_at": "..."}],
+  "facts": [{"tool": "get_admission_record", "doctype": "Student Applicant", "record": "...", "fields": {}, "retrieved_at": "..."}],
   "sources": [{"doctype": "...", "record": "...", "url": "...", "status": "available | permission_denied"}],
   "warnings": []
 }
@@ -127,7 +228,7 @@ unavailable, here are the facts" state explicitly rather than inferring it from 
 
 ---
 
-## 2. Memory: local-only for this phase — a real recommendation, not a menu
+## 3. Memory: local-only for this phase — a real recommendation, not a menu
 
 **Recommendation: implement local, per-conversation storage only (`UCC AI Conversation` +
 `UCC AI Message`, per CLAUDE.md §7.2-7.3) for this round. Formally defer the Zep-vs-Graphiti decision
@@ -168,7 +269,7 @@ not before. Revisit informed by that evidence, not in advance of it.
 
 ---
 
-## 3. Blocking decisions this phase would hit — surfaced now, per CLAUDE.md §19
+## 4. Blocking decisions this phase would hit — surfaced now, per CLAUDE.md §19
 
 Scanning §19's full list against what this phase actually needs. Marked **BLOCKING** where nothing
 meaningful can be built without an answer, **BLOCKING LATER** where it's deferred by design (§2
@@ -178,8 +279,8 @@ not this phase's concern** where it doesn't apply here.
 | §19 item | Status this phase | Why |
 |---|---|---|
 | **Approved AI provider account** | **BLOCKING** | `ai/client.py` cannot be built against a real provider without one. This is the single most load-bearing open item for Phase 8. |
-| **Whether student personal data may be sent to an external provider** | **BLOCKING** | Ask UCC's entire premise (Student Journey) is discussing student records. This needs an explicit yes before step 6 of §1.1 sends ANY student data to a model, external or not. |
-| **UCC role matrix** | **BLOCKING** | Step 1 of §1.1 needs real roles to build Ask UCC's own module-level gate — this does not automatically inherit from Analytics' role matrix, and guessing it risks either over- or under-exposing modules. |
+| **Whether student personal data may be sent to an external provider** | **BLOCKING** | Ask UCC's entire premise (Student Journey) is discussing student records. This needs an explicit yes before step 6 of §2.1 sends ANY student data to a model, external or not. |
+| **UCC role matrix** | **BLOCKING** | Step 1 of §2.1 needs real roles to build Ask UCC's own module-level gate — this does not automatically inherit from Analytics' role matrix, and guessing it risks either over- or under-exposing modules. |
 | **Retention periods** | **BLOCKING** | `UCC AI Conversation`/`Message`/`Usage Log` (§7.2-7.3) have a `retention_category` field in CLAUDE.md's own spec — needs a real value to design correctly from the first migration, not bolted on after data already exists without one. |
 | **Document repository of record** | **BLOCKING for Phase 9 specifically** | Can't design ingestion (`knowledge/ingestion.py`) without knowing whether the source is Google Drive, SharePoint, or Frappe file uploads — not needed for Ask UCC itself, but this phase's document-search piece can't start without it. |
 | **Moodle authentication method** | **BLOCKING the moment any module needs it** | CLAUDE.md's own §8.2 worked example ("What are his latest results?") uses Moodle grades. If Student Journey's tool set includes assessment results, this blocks that specific tool — the rest of the module doesn't need to wait on it. |
