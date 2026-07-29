@@ -327,3 +327,73 @@ exercised against real data yet, only the happy path and a stubbed unavailable-m
 doing before Criterion 1 is fully signed off end-to-end, not blocking the move to Criterion 3.
 
 Next: Criterion 3 (per CLAUDE.md's suggested order — Criterion 1, then 3, 7, 2, 6, 4, 5).
+
+## 12. What was built (Criterion 3 port, this round)
+
+Read `server-scripts/UCC Analytics - Criterion 3.py` in full (2286 lines — larger than Criterion 1's
+1846) before porting, not just mapped by shape. That read surfaced a real architectural difference
+from Criterion 1, not just a different `CONFIG`:
+
+- **Two-pass metric evaluation.** Base metrics (`evaluate_base_metric`) are evaluated first; derived
+  metrics (`evaluate_derived_metric`, modes `derived_sum`/`derived_percent`) are evaluated second,
+  referencing already-computed base metrics by id via `find_metric`/`metrics_by_id`. Criterion 1 has
+  no equivalent layer.
+- **Inline exception flags** (`"is_exception": True` per metric) instead of a separate
+  `EXCEPTION_METRIC_IDS` list.
+- **No `REQUIREMENT_REGISTRY`/`evaluate_requirement`** — questions are answered directly from a linked
+  metric via `answer_for_metric`.
+- **`unsupported_metric(...)`**, a static-catalogue helper (not a runtime mode) that produces a
+  placeholder entry for controls the data model can't yet evaluate — used directly inside `CONFIG`'s
+  metric lists.
+- **`row_cache = {}`** is a genuine correctness concern once ported, not just a style note: in the
+  legacy Server Script it's module-global but freshly empty every call (Server Scripts re-execute
+  their whole global scope per request); ported as a bare module-level dict in a long-lived worker
+  process, it would leak stale rows across requests — and potentially across users in the same worker.
+  Nesting the whole engine inside `run()` (the same technique used throughout this phase) gives every
+  call its own fresh `row_cache`, so this is preserved correctly by construction, not by extra code.
+
+**Files added**:
+
+- `ucc_intelligence/ucc_intelligence/analytics/criterion_3.py` — the port. Static config/registry
+  block (legacy lines 81-1101) verbatim at module scope; engine + response assembly (legacy lines
+  1122-1128, 1140-1984, 2191-2282) wrapped in `run()`, reusing `analytics.engine`'s
+  `clean_text`/`lower_text`/`is_truthy` (content-diffed against Criterion 3's own copies — identical
+  apart from blank-line style, which the extraction already tolerates) and `analytics.contracts`'
+  `is_permission_error`/`standardise_response_contract` (content-diffed against Criterion 3's own
+  copies too, not just trusted from the Phase 2 hash claim — only cosmetic differences found:
+  reworded docstring, `CONTRACT_VERSION`/`ARRAY_KEYS` constants instead of inline literals, trailing
+  commas). Five deliberate differences documented in the module docstring.
+- `tools/test_ucc_intelligence_criterion_3.py` — same two-layer technique as Criterion 1's test, with
+  a dataset built specifically for Criterion 3's shape: an `overview` pass exercising `equals`/`in`/
+  `date_next_days` base metrics plus a `derived_sum` and an `unsupported` placeholder, and a `3.1.1`
+  pass (agent-only synthetic data) exercising `all`/`in`/`equals`/`truthy`/`all_required`/
+  `derived_percent`, plus drilldown across a normal metric, a `derived_sum`, a `derived_percent`, an
+  unsupported metric, an unknown `metric_id` (expects the same `frappe.throw` as legacy), and the
+  Criterion-3-only `question_catalogue` action. **28/28 checks pass.**
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — added `CRITERION_3_ALLOWED_ACTIONS` (matches legacy's
+  `ALLOWED_ACTIONS`, including `question_catalogue`) and `get_criterion_3()`, same shape as
+  `get_criterion_1()`.
+
+**Verification performed**:
+
+- `tools/test_ucc_intelligence_criterion_3.py`: 28/28.
+- Full existing regression suite re-run, including `test_ucc_intelligence_criterion_1.py` (still
+  19/19 — confirms the shared `engine.py`/`contracts.py`/`api.py` changes didn't regress Criterion 1):
+  all still pass.
+- `git diff --stat cb77320 -- custom-html-block/ server-scripts/ src/ dist/ archive/` — empty.
+- `python3 -m py_compile` clean on all new/changed Python files.
+
+**Known limitations / not yet done**:
+
+- Live parity against real data has not been run for Criterion 3 yet — needs your bench, same
+  procedure as §11: run `ucc_analytics_criterion_3` and `ucc_intelligence.api.get_criterion_3` with the
+  same payload/user, diff the JSON (`meta.generated_at` excluded). Recommend covering `overview`,
+  `3.1.1`, and `3.2.1` at minimum, since `3.2.1` exercises `average_fields`/`sum`/
+  `renewal_rule_compliant` modes the smoke test doesn't reach.
+- Same open permission-path follow-up as Criterion 1 (§7) — not yet exercised against a real
+  permission-denied source.
+- Frontend still calls the legacy Server Script directly (Decision B).
+- Criteria 7, 2, 6, 4, 5 not started.
