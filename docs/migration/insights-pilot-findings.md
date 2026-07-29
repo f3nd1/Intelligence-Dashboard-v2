@@ -646,6 +646,43 @@ constraint, not a tuning knob: **anything published as a public Insights
 dashboard is visible to anyone with the URL, permanently, regardless of the
 underlying data's sensitivity or `ucc_dashboard_access`'s role gating.**
 
+**Update, 2026-07-29 — new direction (Option B: embed live Insights charts
+directly, not copy logic out) requires testing the *private* path, which
+this pilot never touched.** Read the real, unabridged Insights v3.12.2
+source rather than assuming from the public-link findings above
+(`insights/permissions.py`, `insights/api/__init__.py`,
+`insights_table_v3.py`'s `apply_user_permissions`, `insights_query_v3.py`'s
+`execute`). Two genuinely independent permission layers exist:
+
+- **Layer 1 (document access)** — can the user open the Chart/Dashboard/
+  Query record at all? Governed entirely by `InsightsPermissions`
+  (ownership, `DocShare`, Workbook access, Team-based resource grants) —
+  has nothing to do with the underlying data's DocType permission. Testing
+  only `insights.api.get_doc` (as originally scoped for this check) mostly
+  tests this layer, which mainly answers "did someone remember to share
+  this chart," not the thing that actually matters for a safe embed.
+- **Layer 2 (row/column data filtering on query execution)** — when
+  `Insights Query v3.execute()` runs (the real `insights.api.run_doc_method`
+  entry point, not a direct Python call), every table it reads goes
+  through `apply_user_permissions()`, which applies
+  `frappe.has_permission(doctype, "read")` and the same
+  `permission_query_conditions` machinery `frappe.get_list` uses — a real
+  implementation (`t.filter(False)` when the user can't read the DocType),
+  not a stub. Gated by `Insights Settings.apply_user_permissions` (ships
+  default `1`, needs confirming on the real site) and skipped only via
+  `frappe.flags.insights_for_public_access`, which is set only on the
+  public path this pilot already ruled out — not relevant to the private
+  path.
+
+Go/no-go test script, testing both layers separately (isolating Layer 2
+requires explicitly sharing the chart with the restricted test user first,
+otherwise a Layer-1 failure masks whatever Layer 2 does), with a positive
+control (grant real `Student Applicant` access, confirm real rows come
+back, so a zero-row result is provably permission-driven and not "broken
+for everyone"):
+**`docs/migration/scripts/test_insights_private_permissions.py`** — not
+run yet, same round-trip as every other bench-dependent step in this doc.
+
 ---
 
 ## 5. Cost estimate for full Analytics-wide adoption (informed by this pilot's scope, not yet by its results)
