@@ -25,20 +25,22 @@ private (non-public) record that raises `frappe.PermissionError` and
 `get_doc` re-raises it unchanged; only for a genuinely public record does
 it fall back to an unchecked `frappe.get_doc(...).as_dict()`.
 
-LAYER 2 -- row/column data filtering on query execution. The real,
-production entry point for this is `insights.api.run_doc_method` (not a
-direct Python call to `.execute()` -- using the actual wrapper keeps this
-test representative of what a browser request experiences).
-`run_doc_method` calls `_execute_doc_method`, which does
-`doc.check_permission("read")` before invoking the method for a private
-record (same Layer-1 gate as get_doc, this time on the Query document) --
+LAYER 2 -- row/column data filtering on query execution. In production
+this runs through `insights.api.run_doc_method`, which calls
+`_execute_doc_method` -- `doc.check_permission("read")` for a private
+record (same Layer-1 gate as get_doc, this time on the Query document),
 and only for a record confirmed public via `is_public()` AND whose method
 is in `is_public_method`'s allowlist (`Insights Query v3`: `execute`,
 `download_results`) does it retry with `ignore_permissions=True` *and* set
 `frappe.flags.insights_for_public_access = True`, which is what disables
 row filtering entirely (see below) -- confirming the public path bypasses
-both layers, and the private path (this script's whole subject) goes
-through neither bypass.
+both layers. This script calls `doc.check_permission("read")` +
+`doc.execute()` directly instead of going through `run_doc_method` --
+that wrapper also calls `is_valid_http_method()`/`add_data_to_monitor()`,
+which need a real `frappe.request` that doesn't exist in a bench console
+session (raises `AttributeError('request')`, confirmed by an actual run).
+Neither of those is part of what's being tested here; the direct call
+exercises the same permission gate and the same `execute()` that matters.
 
 Once past Layer 1, `Insights Query v3.execute()` (insights_query_v3.py)
 builds its ibis pipeline via `InsightsTablev3.get_ibis_table()`
@@ -157,7 +159,7 @@ print("\n" + "=" * 70)
 print("STAGE 2 -- Administrator, insights.api.get_doc (expected: succeeds)")
 print("=" * 70)
 
-from insights.api import get_doc as insights_get_doc, run_doc_method as insights_run_doc_method  # noqa: E402
+from insights.api import get_doc as insights_get_doc  # noqa: E402
 
 frappe.set_user("Administrator")
 try:
@@ -243,16 +245,18 @@ print("=" * 70)
 import frappe.share  # noqa: E402
 
 
-def is_shared_with_test_user(dt, dn):
+def is_shared_with_user(dt, dn, user_email):
 	# frappe.share.get_users(doctype, name) takes no `user` filter -- it returns every
-	# share for the document, so filter for our test user here.
-	return any(u.user == TEST_USER_EMAIL for u in frappe.share.get_users(dt, dn))
+	# share for the document, so filter for our test user here. Takes user_email as an
+	# explicit arg rather than closing over TEST_USER_EMAIL -- bench console's exec()
+	# doesn't reliably keep top-level names visible as free variables inside a def.
+	return any(u.user == user_email for u in frappe.share.get_users(dt, dn))
 
 
 for dt, dn in [("Insights Chart v3", chart_name), ("Insights Query v3", query_name)] + (
 	[("Insights Dashboard v3", dashboard_name)] if dashboard_name else []
 ):
-	if not is_shared_with_test_user(dt, dn):
+	if not is_shared_with_user(dt, dn, TEST_USER_EMAIL):
 		frappe.share.add(dt, dn, user=TEST_USER_EMAIL, read=1)
 frappe.db.commit()
 
@@ -281,12 +285,13 @@ print("=" * 70)
 
 frappe.set_user(TEST_USER_EMAIL)
 try:
-	# The real production entry point (insights/api/__init__.py), not a hand-rolled
-	# check_permission()+execute() call -- this is what a browser embed would actually hit.
-	exec_result = insights_run_doc_method(
-		method="execute",
-		docs={"doctype": "Insights Query v3", "name": query_name},
-	)
+	# insights.api.run_doc_method (the real HTTP entry point) calls is_valid_http_method()
+	# and add_data_to_monitor(), both of which need a real frappe.request -- unavailable in
+	# bench console (AttributeError('request') from werkzeug's Local.__getattr__). Neither
+	# is part of what we're testing, so call the same Layer-1 gate + the method directly.
+	query_doc = frappe.get_doc("Insights Query v3", query_name)
+	query_doc.check_permission("read")
+	exec_result = query_doc.execute()
 	row_count = len(exec_result.get("rows") or [])
 	print("execute() succeeded, returned %d row(s)." % row_count)
 	if row_count == 0:
@@ -334,10 +339,9 @@ print("frappe.has_permission('Student Applicant', 'read', user=%r) now = %s" % (
 
 frappe.set_user(TEST_USER_EMAIL)
 try:
-	control_result = insights_run_doc_method(
-		method="execute",
-		docs={"doctype": "Insights Query v3", "name": query_name},
-	)
+	query_doc = frappe.get_doc("Insights Query v3", query_name)
+	query_doc.check_permission("read")
+	control_result = query_doc.execute()
 	control_row_count = len(control_result.get("rows") or [])
 	print("Control execute() returned %d row(s)." % control_row_count)
 	results["control_execute_row_count"] = control_row_count
@@ -381,7 +385,7 @@ if CLEANUP_TEST_USER:
 	for dt, dn in [("Insights Chart v3", chart_name), ("Insights Query v3", query_name)] + (
 		[("Insights Dashboard v3", dashboard_name)] if dashboard_name else []
 	):
-		if is_shared_with_test_user(dt, dn):
+		if is_shared_with_user(dt, dn, TEST_USER_EMAIL):
 			frappe.share.remove(dt, dn, TEST_USER_EMAIL)
 	if frappe.db.exists("User", TEST_USER_EMAIL):
 		frappe.delete_doc("User", TEST_USER_EMAIL, ignore_permissions=True, force=True)
