@@ -732,3 +732,83 @@ needing the caching problem to exist in the first place.
   implied by this work.
 - Criterion 5 not started — needs its own read-through first to confirm whether it has an
   `admission_intelligence`-equivalent block before assuming the same approach applies unchanged.
+
+## 17. Option B — real live embed of admission_intelligence (2026-07-29)
+
+Direction confirmed with Felix after `test_insights_private_permissions.py` proved the private-query
+permission pattern safe on the real bench (0 rows restricted, 6 rows with real access): Sophia embeds
+live Insights charts directly, not a copy of their logic. §16's plain-Python `criterion_4.py` module is
+now dead code for these 6 series specifically — kept in place per Felix's instruction, not deleted, not
+extended, not called by the frontend for `admission_intelligence` anymore.
+
+**Files added**:
+
+- `docs/migration/scripts/build_admission_intelligence_embed.py` — creates the 5 remaining Insights
+  Query v3/Chart v3 records (`enrolled_by_year`, `applicants_by_country`, `programmes`, `agents`,
+  `counselling_to_admission`; `applicants_by_year` already existed from the earlier pilot and is only
+  verified, not recreated). Field candidates taken directly from `criterion_4.py`'s own field-candidate
+  lists; the real field is discovered live against this site's schema (`frappe.get_meta`) before each
+  query is authored, not guessed. `filter`/`join`/`mutate` operation shapes verified against the real,
+  unabridged Insights v3.12.2 source (`ibis_utils.py`'s `IbisQueryBuilder`) — the same discipline as
+  every prior script, not assumed from the one `source`+`summarize` pattern the pilot proved. One
+  exception, stated plainly: the `counselling_to_admission` chart's date-difference `mutate` expression
+  uses ibis's own documented `TemporalColumn.delta(other, unit)` method rather than an Insights-specific
+  helper, because `get_functions()` (a separate, unfetched file) wasn't independently confirmed to
+  provide one — if that's wrong, the script's own execute() verification stage will surface a loud,
+  explicit Python error, not silently wrong data. Also runs self-QA (a) and (b): all 6 charts executed
+  as Administrator with real row counts, and the restricted-vs-control permission test re-run against 2
+  of the 5 newly-created charts (not just the original pilot one).
+- `ucc_intelligence/ucc_intelligence/analytics/admission_intelligence_embed.py` — the runtime module:
+  looks up each chart's Insights Query v3 by title, calls `check_permission("read")` + `execute()`
+  directly (not `insights.api.run_doc_method`, which also calls `is_valid_http_method()`/
+  `add_data_to_monitor()` — irrelevant to what's being tested and needs a real `frappe.request` that
+  doesn't exist in bench console, though it would exist for a real production HTTP call; the direct
+  call is simpler and does identical permission work either way), converts Insights' row shape into the
+  same `{label, value}` shape `criterion_4.py`'s `group_count_rows()` already produced, and reports
+  blocked sources by the real underlying DocType so the existing `permissionNoticeHtml` blocked-source
+  UI picks them up unchanged. 3 of 4 KPIs are summed from the Insights-sourced chart series; the 4th
+  (`shortlisted-approved`, an Approved-status count that doesn't correspond to any of the 6 chart
+  series) is one small `frappe.get_list` count call, same permission model, not worth a 7th Insights
+  query for one scalar. **Prominently documents the `Insights Settings.apply_user_permissions`
+  dependency** in its module docstring — a site-wide, not per-chart, toggle; if a future admin disables
+  it, every chart here silently stops filtering by the viewer's permissions.
+
+**Files changed**:
+
+- `ucc_intelligence/ucc_intelligence/api.py` — adds `get_admission_intelligence()`. Unlike every other
+  method in this file, this one IS wired into the frontend (see below) — Criterion 4's other ~40
+  metrics still come from the legacy Server Script, untouched.
+- `ucc_intelligence/ucc_intelligence/sophia/page/sophia_analytics/sophia_analytics.js` —
+  `loadLive()` now calls the new method (scoped to `criterion_4`/`4.1.1` only) and overwrites
+  `result.admission_intelligence` with the embed's response, concatenating its blocked-source entries
+  into `result.sources` so the existing `chartForLive`/`renderLiveChartCardNow` blocked-notice path
+  triggers correctly — no new notice UI, no changes to `callApi`, `renderDashboard`, `renderKpis`,
+  `metricRows`, or the chart-plugin registry. The dormant Insights-pilot iframe glue code
+  (`INSIGHTS_PILOT_CHART_ID`, `watchForInsightsPilotTarget`, `mountInsightsPilotCard`,
+  `injectInsightsPilotStyles`) is fully removed, not left dormant — superseded by this real embed, not
+  a second mechanism sitting alongside it.
+- `tools/test_sophia_analytics_page.py` — the verbatim-engine-body regression guard now applies the one
+  documented `loadLive()` addition to its expected string before the substring check, rather than
+  weakening or dropping the check; still catches unrelated drift everywhere else in the engine. Added
+  checks confirming the pilot iframe code is gone and the new embed wiring is scoped/shaped correctly.
+
+**Known, explicit gap versus the pre-Insights engine**: the `academic_year` request filter no longer
+applies to these 6 charts. Insights' `execute()` accepts an `adhoc_filters` parameter that could
+plausibly restore this, but its exact shape wasn't verified against live source in the time available
+this round — flagged, not silently dropped.
+
+**Self-QA — reported explicitly per the task's success criteria, not summarized as "done"**:
+
+| # | Check | Result |
+|---|---|---|
+| (a) | All 6 charts execute as Administrator with real row counts | **Bench-pending** — `build_admission_intelligence_embed.py` Stage 3 does this; needs Felix to run it |
+| (b) | Restricted-vs-control permission test on 2+ newly-built charts | **Bench-pending** — same script's Stage 4 |
+| (c) | Existing `criterion_4.py` non-Insights path unaffected (regression) | **PASS** — `tools/test_ucc_intelligence_criterion_4.py` 18/18, untouched by this round (`git diff` on the file itself is empty) |
+| (d) | `custom-html-block/`, `server-scripts/`, Criteria 1/2/3/6/7 byte-for-byte untouched | **PASS** — `git diff --stat` against baseline and against this round's start, both empty for those paths |
+| — | Full existing regression suite (all prior criteria + access + contracts + page tests) | **PASS** — every suite still green, including the updated `test_sophia_analytics_page.py` (25/25) |
+| 3 | Live browser render of all 6 series on `/app/sophia-analytics` | **Bench-pending** — requires an actual browser session Felix has and this repo-only session doesn't |
+
+Everything checkable without bench access has been checked and passes. Everything requiring bench
+access is handed off as one complete, ready-to-run script
+(`docs/migration/scripts/build_admission_intelligence_embed.py`) plus the live browser check, per the
+task's explicit instruction not to do this in multiple back-and-forth rounds.

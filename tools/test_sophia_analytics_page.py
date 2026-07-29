@@ -69,7 +69,33 @@ engine_transformed = engine_transformed.replace(
 	'method:"ucc_dashboard_access"', 'method:"ucc_intelligence.api.get_dashboard_access"', 1
 )
 engine_transformed = engine_transformed.rstrip()[: -len("})();")] + "}"
-checks.append(report(engine_transformed in ported, "transformed engine body is present in the ported page verbatim"))
+
+# One documented, deliberate divergence from a straight mechanical transform:
+# the Option B admission_intelligence embed call inserted into loadLive(), plus
+# the new loadAdmissionIntelligenceEmbed() function immediately before it.
+# Applying the identical replacement here (rather than dropping/loosening the
+# check) keeps this test's actual job -- catching UNINTENDED drift everywhere
+# else in the engine -- fully intact.
+_LOAD_LIVE_ORIGINAL = (
+	'async function loadLive(dashboard,force=false){const config=CONFIG[dashboard.dataset.demoDashboard],'
+	'state=dashboardState(dashboard),section=apiSection(config,dashboard,activeSection(dashboard));'
+	'ensureLiveSectionCards(dashboard,config,activeSection(dashboard));if(state.loading)return;'
+	'if(!force&&state.result&&state.result.meta?.subcriterion===section){renderDashboard(dashboard);return;}'
+	'state.loading=true;state.error=null;setLoading(dashboard,true,15,`Loading ${section}`);'
+	'try{const result=await callApi(config,dashboard,"summary");setLoading(dashboard,true,80,"Rendering live analytics");'
+	'state.result=result;state.error=null;renderDashboard(dashboard);setLoading(dashboard,true,100,"Live analytics ready");'
+	'setTimeout(()=>setLoading(dashboard,false),150);}catch(error){state.error=error;'
+	'logEvent(dashboard,"ERROR","api_failure",error.message||error);renderDashboard(dashboard);setLoading(dashboard,false);}'
+	'finally{state.loading=false;}}'
+)
+checks.append(report(_LOAD_LIVE_ORIGINAL in engine_transformed, "original loadLive() text found in the transformed engine (before applying the Option B divergence)"))
+embed_call_match = re.search(r"// Option B:[\s\S]*?function loadAdmissionIntelligenceEmbed[\s\S]*?\n}\n", ported)
+load_live_match = re.search(r"async function loadLive\(.*", ported)  # single-line function, like the rest of this file
+if embed_call_match and load_live_match:
+	# embed_call_match already ends in "\n}\n" (its own trailing newline), so no
+	# extra separator is added here -- confirmed against the real file's byte layout.
+	engine_transformed = engine_transformed.replace(_LOAD_LIVE_ORIGINAL, embed_call_match.group(0) + load_live_match.group(0), 1)
+checks.append(report(engine_transformed in ported, "transformed engine body (plus the one documented Option B addition) is present in the ported page verbatim"))
 checks.append(report('"ucc_dashboard_access"' not in ported, "legacy Server Script method name does not appear in the ported page"))
 checks.append(report(ported.count("ucc_intelligence.api.get_dashboard_access") >= 1, "the app's own access endpoint is called"))
 
@@ -120,27 +146,44 @@ if wireup_match:
 		"page.body is not used directly as a DOM node (must be unwrapped first)"))
 	checks.append(report("page.body[0]" in wireup, "page.body is unwrapped via [0] before use as a DOM node"))
 
-# --- Insights pilot: additive-only guard ---
-# The pilot (docs/migration/insights-pilot-findings.md) must never touch the
-# existing chart-plugin registry or renderer, and must only ever target the
-# single pilot chart id -- if either of those stop being true the pilot has
-# stopped being a feasibility spike and started being a silent migration.
-pilot_match = re.search(r"INSIGHTS PILOT[\s\S]*?(?=frappe\.pages\['sophia-analytics'\]\.on_page_load)", ported)
-checks.append(report(bool(pilot_match), "Insights pilot block found in the ported page"))
-if pilot_match:
-	pilot_block = pilot_match.group(0)
-	rest_of_file = ported[: pilot_match.start()] + ported[pilot_match.end() :]
+# --- Insights pilot iframe glue: retired, must be gone ---
+# Superseded by the Option B live embed (admission_intelligence_embed.py) --
+# the iframe-embed spike (docs/migration/insights-pilot-findings.md) was
+# additive-only by design and is now dead weight, not a second embed
+# mechanism sitting alongside the real one. Confirm it's actually gone
+# rather than just unused.
+checks.append(report(
+	"INSIGHTS_PILOT" not in ported and "watchForInsightsPilotTarget" not in ported and "mountInsightsPilotCard" not in ported,
+	"retired Insights-pilot iframe glue code is fully removed, not left dormant",
+))
+
+# --- Option B live embed: admission_intelligence wiring guard ---
+# admission_intelligence_embed.py's get_admission_intelligence must be called
+# from loadLive() and merged into the same `result` object callApi() already
+# populates, only for criterion_4/4.1.1 -- not a parallel rendering path, and
+# must not touch callApi()/renderDashboard()/the chart-plugin registry.
+# (embed_call_match / load_live_match were already computed above, reused
+# there to build the engine-body-verbatim check's expected divergence.)
+checks.append(report(bool(embed_call_match), "loadAdmissionIntelligenceEmbed() found in the ported page"))
+if embed_call_match:
 	checks.append(report(
-		"CHART_PLUGINS." not in pilot_block and "registerChartPlugin(" not in pilot_block,
-		"Insights pilot block does not touch CHART_PLUGINS or register a chart plugin",
+		'"ucc_intelligence.api.get_admission_intelligence"' in embed_call_match.group(0),
+		"loadAdmissionIntelligenceEmbed() calls the real whitelisted method",
+	))
+checks.append(report(bool(load_live_match), "loadLive() found in the ported page"))
+if load_live_match:
+	load_live_body = load_live_match.group(0)
+	checks.append(report(
+		'dashboard.dataset.demoDashboard==="criterion_4"&&section==="4.1.1"' in load_live_body,
+		"admission_intelligence embed call is scoped to criterion_4/4.1.1 only",
 	))
 	checks.append(report(
-		pilot_block.count('data-demo-card="') <= 1,
-		"Insights pilot block targets at most one existing chart card",
+		"loadAdmissionIntelligenceEmbed()" in load_live_body and "result.admission_intelligence=embed" in load_live_body,
+		"embed result overwrites result.admission_intelligence in place, not a parallel render path",
 	))
 	checks.append(report(
-		"watchForInsightsPilotTarget(root)" in rest_of_file,
-		"pilot mount is wired into boot() alongside the existing shell/engine init",
+		"result.sources=(result.sources||[]).concat(embed.sources||[])" in load_live_body,
+		"embed's blocked sources are merged into result.sources so the existing permission-notice path picks them up",
 	))
 
 passed = all(checks)

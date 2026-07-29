@@ -1,6 +1,6 @@
 import frappe
 
-from ucc_intelligence.analytics import criterion_1, criterion_2, criterion_3, criterion_4, criterion_6, criterion_7
+from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_6, criterion_7
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 
@@ -85,6 +85,20 @@ def get_criterion_2():
 		criterion_label="Criterion 2",
 	)
 	return criterion_2.run(**parsed)
+
+
+@frappe.whitelist()
+def get_admission_intelligence():
+	"""Option B live embed for Criterion 4's admission_intelligence (4 KPIs
+	+ 6 chart series) -- executes real Insights Query v3 records server-side,
+	permission-checked per request. See
+	ucc_intelligence/ucc_intelligence/analytics/admission_intelligence_embed.py's
+	module docstring for the full architecture and the
+	Insights Settings.apply_user_permissions dependency. This IS wired into
+	sophia_analytics.js (unlike every other method in this file) -- Criterion
+	4's other ~40 metrics still come from the legacy Server Script via
+	ucc_analytics_criterion_4, untouched."""
+	return admission_intelligence_embed.run()
 
 
 @frappe.whitelist()
