@@ -83,7 +83,23 @@ unabridged Insights v3.12.2 source directly -- not guessed:
 Usage -- paste into `bench --site <your-site> console` (confirm the real
 site name via `ls sites/` first, same as every script tonight):
 
-    exec(open("docs/migration/scripts/build_admission_intelligence_embed.py").read())
+    exec(open("docs/migration/scripts/build_admission_intelligence_embed.py").read(), globals())
+
+The trailing `globals()` argument matters -- bare `exec(open(...).read())`
+(no explicit globals/locals) inherits whatever globals()/locals() are
+active at ITS OWN call site, and if bench console evaluates pasted input
+from inside some internal method (globals() != locals() there), every
+top-level `def` in this file gets written to that call's locals dict while
+still capturing that call's globals dict as its own __globals__ -- so
+`run()` (and any other function here) calling a sibling top-level function
+resolves it via LOAD_GLOBAL against __globals__, which never got it,
+raising exactly `NameError: name '...' is not defined` for whichever
+cross-function call happens first. Confirmed by reproducing this exact
+failure locally with a stub frappe module, and confirmed it goes away with
+`exec(source, globals())`, which forces a single shared namespace instead
+of a silent two-dict split -- not just theorized. Passing `globals()`
+explicitly costs nothing when this isn't the issue and fixes it outright
+when it is.
 
 Runs STAGE 1 (create/reuse) through STAGE 4 (restricted-permission test on
 the one new chart) automatically. Each STAGE prints its own pass/fail.

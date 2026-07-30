@@ -836,3 +836,29 @@ direction. And the original CLAUDE.md scope beyond the 7 criteria — Ask UCC, Z
 document/policy search, monitoring, controlled AI actions — is all still unstarted; everything built
 across every phase so far is foundation work under CLAUDE.md's Phase 0-6 umbrella, not a signal those
 later phases have begun.
+
+### Update, 2026-07-30 — real bug found running the scoped-down script: `exec()` namespace split
+
+Felix hit `NameError: name 'stage_1b_check_existing' is not defined` inside `run()` at Stage 1, on a
+real bench run. The function is correctly defined at module level and correctly called by name — this
+wasn't a rename/typo mismatch. Root cause, confirmed by reproducing it locally (not just theorized):
+bare `exec(open(path).read())`, the invocation this and two other scripts' docstrings instructed,
+inherits whatever `globals()`/`locals()` are active at its own call site. If bench console evaluates
+pasted input from inside some internal method (where `globals() != locals()`), every top-level `def`
+in the exec'd source gets written to that call's *locals* dict, but each function's own `__globals__`
+still points at that call's *globals* dict — so any function calling a sibling top-level function (via
+`LOAD_GLOBAL`, which only ever checks `__globals__`) fails to find it, while bare top-level code
+(`LOAD_NAME`, checks locals then globals) works fine. This also explains, retroactively, why
+`test_insights_private_permissions.py`'s earlier `TEST_USER_EMAIL` bug looked inconsistent with
+everything else in that script working — that script is mostly bare top-level code; the one actual
+`def` referencing a sibling top-level name was the only place it could have broken, and did.
+
+**Fix**: `exec(open(path).read(), globals())` — passing a single explicit dict forces Python to use it
+for both globals and locals (documented `exec()` behaviour), eliminating the two-dict split outright.
+Applied to the usage instructions in `build_admission_intelligence_embed.py`,
+`test_insights_private_permissions.py`, and `cleanup_insights_pilot.py` — the three scripts using this
+invocation pattern. `create_insights_pilot.py` was told to be pasted directly rather than via `exec()`
+and never hit this, so it was left as-is.
+
+Not yet re-run on the real bench — needs Felix to confirm the fixed invocation actually gets past
+Stage 1 this time.

@@ -26,7 +26,17 @@ site name via `ls sites/` first; a prior session in this same pilot lost
 significant time to an assumed-vs-real site-name mismatch, see the findings
 doc's "root cause has moved to the site name itself" update):
 
-    exec(open("docs/migration/scripts/cleanup_insights_pilot.py").read())
+    exec(open("docs/migration/scripts/cleanup_insights_pilot.py").read(), globals())
+
+The trailing `globals()` matters: bare `exec(open(...).read())` inherits
+whatever globals()/locals() are active at its own call site, and if bench
+console evaluates pasted input from inside some internal method
+(globals() != locals() there), a `def` function referencing a sibling
+top-level name resolves it via LOAD_GLOBAL against __globals__, which
+never received it -- silent NameError (this exact bug hit a near-identical
+script tonight, see build_admission_intelligence_embed.py's usage note).
+`exec(source, globals())` forces one shared namespace instead, closing it
+off here too.
 
 Two-phase by design, matching the lesson learned building the pilot itself
 (bench console rolls back uncommitted work on exit, frappe/commands/utils.py

@@ -67,7 +67,18 @@ debugging saga is a good reminder not to assume away.
 Usage -- paste into `bench --site <your-site> console` (confirm the real
 site name via `ls sites/` first):
 
-    exec(open("docs/migration/scripts/test_insights_private_permissions.py").read())
+    exec(open("docs/migration/scripts/test_insights_private_permissions.py").read(), globals())
+
+The trailing `globals()` matters: bare `exec(open(...).read())` inherits
+whatever globals()/locals() are active at its own call site, and if bench
+console evaluates pasted input from inside some internal method
+(globals() != locals() there), a `def` function referencing a sibling
+top-level name (as `is_shared_with_user` originally did with
+TEST_USER_EMAIL, before that was changed to an explicit parameter)
+resolves it via LOAD_GLOBAL against __globals__, which never received it
+-- silent NameError. `exec(source, globals())` forces one shared
+namespace instead of a two-dict split, closing off this whole class of
+bug for every function here, not just the one already hit.
 
 Creates one throwaway test user + role, cleaned up at the end
 (CLEANUP_TEST_USER = True below; flip to False to leave it for further
