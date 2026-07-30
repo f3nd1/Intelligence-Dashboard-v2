@@ -237,26 +237,55 @@ def get_criterion_7():
 
 
 @frappe.whitelist()
-def ask_quality_action(question, quality_action):
-	"""Ask UCC -- Quality Action module, first build of the Ask UCC
-	architecture (docs/architecture/ask-ucc-phase-plan.md §6). No role
-	check at this layer, by design -- whether this user's role may see the
-	Quality Action module in the UI at all is interface composition
+def ask_ucc(module, question, record):
+	"""Ask UCC -- all three modules (quality_action, recruitment_agent,
+	student_journey) through one endpoint, since the pipeline is identical
+	and only the tool set differs
+	(docs/architecture/ask-ucc-phase-plan.md §6).
+
+	No role check at this layer, by design -- whether this user's role may
+	see a given module in the UI at all is interface composition
 	(get_dashboard_access()'s ask_ucc_modules, same as hidden Analytics
 	criteria), and the real data gate is the ordinary Frappe DocType
-	permission `ask_ucc/quality_action.py`'s tool functions already apply
-	via frappe.get_doc() -- exactly the same split CLAUDE.md §3.3
-	establishes for Analytics, not a new exception.
+	permission each tool already applies via frappe.get_doc(). Exactly the
+	same split CLAUDE.md §3.3 establishes for Analytics, not a new
+	exception.
 
-	Recruitment Agent and Student Journey are not built yet -- see the
-	plan doc for why Quality Action was built first."""
+	`module` is validated against the fixed MODULES registry before
+	anything else runs -- an unknown value is rejected, never used to
+	reach code by name."""
+	module = frappe.utils.cstr(module).strip()
 	question = frappe.utils.cstr(question).strip()
-	quality_action = frappe.utils.cstr(quality_action).strip()
+	record = frappe.utils.cstr(record).strip()
+
+	if module not in _ask_ucc_orchestration.MODULES:
+		frappe.throw("Unsupported Ask UCC module.")
 	if not question:
 		frappe.throw("Please enter a question.")
-	if not quality_action:
-		frappe.throw("Please select a Quality Action.")
+	if not record:
+		frappe.throw("Please select a record.")
 
-	result = _ask_ucc_orchestration.ask_quality_action(question, quality_action)
-	conversation = _ask_ucc_conversations.persist_turn("Quality Action", "Quality Action", quality_action, question, result)
-	return _ask_ucc_contracts.build_response(conversation, result)
+	module_config = _ask_ucc_orchestration.MODULES[module]
+	result = _ask_ucc_orchestration.ask(module, question, record)
+	conversation = _ask_ucc_conversations.persist_turn(
+		module_config["label"], module_config["doctype"], record, question, result,
+	)
+	return _ask_ucc_contracts.build_response(module, conversation, result)
+
+
+@frappe.whitelist()
+def get_ask_ucc_modules():
+	"""Which Ask UCC modules this user's roles allow the interface to build,
+	plus each one's record DocType so the frontend's record picker knows what
+	to search. Interface composition only -- same contract as
+	get_dashboard_access(), which is where the gating actually comes from."""
+	access = _get_dashboard_access()
+	allowed = access.get("ask_ucc_modules") or {}
+	return {
+		"ok": True,
+		"modules": [
+			{"key": key, "label": config["label"], "doctype": config["doctype"]}
+			for key, config in _ask_ucc_orchestration.MODULES.items()
+			if allowed.get(key)
+		],
+	}

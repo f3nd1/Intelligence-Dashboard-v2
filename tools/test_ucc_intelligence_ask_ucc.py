@@ -35,6 +35,10 @@ sys.path.insert(0, str(ROOT / "ucc_intelligence"))
 # ============================================================
 class State:
 	quality_actions = {}  # name -> FakeDoc
+	agent_contracts = {}
+	student_applicants = {}
+	students = {}
+	list_rows = {}  # doctype -> rows
 	resolution_field_meta = "resolutions"  # which field find_resolution_field() should discover
 	settings = None
 	conf = {}
@@ -43,6 +47,7 @@ class State:
 	usage_logs = []
 	post_request_response = None
 	post_request_error = None
+	denied_doctypes = set()
 
 
 class FakeDoc(dict):
@@ -101,11 +106,31 @@ class FakeNewDoc:
 		return self
 
 
+DOC_STORES = {
+	"Quality Action": "quality_actions",
+	"Agent Contract": "agent_contracts",
+	"Student Applicant": "student_applicants",
+	"Student": "students",
+}
+
+
 def _get_doc(doctype, name):
-	if doctype == "Quality Action":
-		if name not in State.quality_actions:
-			raise frappe_stub.DoesNotExistError("no such Quality Action")
-		return State.quality_actions[name]
+	store_name = DOC_STORES.get(doctype)
+	if store_name:
+		store = getattr(State, store_name)
+		if name not in store:
+			raise frappe_stub.DoesNotExistError("no such %s" % doctype)
+		return store[name]
+	if doctype == "Supplier Rating":
+		for row in State.list_rows.get("Supplier Rating", []):
+			if row.get("name") == name:
+				return FakeDoc(row)
+		raise frappe_stub.DoesNotExistError("no such Supplier Rating")
+	if doctype == "Student Admission UCC":
+		for row in State.list_rows.get("Student Admission UCC", []):
+			if row.get("name") == name:
+				return FakeDoc(row)
+		raise frappe_stub.DoesNotExistError("no such Student Admission UCC")
 	if doctype == "UCC AI Conversation":
 		for c in State.conversations:
 			if c.name == name:
@@ -160,6 +185,20 @@ frappe_stub = types.ModuleType("frappe")
 frappe_stub.get_doc = _get_doc
 frappe_stub.new_doc = _new_doc
 frappe_stub.get_all = _get_all
+
+
+def _get_list(doctype, filters=None, fields=None, order_by=None, limit_page_length=None):
+	if doctype in State.denied_doctypes:
+		raise frappe_stub.PermissionError("not permitted to read " + doctype)
+	rows = [dict(r) for r in State.list_rows.get(doctype, [])]
+	for key, value in (filters or {}).items():
+		if isinstance(value, list):
+			continue  # docstatus-style operator filters: not modelled, pass through
+		rows = [r for r in rows if r.get(key) == value]
+	return rows
+
+
+frappe_stub.get_list = _get_list
 frappe_stub.get_meta = _get_meta
 frappe_stub.get_single = _get_single
 frappe_stub.session = _Session()
@@ -307,23 +346,23 @@ State.post_request_error = None
 # ai/orchestration.py -- end to end with the stubbed client
 # ============================================================
 State.settings = FakeDoc({"enable_ai": 0})
-result = orchestration.ask_quality_action("Is this ready to close?", "QA-0001")
+result = orchestration.ask("quality_action", "Is this ready to close?", "QA-0001")
 report(result["ai_status"] == "disabled", "orchestration reports disabled and still returns facts when AI is off")
-report(result["answer"] is None and result["facts"]["summary"]["status"] == "available", "facts are populated even though there's no AI answer (progressive enhancement)")
+report(result["answer"] is None and result["facts"]["get_quality_action_summary"]["status"] == "available", "facts are populated even though there's no AI answer (progressive enhancement)")
 report(result["tools_called"] == ["get_quality_action_summary", "assess_quality_action_closure"], "both tools are called for a resolvable record")
 
-result = orchestration.ask_quality_action("What about it?", "QA-does-not-exist")
+result = orchestration.ask("quality_action", "What about it?", "QA-does-not-exist")
 report(result["ai_status"] == "not_found", "orchestration surfaces the tool's not_found status directly, only 1 tool attempted")
 report(result["tools_called"] == ["get_quality_action_summary"], "closure assessment is not attempted when the record itself doesn't resolve")
 
 State.settings = FakeDoc({"enable_ai": 1, "ai_provider": "OpenAI", "ai_model": "gpt-4o-mini", "max_output_tokens": 500, "default_temperature": 0.2, "ai_request_timeout_seconds": 30})
 State.post_request_response = {"choices": [{"message": {"content": "1 of 2 resolution rows is ready for closure."}}], "model": "gpt-4o-mini", "usage": {"total_tokens": 55}}
-result = orchestration.ask_quality_action("Is this ready to close?", "QA-0001")
+result = orchestration.ask("quality_action", "Is this ready to close?", "QA-0001")
 report(result["ai_status"] == "available" and result["answer"]["text"].startswith("1 of 2"), "a clean AI answer passes through end to end")
 
 # the guardrail actually fires inside orchestration too, not just in isolation
 State.post_request_response = {"choices": [{"message": {"content": "Also check qa9f3k2z01 for a similar issue."}}], "model": "gpt-4o-mini", "usage": {"total_tokens": 12}}
-result = orchestration.ask_quality_action("Is this ready to close?", "QA-0001")
+result = orchestration.ask("quality_action", "Is this ready to close?", "QA-0001")
 report(result["ai_status"] == "guardrail_blocked", "orchestration blocks an AI answer that references an unverified record, end to end")
 report(result["answer"] is None, "a guardrail-blocked response never sets answer -- facts-only is what gets returned")
 
@@ -335,7 +374,7 @@ State.conversations = []
 State.messages = []
 State.usage_logs = []
 State.post_request_response = {"choices": [{"message": {"content": "1 of 2 resolution rows is ready."}}], "model": "gpt-4o-mini", "usage": {"total_tokens": 30}}
-result = orchestration.ask_quality_action("Is this ready to close?", "QA-0001")
+result = orchestration.ask("quality_action", "Is this ready to close?", "QA-0001")
 conversation = conversations.get_or_create_conversation("Quality Action", "Quality Action", "QA-0001")
 report(conversation.name is not None, "a new conversation is created and given a name")
 report(len(State.conversations) == 1, "exactly one conversation row exists after the first call")
@@ -394,7 +433,7 @@ frappe_stub.get_single = _broken_get_single
 # ============================================================
 # ask_ucc/contracts.py + api.py end to end
 # ============================================================
-response = contracts.build_response(conversation, result)
+response = contracts.build_response("quality_action", conversation, result)
 for key in ("ok", "conversation_id", "ai_status", "answer", "facts", "sources", "warnings"):
 	report(key in response, "response contract includes %r" % key)
 report(response["sources"][0] == {"doctype": "Quality Action", "record": "QA-0001", "status": "available"}, "sources correctly cites the real resolved Quality Action")
@@ -405,20 +444,20 @@ State.conversations = []
 State.messages = []
 State.usage_logs = []
 State.post_request_response = {"choices": [{"message": {"content": "1 of 2 resolution rows is ready for closure."}}], "model": "gpt-4o-mini", "usage": {"total_tokens": 44}}
-full_response = api.ask_quality_action("Is this ready to close?", "QA-0001")
-report(full_response["ok"] is True, "api.ask_quality_action() returns ok=True end to end")
-report(full_response["ai_status"] == "available", "api.ask_quality_action() end-to-end AI path works with everything stubbed")
+full_response = api.ask_ucc("quality_action", "Is this ready to close?", "QA-0001")
+report(full_response["ok"] is True, "api.ask_ucc() returns ok=True end to end")
+report(full_response["ai_status"] == "available", "api.ask_ucc() end-to-end AI path works with everything stubbed")
 report(len(State.conversations) == 1 and len(State.messages) == 2 and len(State.usage_logs) == 1,
-	"api.ask_quality_action() persists exactly 1 conversation, 2 messages (user+assistant), 1 usage log")
+	"api.ask_ucc() persists exactly 1 conversation, 2 messages (user+assistant), 1 usage log")
 
 try:
-	api.ask_quality_action("", "QA-0001")
+	api.ask_ucc("quality_action", "", "QA-0001")
 	report(False, "an empty question should raise, not silently proceed")
 except Exception:
 	report(True, "an empty question raises rather than silently proceeding")
 
 try:
-	api.ask_quality_action("A question", "")
+	api.ask_ucc("quality_action", "A question", "")
 	report(False, "a missing quality_action should raise, not silently proceed")
 except Exception:
 	report(True, "a missing quality_action raises rather than silently proceeding")
@@ -434,9 +473,201 @@ def _blocked_get_doc(doctype, name):
 
 
 frappe_stub.get_doc = _blocked_get_doc
-blocked_response = api.ask_quality_action("What is this?", "QA-blocked")
+blocked_response = api.ask_ucc("quality_action", "What is this?", "QA-blocked")
 report(blocked_response["sources"][0]["status"] == "permission_denied", "a permission-denied source reports permission_denied through the full stack, not a silent bypass or a crash")
 frappe_stub.get_doc = _get_doc
+
+
+
+# ============================================================
+# Recruitment Agent module -- same pipeline, own tools + heuristics
+# ============================================================
+import ucc_intelligence.ask_ucc.recruitment_agent as ra_tools  # noqa: E402
+
+State.agent_contracts["AC-0001"] = FakeDoc({
+	"name": "AC-0001",
+	"party_name": "Bright Futures Education",
+	"personal_id": "UEN-12345",
+	"commencement_date": "2024-01-01",
+	"end_date": "2027-12-31",
+})
+State.list_rows["Supplier Rating"] = [
+	{"name": "SR-1", "supplier_name": "Bright Futures Education", "modified": "2026-01-01",
+	 "rating_likert": "4.2", "status": "Approved", "evaluation_stage": "Annual"},
+]
+
+summary = ra_tools.get_agent_contract_summary("AC-0001")
+report(summary["status"] == "available", "RA: get_agent_contract_summary resolves an existing contract")
+report(summary["agent_name"] == "Bright Futures Education", "RA: agent name resolves via the party_name candidate")
+report(summary["contract_status"] == "Active", "RA: contract_status computes Active from dates, per the legacy ladder")
+
+ratings = ra_tools.get_agent_ratings("AC-0001")
+report(ratings["status"] == "available" and len(ratings["ratings"]) == 1, "RA: ratings resolve via the candidate filter list")
+report(ratings["meets_minimum_rating"] is True, "RA: 4.2 meets the 3.5 minimum")
+
+renewal = ra_tools.assess_agent_contract_renewal("AC-0001")
+report(renewal["issues"] == [], "RA: a compliant contract produces no issues")
+report(renewal["recommendation"].startswith("Eligible for continuation"), "RA: a compliant contract is recommended for continuation")
+
+# expired contract -> Expired status, and the first rung of the renewal ladder
+State.agent_contracts["AC-EXPIRED"] = FakeDoc({
+	"name": "AC-EXPIRED", "party_name": "Old Partner Ltd",
+	"commencement_date": "2019-01-01", "end_date": "2020-01-01",
+})
+expired = ra_tools.assess_agent_contract_renewal("AC-EXPIRED")
+report(expired["contract_status"] == "Expired", "RA: a past end_date computes Expired")
+report("Contract status is Expired." in expired["issues"], "RA: expired status is reported as a compliance issue")
+report(expired["recommendation"].startswith("Do not renew automatically"), "RA: expired hits the first rung of the renewal ladder")
+
+# below-threshold rating -> the 3.5 rule fires
+State.agent_contracts["AC-LOW"] = FakeDoc({
+	"name": "AC-LOW", "party_name": "Weak Rating Agency",
+	"commencement_date": "2024-01-01", "end_date": "2027-12-31",
+})
+State.list_rows["Supplier Rating"].append(
+	{"name": "SR-2", "supplier_name": "Weak Rating Agency", "modified": "2026-01-01",
+	 "rating_likert": "2.1", "status": "Conditional"})
+low = ra_tools.assess_agent_contract_renewal("AC-LOW")
+report("Latest rating_likert is below the 3.5 minimum." in low["issues"], "RA: a sub-3.5 rating is flagged as an issue")
+report(low["recommendation"].startswith("Do not renew without corrective action"), "RA: a sub-3.5 rating blocks renewal")
+report(any("requires attention" in i for i in low["issues"]), "RA: a Conditional rating status is flagged for attention")
+
+report(ra_tools.get_agent_contract_summary("AC-nope")["status"] == "not_found", "RA: a missing contract reports not_found")
+
+
+# ============================================================
+# Student Journey module -- same pipeline, own tools + heuristics
+# ============================================================
+import ucc_intelligence.ask_ucc.student_journey as sj_tools  # noqa: E402
+
+State.student_applicants["SA-0001"] = FakeDoc({
+	"name": "SA-0001", "first_name": "Mei", "last_name": "Lim",
+	"student_type": "Full Time", "nationality": "Singaporean", "program": "Diploma in Business",
+})
+State.students["STU-1"] = FakeDoc({"name": "STU-1", "student_name": "Mei Lim", "custom_academic_status": "Active"})
+State.list_rows["Student Admission UCC"] = [{
+	"name": "AD-1", "student_applicant": "SA-0001", "student": "STU-1", "student_name": "Mei Lim",
+	"program": "Diploma in Business", "date_of_commencement": "2024-01-15",
+	"completion_date": "", "application_status": "Admitted", "modified": "2026-01-01",
+	"modules": [
+		FakeDoc({"module_code": "BUS101", "module_name": "Intro to Business", "abbreviation": "IB",
+			"start_date": "2024-02-01", "end_date": "2024-05-01"}),
+		FakeDoc({"module_code": "BUS102", "module_name": "Accounting Basics", "abbreviation": "AB",
+			"start_date": "2024-06-01", "end_date": "2099-01-01"}),
+	],
+}]
+State.list_rows["Assessment Result"] = [{
+	"name": "AR-1", "docstatus": 1, "student": "STU-1", "course": "BUS101",
+	"assessment_name": "BUS101 Final", "total_score": 78, "maximum_score": 100,
+	"grade": "B", "assessment_date": "2024-05-10", "modified": "2024-05-10",
+}]
+State.list_rows["Student Attendance"] = [
+	{"name": "AT-%d" % i, "student": "STU-1", "date": "2024-03-0%d" % (i + 1), "status": "Present"}
+	for i in range(8)
+] + [
+	{"name": "AT-X", "student": "STU-1", "date": "2024-03-09", "status": "Absent"},
+	{"name": "AT-Y", "student": "STU-1", "date": "2024-03-10", "status": "Absent"},
+]
+State.list_rows["Student Leave Application"] = []
+
+profile = sj_tools.get_student_profile("SA-0001")
+report(profile["status"] == "available", "SJ: get_student_profile resolves an existing applicant")
+report(profile["student_name"] == "Mei Lim", "SJ: full name assembles from first/middle/last")
+report(profile["student_id"] == "STU-1", "SJ: the linked Student id resolves via the admission record")
+report(profile["commencement_date"] == "2024-01-15", "SJ: commencement resolves via the date_of_commencement candidate")
+report(profile["graduated"] is False, "SJ: academic status Active is not treated as graduated")
+
+academic = sj_tools.get_student_academic_record("SA-0001")
+report(academic["total_modules"] == 2, "SJ: both admission modules are loaded from the child table")
+report(academic["submitted_count"] == 1 and academic["not_graded_count"] == 1,
+	"SJ: the assessment result matches BUS101 only, leaving BUS102 ungraded")
+report(academic["passed_count"] == 1, "SJ: grade B classifies as passed via numeric_grade_passed")
+report(academic["average_score"] == 78.0, "SJ: average score computed from the matched result")
+report(academic["modules_not_ended"] == 1, "SJ: the module ending in 2099 counts as not ended")
+
+attendance = sj_tools.get_student_attendance_and_leave("SA-0001")
+report(attendance["present"] == 8 and attendance["absent"] == 2, "SJ: attendance totals count correctly")
+report(attendance["attendance_rate"] == 80.0, "SJ: attendance rate is (present+late)/total, per the legacy formula")
+report(attendance["below_threshold"] is True, "SJ: 80% is flagged below the 90% threshold")
+report(attendance["currently_on_leave"] is False, "SJ: no leave records means not currently on leave")
+
+readiness = sj_tools.assess_student_graduation_readiness("SA-0001")
+report(readiness["ready_for_graduation"] is False, "SJ: outstanding modules block graduation readiness")
+report(any("have not ended" in b for b in readiness["blockers"]), "SJ: the not-ended module is reported as a blocker")
+report(any("not submitted" in b for b in readiness["blockers"]), "SJ: the missing result is reported as a blocker")
+report(readiness["finance"] == "unavailable",
+	"SJ: finance is explicitly reported unavailable, NOT silently dropped from the blocker list")
+report(readiness["risk_level"] in ("Medium", "High"), "SJ: risks produce a non-Low risk level")
+report(any("below 90%" in r for r in readiness["risks"]), "SJ: low attendance is reported as a risk")
+
+report(sj_tools.get_student_profile("SA-nope")["status"] == "not_found", "SJ: a missing applicant reports not_found")
+
+
+# ============================================================
+# THE GUARDRAIL, PER MODULE -- a fabricated citation must be caught for
+# all three, not just the one it was first built against.
+# ============================================================
+State.settings = FakeDoc({"enable_ai": 1, "ai_provider": "OpenAI", "ai_model": "gpt-4o-mini",
+	"max_output_tokens": 500, "default_temperature": 0.2, "ai_request_timeout_seconds": 30,
+	"enable_persistent_conversations": 1})
+
+GUARDRAIL_CASES = [
+	("quality_action", "QA-0001", "Late fee reconciliation NC"),
+	("recruitment_agent", "AC-0001", "Bright Futures Education"),
+	("student_journey", "SA-0001", "Mei Lim"),
+]
+
+for module_key, record_name, human_name in GUARDRAIL_CASES:
+	# clean answer -> passes
+	State.post_request_response = {"choices": [{"message": {"content": "%s looks fine." % human_name}}],
+		"model": "gpt-4o-mini", "usage": {"total_tokens": 20}}
+	clean = orchestration.ask(module_key, "How is it?", record_name)
+	report(clean["ai_status"] == "available",
+		"GUARDRAIL/%s: a clean answer referencing only supplied facts passes" % module_key)
+
+	# fabricated record id -> blocked
+	State.post_request_response = {"choices": [{"message": {"content": "Also see record zx9q4m1p07 for context."}}],
+		"model": "gpt-4o-mini", "usage": {"total_tokens": 20}}
+	fabricated = orchestration.ask(module_key, "How is it?", record_name)
+	report(fabricated["ai_status"] == "guardrail_blocked",
+		"GUARDRAIL/%s: a FABRICATED record reference is rejected" % module_key)
+	report(fabricated["answer"] is None,
+		"GUARDRAIL/%s: a blocked answer is never returned -- facts only" % module_key)
+	report("zx9q4m1p07" in (fabricated["answer_error"] or ""),
+		"GUARDRAIL/%s: the rejection names the fabricated identifier" % module_key)
+
+	# the human name itself must NOT be treated as fabricated
+	report(human_name in clean["known_record_names"],
+		"GUARDRAIL/%s: the human-readable name is an accepted identifier, not just the record id" % module_key)
+
+
+# ============================================================
+# api.ask_ucc() across all three modules, plus module validation
+# ============================================================
+for module_key, record_name, _ in GUARDRAIL_CASES:
+	State.post_request_response = {"choices": [{"message": {"content": "All good."}}],
+		"model": "gpt-4o-mini", "usage": {"total_tokens": 10}}
+	State.conversations = []
+	State.messages = []
+	State.usage_logs = []
+	response = api.ask_ucc(module_key, "How is it?", record_name)
+	report(response["ok"] is True and response["module"] == module_key,
+		"api.ask_ucc(%s) returns ok and echoes the module" % module_key)
+	report(response["sources"] and response["sources"][0]["record"] == record_name,
+		"api.ask_ucc(%s) cites the real resolved record" % module_key)
+	report(len(State.conversations) == 1 and len(State.usage_logs) == 1,
+		"api.ask_ucc(%s) persists a conversation and a usage log" % module_key)
+
+try:
+	api.ask_ucc("not_a_module", "A question", "SOME-RECORD")
+	report(False, "an unknown module should be rejected")
+except Exception:
+	report(True, "an unknown module key is rejected, never used to reach code by name")
+
+# get_ask_ucc_modules is gated by dashboard access, not hardcoded
+modules_response = api.get_ask_ucc_modules()
+report(modules_response["ok"] is True, "get_ask_ucc_modules returns ok")
+report(isinstance(modules_response["modules"], list), "get_ask_ucc_modules returns a module list")
 
 
 passed = all(checks)
