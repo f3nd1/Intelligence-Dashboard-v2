@@ -67,6 +67,8 @@ def row(role, **kw):
 		"name": "row-" + role, "role": role, "enabled": 1,
 		"default_when_unconfigured": kw.pop("default", None),
 		"show_analytics": 0, "show_explore": 0, "show_ask_ucc": 0,
+		"show_ask_student_journey": 0, "show_ask_recruitment_agent": 0,
+		"show_ask_quality_action": 0,
 	}
 	for n in range(1, 8):
 		base["show_criterion_%d" % n] = 0
@@ -80,6 +82,10 @@ def visible_criteria(payload):
 
 def visible_workspaces(payload):
 	return sorted(k for k, v in payload["workspaces"].items() if v)
+
+
+def visible_ask_ucc_modules(payload):
+	return sorted(k for k, v in payload["ask_ucc_modules"].items() if v)
 
 
 # (a) a role WITH a configured row -> exactly what that row allows
@@ -213,3 +219,51 @@ assert "Has Role" in access_source, "must match against assigned roles"
 
 print("PASS: ported ucc_intelligence.permissions.access matches all 20 legacy scenarios "
       "(a-e + defaults, truthiness, union) incl. the role-leak regression")
+
+# ============================================================
+# New in the ported module only (legacy Server Script has no concept of
+# this): per-module Ask UCC gating, separate from the Ask UCC workspace tab.
+# ============================================================
+
+# a role granted the Ask UCC workspace tab does NOT automatically get any
+# specific module -- these are deliberately independent checkboxes
+s = load(["Quality Lead"], [row("Quality Lead", show_ask_ucc=1)])
+r = s.build_response()
+assert visible_workspaces(r) == ["ask"]
+assert visible_ask_ucc_modules(r) == [], visible_ask_ucc_modules(r)
+
+# a role granted only one specific module sees only that module
+s = load(["Quality Lead"], [row("Quality Lead", show_ask_ucc=1, show_ask_quality_action=1)])
+r = s.build_response()
+assert visible_ask_ucc_modules(r) == ["quality_action"], visible_ask_ucc_modules(r)
+
+# union across roles applies to ask_ucc_modules the same way it does to criteria/workspaces
+s = load(["Role A", "Role B"], [
+	row("Role A", show_ask_ucc=1, show_ask_student_journey=1),
+	row("Role B", show_ask_ucc=1, show_ask_recruitment_agent=1),
+])
+r = s.build_response()
+assert visible_ask_ucc_modules(r) == ["recruitment_agent", "student_journey"], visible_ask_ucc_modules(r)
+
+# default "Show everything" grants all 3 modules, same as it does criteria/workspaces
+s = load(["Nobody"], [row("Academic Manager", default="Show everything")])
+r = s.build_response()
+assert visible_ask_ucc_modules(r) == ["quality_action", "recruitment_agent", "student_journey"]
+
+# default "Show nothing" grants none
+s = load(["Nobody"], [row("Academic Manager", default="Show nothing")])
+r = s.build_response()
+assert visible_ask_ucc_modules(r) == []
+
+# checkbox truthiness applies to the new fields too (Frappe may send 1/0, "1"/"0", True/False)
+s = load(["R"], [row("R", show_ask_student_journey="1", show_ask_recruitment_agent=True, show_ask_quality_action="0")])
+assert visible_ask_ucc_modules(s.build_response()) == ["recruitment_agent", "student_journey"]
+
+# the fail-open path grants every module too, same as every other fail-open guarantee
+s = load(["Nobody"], [row("Role A", default="Show nothing")], explode=True)
+r = s.get_dashboard_access()
+assert r["applied"] == "error_fail_open"
+assert visible_ask_ucc_modules(r) == ["quality_action", "recruitment_agent", "student_journey"]
+
+print("PASS: Ask UCC per-module gating (show_ask_student_journey/recruitment_agent/quality_action) "
+      "follows the exact same union/default/fail-open rules as criteria and workspaces - 7 new scenarios")

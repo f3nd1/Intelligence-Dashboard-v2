@@ -371,3 +371,59 @@ proven pattern once Quality Action works end-to-end); Student Journey's `convers
 bug (§1.1) stays dead code, not fixed, since the new orchestration layer replaces that path entirely
 rather than patching it; document knowledge, monitoring, and controlled actions remain untouched
 (Phases 9/11/12, no decision made about them here).
+
+---
+
+## 7. What was built (2026-07-30)
+
+The full §6 sequence, built and self-QA'd:
+
+- **DocTypes** — `UCC AI Conversation` (30-day `expires_on`, set on `before_insert`, per decision 4;
+  no `retention_category` enum built for a single fixed period, see the DocType's own field
+  description for why), `UCC AI Message` (standalone, not a child table — reasoning recorded in its
+  `.py` controller per CLAUDE.md §7.3's explicit "don't choose silently"), `UCC AI Usage Log`
+  (read-only in Desk permissions for everyone including System Manager; inserted only server-side with
+  `ignore_permissions=True`, justified in its own `.py` controller per CLAUDE.md §1.1.10).
+- **`UCC Dashboard Access` extended** — `show_ask_student_journey`/`show_ask_recruitment_agent`/
+  `show_ask_quality_action`, siblings to the existing `show_criterion_*` fields. `permissions/access.py`
+  extended the same way (`ASK_UCC_MODULE_FIELDS`, `ask_ucc_modules` in every payload shape including
+  the fail-open path). All 20 existing parity scenarios still pass unchanged; 7 new scenarios added
+  covering the new fields specifically (union, defaults, truthiness, fail-open — same rules, verified
+  to actually apply to the new fields, not just copied from the old ones by assumption).
+- **`ai/client.py`** — the one place `ucc_intelligence_ai_api_key` (site_config.json) is ever read.
+  OpenAI Chat Completions only (provider dispatch has exactly one real branch; anything else reports
+  `unavailable` rather than guessing). Every failure mode — disabled, unconfigured, wrong provider,
+  network error — returns the same `{"ok": False, "status", "message"}` shape, never raises. Confirmed
+  the classified error message never echoes a raw exception's text (which could embed request
+  internals) — tested directly, not assumed.
+- **`ask_ucc/quality_action.py`** — `get_quality_action_summary`/`assess_quality_action_closure`, the
+  fixed 2-tool allowlist for this module. Faithfully ports the legacy script's dynamic resolution-field
+  discovery (`find_resolution_field`, meta-based, not a hardcoded fieldname) and its
+  `root_cause_review`/`action_review` closure heuristics exactly. Global/cross-record search
+  deliberately not built this round (§6).
+- **`ai/orchestration.py`** — v1 calls both Quality Action tools deterministically (not model-driven
+  tool selection — reasoning in the module docstring) and assembles facts + question into the AI call.
+  **`ai/guardrails.py`** — validates every AI answer against the record identifiers actually present in
+  the supplied facts before it's ever returned; a fabricated citation is rejected (`guardrail_blocked`),
+  not rendered.
+- **`api.py`'s `ask_quality_action()`** — no role check at that layer, by design: module-level access is
+  interface composition (`ask_ucc_modules`, same split as Analytics per CLAUDE.md §3.3), the real data
+  gate is the ordinary `frappe.get_doc` permission check inside the tool. Persists the conversation,
+  both messages, and a usage-log row; reuses an existing conversation for the same (user, module,
+  record) rather than creating one per question.
+- **`tools/test_ucc_intelligence_ask_ucc.py`** — 54/54 checks: tool functions against synthetic data
+  matching the legacy formulas exactly, the citation guardrail actually catching a fabricated reference
+  (both in isolation and end-to-end through orchestration, not just the happy path), `ai/client.py`'s
+  config-gated early returns, conversation reuse (a second call for the same record doesn't create a
+  duplicate), and the full `api.ask_quality_action()` path including a permission-denied case surfacing
+  correctly through the whole stack.
+
+**Verification**: new test 54/54; full existing regression suite still green, including the extended
+access test (20 legacy scenarios + 7 new); legacy directories and `analytics/`/the Sophia page
+confirmed untouched via `git diff --stat`.
+
+**Not yet done, needs Felix's bench access**: the DocTypes haven't been installed/migrated on a real
+site; `UCC Intelligence Settings.enable_ai`/`ai_provider`/`ai_model` haven't been set for real, and
+`ucc_intelligence_ai_api_key` hasn't been added to `site_config.json` yet, so no real OpenAI call has
+happened outside the stubbed tests. No frontend UI was built this round (per §6's explicit scope) —
+the method is callable and tested, not yet exposed in any page.

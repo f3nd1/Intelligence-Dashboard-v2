@@ -1,0 +1,71 @@
+{
+	"doctype": "DocType",
+	"name": "UCC AI Conversation",
+	"module": "Sophia",
+	"custom": 0,
+	"istable": 0,
+	"issingle": 0,
+	"track_changes": 1,
+	"engine": "InnoDB",
+	"autoname": "hash",
+	"fields": [
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"description": "Short auto-generated summary (first question, truncated) -- not user-entered."
+		},
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "User",
+			"reqd": 1
+		},
+		{
+			"fieldname": "module",
+			"fieldtype": "Select",
+			"options": "Student Journey\nRecruitment Agent\nQuality Action",
+			"label": "Module",
+			"reqd": 1
+		},
+		{
+			"fieldname": "linked_doctype",
+			"fieldtype": "Data",
+			"label": "Linked DocType",
+			"description": "e.g. \"Quality Action\" -- the record type this conversation is about."
+		},
+		{
+			"fieldname": "linked_name",
+			"fieldtype": "Data",
+			"label": "Linked Record"
+		},
+		{
+			"fieldname": "last_activity",
+			"fieldtype": "Datetime",
+			"label": "Last Activity"
+		},
+		{
+			"fieldname": "expires_on",
+			"fieldtype": "Date",
+			"label": "Expires On",
+			"description": "Set on creation to creation date + 30 days (Felix, 2026-07-30). A single fixed retention period doesn't need a category enum yet -- see CLAUDE.md §7.2's retention_category field, deliberately simplified here to one concrete date until more than one retention rule actually exists."
+		}
+	],
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1
+		},
+		{
+			"role": "All",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"if_owner": 1
+		}
+	]
+}

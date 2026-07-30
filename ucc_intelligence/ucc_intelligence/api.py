@@ -1,7 +1,10 @@
 import frappe
 
+from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_6, criterion_7
 from ucc_intelligence.analytics.request import parse_payload
+from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
+from ucc_intelligence.ask_ucc import conversations as _ask_ucc_conversations
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 from ucc_intelligence.settings import status as _settings_status
 
@@ -179,3 +182,40 @@ def get_criterion_7():
 		criterion_label="Criterion 7",
 	)
 	return criterion_7.run(**parsed)
+
+
+@frappe.whitelist()
+def ask_quality_action(question, quality_action):
+	"""Ask UCC -- Quality Action module, first build of the Ask UCC
+	architecture (docs/architecture/ask-ucc-phase-plan.md §6). No role
+	check at this layer, by design -- whether this user's role may see the
+	Quality Action module in the UI at all is interface composition
+	(get_dashboard_access()'s ask_ucc_modules, same as hidden Analytics
+	criteria), and the real data gate is the ordinary Frappe DocType
+	permission `ask_ucc/quality_action.py`'s tool functions already apply
+	via frappe.get_doc() -- exactly the same split CLAUDE.md §3.3
+	establishes for Analytics, not a new exception.
+
+	Recruitment Agent and Student Journey are not built yet -- see the
+	plan doc for why Quality Action was built first."""
+	question = frappe.utils.cstr(question).strip()
+	quality_action = frappe.utils.cstr(quality_action).strip()
+	if not question:
+		frappe.throw("Please enter a question.")
+	if not quality_action:
+		frappe.throw("Please select a Quality Action.")
+
+	result = _ask_ucc_orchestration.ask_quality_action(question, quality_action)
+
+	conversation = _ask_ucc_conversations.get_or_create_conversation("Quality Action", "Quality Action", quality_action)
+	_ask_ucc_conversations.record_message(conversation, "user", question)
+	answer = result.get("answer")
+	if answer:
+		_ask_ucc_conversations.record_message(
+			conversation, "assistant", answer["text"],
+			model=answer.get("model"), latency_ms=answer.get("latency_ms"),
+			token_usage=answer.get("token_usage"), source_summary=result.get("known_record_names"),
+		)
+	_ask_ucc_conversations.record_usage_log(conversation, "Quality Action", result)
+
+	return _ask_ucc_contracts.build_response(conversation, result)

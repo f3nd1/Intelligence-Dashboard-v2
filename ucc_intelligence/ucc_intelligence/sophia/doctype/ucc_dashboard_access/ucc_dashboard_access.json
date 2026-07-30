@@ -79,6 +79,27 @@
 			"label": "Show Criterion 7"
 		},
 		{
+			"fieldname": "ask_ucc_modules_section",
+			"fieldtype": "Section Break",
+			"label": "Ask UCC Modules"
+		},
+		{
+			"fieldname": "show_ask_student_journey",
+			"fieldtype": "Check",
+			"label": "Show Ask UCC - Student Journey",
+			"description": "Separate from Show Ask UCC above -- that gates the workspace tab, this gates this specific module (discusses individual student records)."
+		},
+		{
+			"fieldname": "show_ask_recruitment_agent",
+			"fieldtype": "Check",
+			"label": "Show Ask UCC - Recruitment Agent"
+		},
+		{
+			"fieldname": "show_ask_quality_action",
+			"fieldtype": "Check",
+			"label": "Show Ask UCC - Quality Action"
+		},
+		{
 			"fieldname": "notes",
 			"fieldtype": "Small Text",
 			"label": "Notes"
