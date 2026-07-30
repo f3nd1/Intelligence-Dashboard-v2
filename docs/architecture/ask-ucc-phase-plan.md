@@ -298,3 +298,76 @@ not this phase's concern** where it doesn't apply here.
 account, external-provider data policy, the Ask-UCC-specific role matrix, and retention periods.
 Everything else either blocks a narrower slice (a specific tool, a specific action type) or is
 correctly deferred by the memory recommendation above.
+
+---
+
+## 5. Decisions confirmed (Felix, 2026-07-30) — all four resolved
+
+1. **AI provider**: OpenAI. A working API key already exists — Phase 8's client can be built *and*
+   tested for real this round, not groundwork-only. Key goes in `site_config.json` as
+   `ucc_intelligence_ai_api_key` — reusing the exact convention already shipped in
+   `settings/status.py`'s `get_ai_provider_configured()`, not inventing a second name. Once it's set,
+   the Settings page's "AI provider configured elsewhere" indicator (built last round) turns green with
+   no further code changes — a direct, already-tested connection between the two rounds.
+2. **Student data**: approved, with the safeguards already specced in §2 — permission-checked
+   retrieval, fixed per-module tool allowlist, source citations, output validation against the actual
+   retrieved facts. Clears the data-flow blocker for step 6 of §2.1.
+3. **Role matrix**: same roles as `UCC Dashboard Access`, but Ask UCC needs its **own per-module**
+   gate — not the existing single `show_ask_ucc` boolean. Concretely: extend `UCC Dashboard Access`
+   (one more row-shape change, not a new DocType) with three new fields —
+   `show_ask_student_journey`, `show_ask_recruitment_agent`, `show_ask_quality_action` — siblings to
+   the existing `show_criterion_1`...`show_criterion_7`. `permissions/access.py`'s `ACCESS_FIELDS`,
+   `everything_visible()`/`nothing_visible()`/`union_of()` need the same three keys added. This keeps
+   ONE source of truth for all interface-composition access (Analytics + Ask UCC together), consistent
+   with how criteria already work, rather than a parallel access mechanism.
+4. **Retention**: 30 days. Feeds `UCC AI Conversation`'s retention design directly (§6 below).
+
+One follow-up this creates, flagged rather than decided silently: the Settings page's memory section
+was deliberately *cut* last round because the storage it would gate didn't exist. Once `UCC AI
+Conversation` is real (this round), that field graduates from "nothing to gate" to "a real toggle" —
+worth a small follow-up to the Settings page once this build lands, not bundled into it now.
+
+---
+
+## 6. First-build plan
+
+Same principle as every build this session: prove the full pipeline on the smallest slice before
+extending it, rather than building all three modules at once. **Quality Action first** — of the three
+legacy scripts read in §1, it's the narrowest (one DocType, `Quality Action` only, 911 lines vs. 4208
+and 2153) and has zero existing AI code to work around or be confused with (unlike Student Journey's
+broken `OPENAI_MODEL` routing call). Proving permission-check → tool-call → facts → real OpenAI call →
+citation validation → rendered response on this module first means the second and third modules
+(Recruitment Agent, then Student Journey) are extending a working pattern, not debugging the pattern
+itself under more complexity.
+
+**Sequence:**
+
+1. **DocTypes** — `UCC AI Conversation`, `UCC AI Message`, `UCC AI Usage Log` (CLAUDE.md §7.2-7.3,
+   Phase 8's audit requirement). `UCC AI Conversation` gets a fixed 30-day retention window per
+   decision 4 above — hardcoded for now (not a configurable field; nothing asked for that yet, and the
+   Settings page's memory section is deliberately still absent per §5's follow-up note) rather than
+   built with unrequested flexibility.
+2. **Ask UCC access fields** — extend `UCC Dashboard Access` + `permissions/access.py` per decision 3.
+   Reuses the existing DocType's List View for editing; no new admin UI.
+3. **`ai/client.py`** — the one place `ucc_intelligence_ai_api_key` is ever read. Timeout, retry limit,
+   structured-output call shape. This is new capability, not a port — §1.1 already established the
+   legacy system never actually generated AI prose anywhere.
+4. **`ask_ucc/quality_action.py`** — the tool allowlist for this module (from §1.2's real DocType:
+   `Quality Action` fields — problem, resolution, action_taken, assigned, due, status, closure,
+   review), built from what the legacy script's `detect_intent()`/template answers already show is
+   asked about, not guessed fresh.
+5. **`ai/orchestration.py` + `ai/guardrails.py`** — steps 6-7 of §2.1: assemble retrieved facts +
+   question into the OpenAI call, validate every citation in the response against what was actually
+   retrieved before it's ever rendered.
+6. **`api.py`'s `ask_ucc` whitelisted method** (Quality Action only for this round) + minimal frontend
+   wiring to exercise it — enough to test end-to-end, not a full Ask UCC page redesign yet.
+7. **Self-QA**: same discipline as every other round — stubbed-`frappe` tests for the tool functions,
+   citation-guardrail tests (a fabricated-source case must be caught, not just the happy path), and a
+   bench-pending real call once Felix has the key in `site_config.json` — Confirm real request → real
+   OpenAI response → citations validated → rendered, plus the restricted-user permission case.
+
+**Deferred, not silently dropped**: Recruitment Agent and Student Journey tool modules (extend the
+proven pattern once Quality Action works end-to-end); Student Journey's `conversation`-based routing
+bug (§1.1) stays dead code, not fixed, since the new orchestration layer replaces that path entirely
+rather than patching it; document knowledge, monitoring, and controlled actions remain untouched
+(Phases 9/11/12, no decision made about them here).
