@@ -29,6 +29,18 @@ WORKSPACE_FIELDS = {
 	"explore": "show_explore",
 	"ask": "show_ask_ucc",
 }
+# `show_ask_ucc` above gates the Ask UCC workspace tab as a whole (interface
+# composition, same as every other WORKSPACE_FIELDS entry). Per-module gating
+# within Ask UCC is a separate, finer-grained question -- a role seeing the
+# workspace at all doesn't mean every module inside it should be open to
+# them (Felix, 2026-07-30: "same roles, but separate per-module checkboxes
+# needed" -- Student Journey discusses individual student records, which
+# warrants its own gate distinct from Recruitment Agent or Quality Action).
+ASK_UCC_MODULE_FIELDS = {
+	"student_journey": "show_ask_student_journey",
+	"recruitment_agent": "show_ask_recruitment_agent",
+	"quality_action": "show_ask_quality_action",
+}
 SHOW_EVERYTHING = "Show everything"
 SHOW_NOTHING = "Show nothing"
 
@@ -37,7 +49,8 @@ ACCESS_FIELDS = [
 	"show_analytics", "show_explore", "show_ask_ucc",
 	"show_criterion_1", "show_criterion_2", "show_criterion_3",
 	"show_criterion_4", "show_criterion_5", "show_criterion_6",
-	"show_criterion_7", "notes",
+	"show_criterion_7", "show_ask_student_journey",
+	"show_ask_recruitment_agent", "show_ask_quality_action", "notes",
 ]
 
 
@@ -56,20 +69,24 @@ def is_checked(value):
 
 
 def everything_visible():
-	payload = {"workspaces": {}, "criteria": {}}
+	payload = {"workspaces": {}, "criteria": {}, "ask_ucc_modules": {}}
 	for workspace_key in WORKSPACE_FIELDS:
 		payload["workspaces"][workspace_key] = True
 	for criterion_key in CRITERION_KEYS:
 		payload["criteria"][criterion_key] = True
+	for module_key in ASK_UCC_MODULE_FIELDS:
+		payload["ask_ucc_modules"][module_key] = True
 	return payload
 
 
 def nothing_visible():
-	payload = {"workspaces": {}, "criteria": {}}
+	payload = {"workspaces": {}, "criteria": {}, "ask_ucc_modules": {}}
 	for workspace_key in WORKSPACE_FIELDS:
 		payload["workspaces"][workspace_key] = False
 	for criterion_key in CRITERION_KEYS:
 		payload["criteria"][criterion_key] = False
+	for module_key in ASK_UCC_MODULE_FIELDS:
+		payload["ask_ucc_modules"][module_key] = False
 	return payload
 
 
@@ -128,6 +145,9 @@ def union_of(rows):
 		for criterion_key in CRITERION_KEYS:
 			if is_checked(row.get("show_" + criterion_key)):
 				payload["criteria"][criterion_key] = True
+		for module_key, fieldname in ASK_UCC_MODULE_FIELDS.items():
+			if is_checked(row.get(fieldname)):
+				payload["ask_ucc_modules"][module_key] = True
 	return payload
 
 
@@ -225,6 +245,7 @@ def build_response():
 		"default_ambiguous": default_ambiguous,
 		"workspaces": payload["workspaces"],
 		"criteria": payload["criteria"],
+		"ask_ucc_modules": payload["ask_ucc_modules"],
 	}
 
 
@@ -255,4 +276,5 @@ def get_dashboard_access():
 			"error": str(error),
 			"workspaces": fallback["workspaces"],
 			"criteria": fallback["criteria"],
+			"ask_ucc_modules": fallback["ask_ucc_modules"],
 		}

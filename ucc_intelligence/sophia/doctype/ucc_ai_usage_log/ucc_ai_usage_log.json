@@ -1,0 +1,93 @@
+{
+	"doctype": "DocType",
+	"name": "UCC AI Usage Log",
+	"module": "Sophia",
+	"custom": 0,
+	"istable": 0,
+	"issingle": 0,
+	"track_changes": 0,
+	"engine": "InnoDB",
+	"autoname": "hash",
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "User",
+			"reqd": 1
+		},
+		{
+			"fieldname": "module",
+			"fieldtype": "Data",
+			"label": "Module"
+		},
+		{
+			"fieldname": "conversation",
+			"fieldtype": "Link",
+			"options": "UCC AI Conversation",
+			"label": "Conversation"
+		},
+		{
+			"fieldname": "tools_called",
+			"fieldtype": "Small Text",
+			"label": "Tools Called",
+			"description": "JSON list of tool names actually invoked."
+		},
+		{
+			"fieldname": "source_ids",
+			"fieldtype": "Small Text",
+			"label": "Source IDs",
+			"description": "JSON list of {doctype, record} actually retrieved."
+		},
+		{
+			"fieldname": "model",
+			"fieldtype": "Data",
+			"label": "Model"
+		},
+		{
+			"fieldname": "latency_ms",
+			"fieldtype": "Int",
+			"label": "Latency (ms)"
+		},
+		{
+			"fieldname": "token_usage",
+			"fieldtype": "Int",
+			"label": "Token Usage"
+		},
+		{
+			"fieldname": "action_proposed",
+			"fieldtype": "Data",
+			"label": "Action Proposed",
+			"description": "Not used yet -- Phase 12 (controlled actions) is unbuilt. Field exists per CLAUDE.md §12.4's audit requirement, ready for when it is."
+		},
+		{
+			"fieldname": "approval_status",
+			"fieldtype": "Data",
+			"label": "Approval Status"
+		},
+		{
+			"fieldname": "execution_result",
+			"fieldtype": "Data",
+			"label": "Execution Result"
+		},
+		{
+			"fieldname": "error_reference",
+			"fieldtype": "Data",
+			"label": "Error Reference"
+		},
+		{
+			"fieldname": "request_diagnostic_id",
+			"fieldtype": "Data",
+			"label": "Request Diagnostic ID"
+		}
+	],
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 0,
+			"create": 0,
+			"delete": 0
+		}
+	]
+}
