@@ -860,5 +860,26 @@ Applied to the usage instructions in `build_admission_intelligence_embed.py`,
 invocation pattern. `create_insights_pilot.py` was told to be pasted directly rather than via `exec()`
 and never hit this, so it was left as-is.
 
-Not yet re-run on the real bench — needs Felix to confirm the fixed invocation actually gets past
-Stage 1 this time.
+Re-run confirmed the `exec()` fix: Stages 1-3 passed — `enrolled_by_year` created successfully, both
+charts (`applicants_by_year`, `enrolled_by_year`) return correct real data as Administrator (6 rows
+each, matching expected academic years).
+
+### Update, 2026-07-30 (same day) — second real bug: `import frappe.share` inside a function
+
+Stage 4 crashed: `UnboundLocalError: cannot access local variable 'frappe' where it is not associated
+with a value`, inside `stage_4_permission_test`. Classic Python gotcha, correctly diagnosed by Felix
+before I even looked: `import frappe.share` sat *inside* that function's body (added when the
+restricted-user share/unshare logic was written). `import x.y` binds the top-level name `x` in
+whatever scope the statement is textually in — since Python determines local-vs-global for a whole
+function at compile time by scanning every assignment target in its body, that one import line made
+`frappe` local to the *entire* function, breaking every earlier plain `frappe.db.exists(...)`-style
+call above it, not just the lines after the import.
+
+**Fix**: moved `import frappe.share` to module level (next to the existing `import frappe`), removed
+the local one entirely. Verified with `dis`-level inspection (not just read-through) that `frappe` no
+longer appears in `stage_4_permission_test.__code__.co_varnames` after the fix. Checked the other two
+scripts using `frappe.share` for the same pattern — `test_insights_private_permissions.py`'s
+`import frappe.share` is already at true module level (fine, not a duplicate of this bug);
+`cleanup_insights_pilot.py` doesn't use `frappe.share` at all.
+
+Not yet re-run on the real bench past Stage 4 — needs Felix to confirm.

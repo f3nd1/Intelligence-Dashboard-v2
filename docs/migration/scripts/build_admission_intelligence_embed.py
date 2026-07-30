@@ -106,6 +106,7 @@ the one new chart) automatically. Each STAGE prints its own pass/fail.
 """
 
 import frappe
+import frappe.share
 
 DATA_SOURCE_NAME_HINT = "Site DB"
 WORKBOOK_TITLE_HINT = "Workbook 2"
@@ -420,8 +421,6 @@ def stage_4_permission_test(execute_results):
 	if can_read:
 		print("STOP -- test user unexpectedly has Student Applicant read access. Not a valid test.")
 		return {}
-
-	import frappe.share
 
 	def is_shared(dt, dn, email):
 		return any(u.user == email for u in frappe.share.get_users(dt, dn))
