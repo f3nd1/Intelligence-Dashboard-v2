@@ -170,10 +170,27 @@ doctype_json = json.loads((ROOT / "ucc_intelligence/ucc_intelligence/sophia/doct
 fieldnames = {f["fieldname"] for f in doctype_json["fields"]}
 report(doctype_json.get("issingle") == 1, "UCC Intelligence Settings is a Single DocType")
 report(doctype_json.get("module") == "Sophia", "DocType is registered under the Sophia module, matching UCC Dashboard Access")
-for cut_field in ("enable_persistent_conversations", "conversation_retention_days", "default_action_approval_level"):
+# conversation_retention_days and default_action_approval_level stay cut: the
+# first because retention is a single fixed 30 days (no second rule to choose
+# between), the second because no controlled-actions feature exists to gate.
+# enable_persistent_conversations was cut in the first round for exactly that
+# reason too -- but UCC AI Conversation/Message now exist, so it graduated to
+# a real toggle (asserted below, not here).
+for cut_field in ("conversation_retention_days", "default_action_approval_level"):
 	report(cut_field not in fieldnames, "%r is genuinely absent (cut per Felix's decision), not just unused" % cut_field)
-for kept_field in ("enable_ai", "ai_provider", "ai_model", "max_output_tokens", "default_temperature", "ai_request_timeout_seconds", "enable_document_knowledge", "enable_monitoring"):
+for kept_field in ("enable_ai", "ai_provider", "ai_model", "max_output_tokens", "default_temperature", "ai_request_timeout_seconds", "enable_document_knowledge", "enable_monitoring", "enable_persistent_conversations"):
 	report(kept_field in fieldnames, "%r is present" % kept_field)
+
+# The memory toggle is REAL, not a placeholder -- it must default on (matching
+# prior behaviour, where conversations were always stored) and its description
+# must not call itself a placeholder the way the two genuine placeholders do.
+memory_field = next(f for f in doctype_json["fields"] if f["fieldname"] == "enable_persistent_conversations")
+report(memory_field.get("default") == "1", "enable_persistent_conversations defaults ON, preserving existing behaviour")
+report("Placeholder" not in memory_field.get("description", ""), "the memory toggle is not described as a placeholder -- it is genuinely wired up")
+for placeholder_fieldname in ("enable_document_knowledge", "enable_monitoring"):
+	placeholder_field = next(f for f in doctype_json["fields"] if f["fieldname"] == placeholder_fieldname)
+	report("Placeholder" in placeholder_field.get("description", ""),
+		"%r is still honestly labelled a placeholder" % placeholder_fieldname)
 report(
 	"api_key" not in " ".join(fieldnames).lower() and "secret" not in " ".join(fieldnames).lower(),
 	"no field name suggests a stored secret -- the API key deliberately has no field this round",

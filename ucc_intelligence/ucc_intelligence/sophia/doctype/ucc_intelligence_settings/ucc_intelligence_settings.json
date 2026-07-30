@@ -57,6 +57,13 @@
 			"label": "Feature Toggles"
 		},
 		{
+			"fieldname": "enable_persistent_conversations",
+			"fieldtype": "Check",
+			"label": "Enable Persistent Conversations",
+			"default": "1",
+			"description": "REAL, not a placeholder -- when off, Ask UCC answers questions normally but stores no UCC AI Conversation or UCC AI Message rows. UCC AI Usage Log is always written regardless (audit trail, not conversation memory). Conversations are retained 30 days."
+		},
+		{
 			"fieldname": "enable_document_knowledge",
 			"fieldtype": "Check",
 			"label": "Enable Document Knowledge",

@@ -206,16 +206,5 @@ def ask_quality_action(question, quality_action):
 		frappe.throw("Please select a Quality Action.")
 
 	result = _ask_ucc_orchestration.ask_quality_action(question, quality_action)
-
-	conversation = _ask_ucc_conversations.get_or_create_conversation("Quality Action", "Quality Action", quality_action)
-	_ask_ucc_conversations.record_message(conversation, "user", question)
-	answer = result.get("answer")
-	if answer:
-		_ask_ucc_conversations.record_message(
-			conversation, "assistant", answer["text"],
-			model=answer.get("model"), latency_ms=answer.get("latency_ms"),
-			token_usage=answer.get("token_usage"), source_summary=result.get("known_record_names"),
-		)
-	_ask_ucc_conversations.record_usage_log(conversation, "Quality Action", result)
-
+	conversation = _ask_ucc_conversations.persist_turn("Quality Action", "Quality Action", quality_action, question, result)
 	return _ask_ucc_contracts.build_response(conversation, result)

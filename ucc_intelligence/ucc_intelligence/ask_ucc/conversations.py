@@ -25,6 +25,22 @@ the DocType's own .py controller.
 import frappe
 
 
+def persistence_enabled():
+	"""`UCC Intelligence Settings.enable_persistent_conversations`. When off,
+	Ask UCC still answers normally -- only the Conversation/Message rows are
+	skipped. Usage Log is deliberately NOT gated by this: it's the audit
+	trail CLAUDE.md §12.4 requires, not conversation memory, and an audit
+	trail an operator can silently switch off is not an audit trail.
+
+	Defaults to enabled when the setting can't be read at all, matching the
+	shipped field default (1) -- a settings-read fault shouldn't silently
+	start dropping conversation history without anyone choosing that."""
+	try:
+		return bool(frappe.get_single("UCC Intelligence Settings").enable_persistent_conversations)
+	except Exception:
+		return True
+
+
 def get_or_create_conversation(module_label, linked_doctype, linked_name):
 	existing = frappe.get_all(
 		"UCC AI Conversation",
@@ -73,7 +89,7 @@ def record_usage_log(conversation, module_label, result):
 	log = frappe.new_doc("UCC AI Usage Log")
 	log.user = frappe.session.user
 	log.module = module_label
-	log.conversation = conversation.name
+	log.conversation = conversation.name if conversation else None
 	log.tools_called = frappe.as_json(result.get("tools_called") or [])
 	log.source_ids = frappe.as_json(result.get("known_record_names") or [])
 	answer = result.get("answer") or {}
@@ -83,3 +99,24 @@ def record_usage_log(conversation, module_label, result):
 	log.request_diagnostic_id = frappe.generate_hash(length=10)
 	log.insert(ignore_permissions=True)
 	return log
+
+
+def persist_turn(module_label, linked_doctype, linked_name, question, result):
+	"""One question/answer turn's full persistence. Returns the conversation,
+	or None when persistence is disabled -- the response contract already
+	treats a null conversation_id as valid, so callers need no branch.
+
+	Usage Log is written either way, deliberately (see persistence_enabled)."""
+	conversation = None
+	if persistence_enabled():
+		conversation = get_or_create_conversation(module_label, linked_doctype, linked_name)
+		record_message(conversation, "user", question)
+		answer = result.get("answer")
+		if answer:
+			record_message(
+				conversation, "assistant", answer["text"],
+				model=answer.get("model"), latency_ms=answer.get("latency_ms"),
+				token_usage=answer.get("token_usage"), source_summary=result.get("known_record_names"),
+			)
+	record_usage_log(conversation, module_label, result)
+	return conversation

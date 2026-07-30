@@ -353,6 +353,45 @@ report(State.usage_logs[0].tools_called == str(result["tools_called"]), "usage l
 
 
 # ============================================================
+# The memory toggle (UCC Intelligence Settings.enable_persistent_conversations)
+# -- REAL, not a placeholder: it must genuinely stop conversation storage.
+# ============================================================
+State.settings = FakeDoc({"enable_ai": 1, "ai_provider": "OpenAI", "ai_model": "gpt-4o-mini", "max_output_tokens": 500,
+	"default_temperature": 0.2, "ai_request_timeout_seconds": 30, "enable_persistent_conversations": 1})
+report(conversations.persistence_enabled() is True, "persistence_enabled() True when the toggle is on")
+State.settings = FakeDoc({"enable_ai": 1, "ai_provider": "OpenAI", "ai_model": "gpt-4o-mini", "max_output_tokens": 500,
+	"default_temperature": 0.2, "ai_request_timeout_seconds": 30, "enable_persistent_conversations": 0})
+report(conversations.persistence_enabled() is False, "persistence_enabled() False when the toggle is off")
+
+# toggle OFF: no conversation, no messages -- but the audit log still written
+State.conversations = []
+State.messages = []
+State.usage_logs = []
+returned = conversations.persist_turn("Quality Action", "Quality Action", "QA-0001", "Is this ready?", result)
+report(returned is None, "persist_turn returns None when persistence is off (contract already allows a null conversation_id)")
+report(len(State.conversations) == 0 and len(State.messages) == 0, "toggle OFF stores NO conversation and NO messages")
+report(len(State.usage_logs) == 1, "toggle OFF still writes the Usage Log -- audit trail is deliberately not gated by a memory setting")
+report(State.usage_logs[0].conversation is None, "the usage log row tolerates a null conversation link when persistence is off")
+
+# toggle ON: full persistence
+State.settings = FakeDoc({"enable_ai": 1, "ai_provider": "OpenAI", "ai_model": "gpt-4o-mini", "max_output_tokens": 500,
+	"default_temperature": 0.2, "ai_request_timeout_seconds": 30, "enable_persistent_conversations": 1})
+State.conversations = []
+State.messages = []
+State.usage_logs = []
+returned = conversations.persist_turn("Quality Action", "Quality Action", "QA-0001", "Is this ready?", result)
+report(returned is not None, "persist_turn returns the conversation when persistence is on")
+report(len(State.conversations) == 1 and len(State.messages) == 2 and len(State.usage_logs) == 1,
+	"toggle ON stores 1 conversation, 2 messages (user+assistant), 1 usage log")
+
+# a settings-read fault must not silently start dropping history
+_broken_get_single = frappe_stub.get_single
+frappe_stub.get_single = lambda dt: (_ for _ in ()).throw(Exception("settings unreadable"))
+report(conversations.persistence_enabled() is True, "persistence_enabled() defaults ON when the setting can't be read at all -- a read fault must not silently discard conversations")
+frappe_stub.get_single = _broken_get_single
+
+
+# ============================================================
 # ask_ucc/contracts.py + api.py end to end
 # ============================================================
 response = contracts.build_response(conversation, result)
