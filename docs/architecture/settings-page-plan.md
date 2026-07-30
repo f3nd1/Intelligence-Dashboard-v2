@@ -149,11 +149,42 @@ any existing frontend page — this is new, additive surface only.
 
 ---
 
-## Open questions worth your call before I build
+## Decisions (Felix, 2026-07-30) and what was built
 
-1. **Memory toggle** (§2): build `enable_persistent_conversations`/`conversation_retention_days` now
-   as pure schema-first placeholders, or hold them until `UCC AI Conversation`/`Message` exist?
-2. **API key field**: confirmed skip for this round (§2), deferred to a real ADR when Phase 8 starts —
-   agree, or do you want *some* placeholder field (even just "provider account configured elsewhere:
-   yes/no") on the form now?
-3. Anything in §2/§3 that should be cut entirely rather than shipped as a placeholder?
+1. **Memory toggle: cut entirely.** `enable_persistent_conversations`/`conversation_retention_days`
+   are not on the DocType — no field for storage that doesn't exist yet.
+2. **AI provider "configured elsewhere" indicator: added**, as a status check, not a stored field.
+   `settings/status.py`'s `get_ai_provider_configured()` reads a conventional site_config key
+   (`ucc_intelligence_ai_api_key`) via `frappe.conf.get(...)` and reports presence only — never the
+   value, never written from this DocType. Shown as a dashboard indicator on the form.
+3. **Controlled-actions default approval level: cut entirely**, same reasoning as the memory toggle —
+   no field, no Select, no shipped default. `enable_document_knowledge` and `enable_monitoring` kept
+   as planned.
+
+**Built**:
+
+- `sophia/doctype/ucc_intelligence_settings/` — the Single DocType (JSON + `.py` controller with the
+  `default_temperature` 0-2 clamp + `.js` controller), module `Sophia`, System Manager read/write only.
+- `settings/status.py` — `get_dashboard_access_summary()` (thin reshape of the existing
+  `load_rows()`, no duplication), `get_insights_chart_status()`, `get_insights_permission_setting()`,
+  `get_ai_provider_configured()`, `get_db_reachable()`, and `get_status_summary()` combining them —
+  exactly the "genuinely live" tier from §3, nothing from the other two tiers pretending to be more
+  than it is. The "AI provider/model fields filled" indicator (configuration-presence tier) is
+  computed client-side from `frm.doc` instead — it only needs the form's own already-loaded fields, no
+  server round-trip.
+- `api.py`'s `get_settings_status()` — gates on `frappe.only_for("System Manager")` before returning
+  anything, since the underlying reads aren't all self-gating (`load_rows()` uses
+  `ignore_permissions=True` by its own existing design) and this endpoint returns more than any one
+  user should necessarily see.
+- `tools/test_ucc_intelligence_settings.py` — 43/43 checks: each status function against a stubbed
+  `frappe`, the temperature clamp, the DocType JSON shape (explicitly asserts the three cut fields are
+  *absent*, not just unused, and that no field name suggests a stored secret), and the System Manager
+  gate firing before data returns.
+
+**Verification**: new test 43/43; full existing regression suite still green (all criteria, access,
+contracts, page tests); legacy directories (`custom-html-block/`, `server-scripts/`, `src/`, `dist/`,
+`archive/`) confirmed byte-for-byte untouched via `git diff --stat`.
+
+**Not yet done, needs Felix's bench access**: the DocType hasn't been installed/migrated on a real
+site, so the form itself (fields, indicators, the Manage Role Access button) hasn't been seen live —
+same bench-dependent gap every other phase has had at this stage.
