@@ -3,6 +3,7 @@ import frappe
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_6, criterion_7
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
+from ucc_intelligence.settings import status as _settings_status
 
 CRITERION_1_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
@@ -44,6 +45,19 @@ def health_check():
 		"app": "ucc_intelligence",
 		"user": frappe.session.user,
 	}
+
+
+@frappe.whitelist()
+def get_settings_status():
+	"""Read-only status summary for the UCC Intelligence Settings form
+	(docs/architecture/settings-page-plan.md). System Manager only -- the
+	underlying reads (settings/status.py) are not all self-gating the way
+	an ordinary frappe.get_list call is (load_rows() reads with
+	ignore_permissions=True by its own existing design), and this returns
+	more than any one user should necessarily see (every configured role's
+	access, not just their own), so the gate belongs here explicitly."""
+	frappe.only_for("System Manager")
+	return _settings_status.get_status_summary()
 
 
 @frappe.whitelist()
