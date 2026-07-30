@@ -1,7 +1,7 @@
 import frappe
 
 from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
-from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_6, criterion_7
+from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_5, criterion_6, criterion_7
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
 from ucc_intelligence.ask_ucc import conversations as _ask_ucc_conversations
@@ -28,6 +28,19 @@ CRITERION_3_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
 	"question_registry", "question_catalogue", "drilldown",
 ]
+
+CRITERION_5_ALLOWED_ACTIONS = [
+	"summary", "source_status", "policy_registry", "requirement_registry",
+	"question_registry", "drilldown",
+]
+
+# Criterion 5's legacy script defaults `limit` to 500 and clamps to 2000; the
+# shared parse_payload() (extracted from Criterion 1) uses 2000/5000. Routing
+# this criterion through the shared parser unchanged would silently quadruple
+# both, so get_criterion_5() re-clamps rather than forking the parser for one
+# caller. See analytics/criterion_5.py's module docstring, special case 5.
+CRITERION_5_DEFAULT_ROW_LIMIT = 500
+CRITERION_5_MAX_ROW_LIMIT = 2000
 
 CRITERION_6_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
@@ -150,6 +163,45 @@ def get_criterion_3():
 		criterion_label="Criterion 3",
 	)
 	return criterion_3.run(**parsed)
+
+
+@frappe.whitelist()
+def get_criterion_5():
+	"""Phase 4 port of `ucc_analytics_criterion_5`
+	(server-scripts/UCC Analytics - Criterion 5.py). Option A, a verbatim
+	port like Criteria 1/2/3/6/7 -- Criterion 5 has no
+	admission_intelligence-equivalent block, so Criterion 4's Insights-embed
+	approach doesn't apply. Not yet called by the frontend (Decision B: ship
+	dark). See ucc_intelligence/ucc_intelligence/analytics/criterion_5.py.
+
+	Two criterion-specific deviations from the shared shape, both documented
+	in that module: `question_id` (a drilldown fallback no other criterion
+	has, so it's read here rather than widening the shared parser) and the
+	tighter legacy row limit, re-clamped below."""
+	raw_payload = frappe.form_dict.get("payload")
+	parsed = parse_payload(
+		raw_payload,
+		default_subcriterion="5.1.1",
+		allowed_actions=CRITERION_5_ALLOWED_ACTIONS,
+		criterion_label="Criterion 5",
+	)
+
+	payload = raw_payload or {}
+	if isinstance(payload, str):
+		try:
+			payload = frappe.parse_json(payload) or {}
+		except Exception:
+			payload = {}
+	if not isinstance(payload, dict):
+		payload = {}
+
+	requested_limit = payload.get("limit") or CRITERION_5_DEFAULT_ROW_LIMIT
+	try:
+		parsed["row_limit"] = max(1, min(int(requested_limit), CRITERION_5_MAX_ROW_LIMIT))
+	except Exception:
+		parsed["row_limit"] = CRITERION_5_DEFAULT_ROW_LIMIT
+
+	return criterion_5.run(question_id=payload.get("question_id"), **parsed)
 
 
 @frappe.whitelist()
