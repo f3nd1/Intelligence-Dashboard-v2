@@ -165,18 +165,45 @@ from ucc_intelligence.analytics import chart_registry  # noqa: E402
 counts = chart_registry.counts()
 report(counts["total"] >= 107, "every chart in the platform is registered (%d)" % counts["total"])
 report(counts["real"] >= 6, "at least the 6 bench-verified admission charts are REAL (%d)" % counts["real"])
-print("        real=%(real)d placeholder=%(placeholder)d total=%(total)d" % counts)
+print("        real=%(real)d authored=%(authored)d composite=%(composite)d placeholder=%(placeholder)d total=%(total)d" % counts)
 
-for chart_id, spec in chart_registry.CHARTS.items():
-	if spec["status"] == "placeholder":
-		report("PLACEHOLDER" in spec["insights_query_title"].upper(),
-			"placeholder chart %r is labelled PLACEHOLDER in its Insights title" % chart_id,
-			"title %r hides its status" % spec["insights_query_title"])
-		break  # one representative; the exhaustive form is below
+per = chart_registry.per_criterion()
+print("\n        %-14s %6s %5s %9s %10s %12s" % ("criterion", "total", "real", "authored", "composite", "unspecified"))
+for key, row in per.items():
+	print("        %-14s %6d %5d %9d %10d %12d" % (
+		key, row["total"], row["real"], row["authored"], row["composite"], row["unspecified"]))
+	report(row["unspecified"] == 0,
+		"%s: every chart is classified (real / authored / composite), none left unexamined" % key,
+		"%d unclassified" % row["unspecified"])
+
 unlabelled = [c for c, s in chart_registry.CHARTS.items()
 	if s["status"] == "placeholder" and "PLACEHOLDER" not in s["insights_query_title"].upper()]
 report(not unlabelled, "EVERY placeholder chart is labelled as one, never disguised as real",
 	"unlabelled: %s" % unlabelled[:5])
+
+# An authored chart must carry a runnable spec, not just a promise.
+for chart_id, spec in chart_registry.CHARTS.items():
+	if spec["status"] != "authored":
+		continue
+	detail = spec.get("spec") or {}
+	if not (detail.get("doctype") and detail.get("dimension")):
+		report(False, "authored chart %r carries a complete spec" % chart_id, str(detail))
+		break
+else:
+	report(True, "every AUTHORED chart carries a doctype + dimension the builder can execute")
+
+# A composite chart must say WHY, so an empty card is explained rather than
+# looking like an oversight.
+composites = [c for c, s in chart_registry.CHARTS.items() if s.get("composite_reason")]
+report(all(chart_registry.CHARTS[c]["composite_reason"].startswith("COMPOSITE:") for c in composites),
+	"every composite chart records why it cannot be a single Insights query (%d)" % len(composites))
+
+# "real" means the runtime WILL execute the query. A chart promoted without
+# anyone seeing it return data produces an error card on a live dashboard.
+actually_real = {c for c, s in chart_registry.CHARTS.items() if s["status"] == "real"}
+report(actually_real == chart_registry.BENCH_VERIFIED_CHARTS,
+	"only bench-VERIFIED charts are marked real (%d)" % len(actually_real),
+	"unverified charts claiming real: %s" % sorted(actually_real - chart_registry.BENCH_VERIFIED_CHARTS)[:5])
 
 real_titles = [s["insights_query_title"] for s in chart_registry.CHARTS.values() if s["status"] == "real"]
 report(all("PLACEHOLDER" not in t.upper() for t in real_titles),
@@ -187,6 +214,20 @@ report("is_public" not in chart_service_source,
 	"the chart runtime never touches Insights' public-dashboard mechanism")
 report("run_chart_query" in chart_service_source,
 	"real charts execute through the bench-proved permission-checked path")
+
+# --- THE SINGLE RENDERING PATH ---------------------------------------------
+# The hand-rolled SVG renderers must be unreachable: charts come from
+# Insights or they come up empty, with nothing in between.
+render_block = page_source[page_source.index("function renderLiveChartCardNow("):]
+render_block = render_block[:render_block.index("function renderKpis(")]
+report("metricRows(" not in render_block,
+	"the chart path no longer derives rows from the criterion API (metricRows is unreachable)")
+report("chartForLive(" not in render_block,
+	"the chart path no longer calls the hand-rolled SVG renderer (chartForLive is unreachable)")
+report("ucc_intelligence.api.get_chart_data" in page_source,
+	"charts are fetched from Insights through the app's own endpoint")
+report("renderInsightsChartInto" in page_source, "there is exactly one chart renderer, and it is the Insights one")
+report("paintChartPlaceholder" in page_source, "a chart with no Insights definition paints a labelled placeholder")
 
 page_has_badge = "ucc-insights-badge" in page_source
 report(page_has_badge, "the dashboard badges each chart with its Insights status")

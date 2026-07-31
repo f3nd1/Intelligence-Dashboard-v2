@@ -113,6 +113,30 @@ engine_transformed = engine_transformed.replace(
 	'        heading.textContent = chart.title || "Live visual";\n',
 	'        heading.textContent = chart.title || "Live visual";\n        applyInsightsBadge(heading, chart.id);\n', 1
 )
+
+# --- SINGLE RENDERING PATH --------------------------------------------------
+# Felix's decision: everything through Insights, no dual path, no fallback to
+# the hand-rolled SVG renderers. The legacy renderLiveChartCardNow() derived
+# rows from the criterion API and drew them with chartForLive(); it is
+# replaced wholesale. Applied here as an explicit swap so this test still
+# catches drift in the rest of the engine, and so the replacement itself is
+# asserted rather than assumed.
+_LEGACY_RENDER_NOW = re.search(
+	r"function renderLiveChartCardNow\(card\)\{[\s\S]*?\ncard\.dataset\.liveCardRendered=\"1\";\n\}",
+	engine_transformed)
+checks.append(report(bool(_LEGACY_RENDER_NOW),
+	"legacy renderLiveChartCardNow() found in the transformed engine (baseline for the swap)"))
+if _LEGACY_RENDER_NOW:
+	checks.append(report("metricRows(" in _LEGACY_RENDER_NOW.group(0),
+		"the legacy renderer really did derive rows from the criterion API"))
+	checks.append(report("chartForLive(" in _LEGACY_RENDER_NOW.group(0),
+		"the legacy renderer really did call the hand-rolled SVG renderer"))
+	_new_render = re.search(
+		r"// DOCUMENTED DIVERGENCE FROM THE PORT[\s\S]*?\n\}(?=\nfunction renderKpis\()", ported)
+	checks.append(report(bool(_new_render), "the Insights-only chart renderer is present in the ported page"))
+	if _new_render:
+		engine_transformed = engine_transformed.replace(
+			_LEGACY_RENDER_NOW.group(0), _new_render.group(0), 1)
 engine_transformed = engine_transformed.replace(
 	"function bootstrapDashboards(){\nmountUnifiedDashboards();",
 	"function bootstrapDashboards(){\nmountUnifiedDashboards();\n"

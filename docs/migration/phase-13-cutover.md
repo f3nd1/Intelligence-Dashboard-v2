@@ -106,3 +106,71 @@ Verified against 5 mutations — reverting one criterion to its Server Script,
 reverting dashboard access, disguising a placeholder chart as real, reaching
 for the public-dashboard mechanism, and dropping the facts-only constraint
 from a prompt. All caught.
+
+---
+
+# Round 2 — Felix's five decisions applied
+
+## 1. Charts emptied — no dual rendering path
+
+The previous round kept 107 charts rendering the criterion API's numbers
+under a "pending" badge. That is gone. `renderLiveChartCardNow()` no longer
+calls `metricRows()` or `chartForLive()`; the end-to-end gate asserts both
+are unreachable from the chart path.
+
+A chart now shows exactly one of two things — real Insights data, or a
+labelled empty placeholder. There is no third case and no fallback.
+
+**Reading applied to "remove the hand-rolled SVG renderers entirely":**
+removed *from the runtime path* (unreachable, asserted). The functions
+remain physically present because they sit inside the verbatim-ported engine
+region, whose provenance still matters for the KPI, QA-table, sources and
+readiness code that is still in use. Deleting ~500 lines from the port to
+remove dead code would cost that guarantee. Flagged in the list below.
+
+## 2. Definitions authored by criterion
+
+| Criterion | Total | Real | Authored | Composite |
+|---|---|---|---|---|
+| 1 | 6 | 0 | **2** | 4 |
+| 2 | 10 | 0 | **4** | 6 |
+| 3 | 19 | 0 | **7** | 12 |
+| 4 | 6 | **6** | 0 | 0 |
+| 5 | 32 | 0 | **7** | 25 |
+| 6 | 36 | 0 | **9** | 27 |
+| 7 | 4 | 0 | **1** | 3 |
+| **Total** | **113** | **6** | **30** | **77** |
+
+Every chart is classified; none unexamined.
+
+### The finding that shaped this
+The charts are two genuinely different kinds, and only one is expressible as
+a single Insights query:
+
+- **Authored (30)** — a group-by over one DocType returning label/value rows.
+  "Status Distribution" = count Quality Action by status. Specs written;
+  `build_insights_charts_from_specs.py` materialises them.
+
+- **Composite (77)** — visualisations over the *criterion engine's own
+  computed metric set*, not over a table. "Control Coverage" is how many of
+  a subcriterion's configured controls resolved. "Source Availability" is
+  which DocTypes *this user* may read — per-request permission state, not
+  data. "Evidence Readiness" and "Exception Profile" score across many
+  metrics at once. An Insights query returns rows from a data source; it
+  cannot express "how much of my own metric catalogue came back available".
+
+  Each records **why**, so an empty card is explained rather than looking
+  like an oversight. Making them real needs a decision — see the list.
+
+### Status discipline
+`authored` ≠ `real`. Only bench-**verified** charts are `real`, enforced by
+`BENCH_VERIFIED_CHARTS` and asserted. Promotion is a deliberate human edit
+after seeing the query return correct data; the builder script reports
+readiness but cannot promote.
+
+## 3. AI prompts — unchanged, as instructed.
+
+## 4. Legacy Server Scripts — stay on disk and on the site, disabled.
+No deletion date. `verify_cutover.py` proves nothing depends on them.
+
+## 5. `test_drop_server_message.py` deleted.
