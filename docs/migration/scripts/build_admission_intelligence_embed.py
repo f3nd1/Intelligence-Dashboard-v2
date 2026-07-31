@@ -101,6 +101,13 @@ the one new chart) automatically. Each STAGE prints its own pass/fail.
 import frappe
 import frappe.share
 
+# Reused, not reimplemented: this is the same classifier the Analytics
+# frontend already uses to decide whether an error is a permission denial
+# (analytics/contracts.py, itself ported verbatim from the legacy Criterion 7
+# script). A second copy here could drift from it, and then the permission
+# test and the running product would disagree about what "denied" means.
+from ucc_intelligence.analytics.contracts import is_permission_error
+
 DATA_SOURCE_NAME_HINT = "Site DB"
 WORKBOOK_TITLE_HINT = "Workbook 2"
 
@@ -436,6 +443,37 @@ def stage_4_permission_test(execute_results):
 		finally:
 			frappe.set_user("Administrator")
 
+	def classify_restricted(outcome):
+		"""What the restricted user's result actually tells us.
+
+		Insights can deny at either of two layers, and BOTH are passes:
+
+		  filtered  the query ran and row-level filtering
+		            (Insights Settings.apply_user_permissions) removed every
+		            row -> 0 rows.
+		  denied    the query was refused outright at the table/document
+		            layer, before executing at all.
+
+		`denied` is not weaker than `filtered`. Both disclose zero rows;
+		`denied` refuses earlier, without running the query. Insights moved
+		from the first to the second, which is why this test started
+		reporting NEEDS REVIEW on charts that had previously been proved.
+
+		The distinction that matters is NOT error-vs-rows, it is
+		permission-vs-anything-else. A timeout, a missing table or a syntax
+		error ALSO returns no data to the restricted user, and would sail
+		through a check that merely accepted "an error". Those stay
+		inconclusive, because they prove nothing about permissions -- they
+		would look identical for a fully authorised user.
+		"""
+		if isinstance(outcome, int):
+			# The one genuinely bad outcome, and it deserves its own name:
+			# rows reached a user with no access to the underlying DocType.
+			return "filtered" if outcome == 0 else "breach"
+		if is_permission_error(outcome):
+			return "denied"
+		return "inconclusive"
+
 	query_names = {dk: frappe.db.get_value("Insights Query v3", {"title": CHART_TITLES[dk]}, "name") for dk in candidates}
 	for query_name in query_names.values():
 		if query_name and not is_shared("Insights Query v3", query_name, test_user_email):
@@ -467,9 +505,64 @@ def stage_4_permission_test(execute_results):
 	for data_key in candidates:
 		control_rows = execute_as_test_user(query_names[data_key])
 		restricted_rows = restricted_rows_by_key[data_key]
-		verdict = "GO" if restricted_rows == 0 and isinstance(control_rows, int) and control_rows > 0 else "NEEDS REVIEW"
-		print("%-26s restricted=%s control=%s -> %s" % (data_key, restricted_rows, control_rows, verdict))
-		permission_results[data_key] = {"restricted_rows": restricted_rows, "control_rows": control_rows, "verdict": verdict}
+		enforcement = classify_restricted(restricted_rows)
+
+		# The control read is what makes any of this evidence. Restricted and
+		# control are the SAME query, the SAME chart and the SAME user
+		# account -- the only variable is the System Manager role. So if the
+		# restricted read was denied and the control read returns real rows,
+		# the denial is caused by the permission state and cannot be a broken
+		# query, a renamed table or an empty result set: those would fail the
+		# control read too.
+		control_ok = isinstance(control_rows, int) and control_rows > 0
+
+		if not control_ok:
+			verdict = "NEEDS REVIEW"
+			reason = "control read returned no rows -- cannot tell a real denial from a broken query"
+		elif enforcement == "breach":
+			verdict = "PERMISSION BREACH"
+			reason = "restricted user received %s rows of data they have no access to" % restricted_rows
+		elif enforcement == "filtered":
+			verdict = "GO"
+			reason = "row-level filtering removed every row"
+		elif enforcement == "denied":
+			verdict = "GO"
+			reason = "refused at the table layer, before the query ran"
+		else:
+			verdict = "NEEDS REVIEW"
+			reason = "restricted read failed for a NON-permission reason; proves nothing about access"
+
+		print("%-26s restricted=%-58s control=%-5s -> %s (%s)" % (
+			data_key, restricted_rows, control_rows, verdict, reason))
+		permission_results[data_key] = {
+			"restricted_rows": restricted_rows,
+			"control_rows": control_rows,
+			"enforcement": enforcement,
+			"verdict": verdict,
+			"reason": reason,
+		}
+
+	# When denial happens at the TABLE layer, the query never runs, so this
+	# run has not exercised row-level filtering at all. That is fine for
+	# safety -- nothing was disclosed -- but it means the site-wide setting is
+	# now the only remaining evidence that the second layer still exists. If
+	# the table gate is ever relaxed (a legitimate share, a role grant), row
+	# filtering becomes the thing standing between a user and the data, so it
+	# is checked explicitly rather than assumed.
+	apply_user_permissions = bool(frappe.db.get_singles_dict("Insights Settings").get("apply_user_permissions"))
+	denied_only = [k for k, r in permission_results.items() if r["enforcement"] == "denied"]
+	if denied_only and not apply_user_permissions:
+		print("\nWARNING -- %d chart(s) were denied at the table layer, so row-level filtering was never"
+			" exercised, AND Insights Settings.apply_user_permissions is OFF. The second layer is"
+			" both unproven and disabled. Turn it back on." % len(denied_only))
+		for data_key in denied_only:
+			permission_results[data_key]["verdict"] = "NEEDS REVIEW"
+			permission_results[data_key]["reason"] = (
+				"denied at the table layer, but apply_user_permissions is OFF -- row filtering unproven and disabled")
+	elif denied_only:
+		print("\nNote: %d chart(s) were denied at the TABLE layer rather than returning 0 filtered rows."
+			" Both deny equally; the table layer refuses earlier. apply_user_permissions is ON, so"
+			" row-level filtering remains in place as the second layer." % len(denied_only))
 
 	for dt, dn in [("Insights Query v3", frappe.db.get_value("Insights Query v3", {"title": CHART_TITLES[dk]}, "name")) for dk in candidates]:
 		if is_shared(dt, dn, test_user_email):

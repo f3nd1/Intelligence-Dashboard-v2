@@ -22,6 +22,10 @@ import types
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "docs" / "migration" / "scripts" / "build_admission_intelligence_embed.py"
+# The script imports is_permission_error from the installed app rather than
+# keeping a second copy of it. On a bench the app is importable; here it has
+# to be put on the path, which also proves the import actually resolves.
+sys.path.insert(0, str(ROOT / "ucc_intelligence"))
 checks = []
 
 
@@ -43,6 +47,9 @@ class State:
 	meta_fields = {}
 	created_docs = []
 	singles = {"Insights Settings": {"apply_user_permissions": 1}}
+	# "filter" = row-level 0 rows; "deny" = table-level refusal;
+	# "broken" = a non-permission failure that also yields no data.
+	enforcement_layer = "filter"
 
 
 class FakeQueryDoc:
@@ -53,10 +60,32 @@ class FakeQueryDoc:
 		return True
 
 	def execute(self, page_size=None):
-		# The real behaviour being modelled: apply_user_permissions filters
-		# every row out for a user lacking Student Applicant read access.
+		# Insights can deny at either of two layers, and this stub can model
+		# both, because the real bench switched from one to the other:
+		#
+		#   "filter"  apply_user_permissions strips every row -> 0 rows
+		#   "deny"    the table check refuses before the query runs
+		#
+		# An elevated reader always gets real rows either way -- that is what
+		# makes the restricted result evidence rather than noise.
+		if State.enforcement_layer == "empty":
+			# The table is genuinely empty, for everyone. A restricted read of
+			# 0 rows then means nothing at all -- it is not evidence of
+			# filtering. This is the case the control read exists to catch.
+			return {"rows": []}
 		if State.current_user in State.elevated_users or State.current_user == "Administrator":
 			return {"rows": [{"academic_year": "2024", "count": 6}] * 6}
+		if State.enforcement_layer == "deny":
+			raise Exception("You do not have permission to access this table")
+		if State.enforcement_layer == "leak":
+			# Enforcement genuinely gone: a restricted user receives real
+			# rows. The outcome the whole test exists to catch.
+			return {"rows": [{"academic_year": "2024", "count": 6}] * 6}
+		if State.enforcement_layer == "broken":
+			# NOT a permission problem: the shape a timeout or a renamed
+			# table takes. Returns no data to the restricted user just like a
+			# real denial, and must NOT be accepted as one.
+			raise Exception("Query execution timed out after 30s")
 		return {"rows": []}
 
 
@@ -231,6 +260,102 @@ report(
 	all(isinstance(r["control_rows"], int) and r["control_rows"] > 0 for r in permission_results.values()),
 	"Stage 4: every chart's control read returns real rows (proves 0 was permission-driven, not an empty table)",
 )
+report(
+	all(r["enforcement"] == "filtered" for r in permission_results.values()),
+	"Stage 4 names WHICH layer denied -- row-level filtering, in this configuration",
+)
+
+# ============================================================
+# THE ENFORCEMENT-LAYER CHANGE (2026-07-31)
+#
+# Insights moved from silently returning 0 rows to refusing outright with
+# "You do not have permission to access this table". Both deny; the table
+# layer refuses earlier, without running the query. The script previously
+# only recognised 0 rows and reported NEEDS REVIEW on a genuine pass.
+#
+# The danger in accepting an error is accepting the WRONG error: a timeout
+# or a renamed table also returns no data to the restricted user. These
+# check that the distinction drawn is permission-vs-not, not error-vs-rows.
+# ============================================================
+def rerun(layer, apply_user_permissions=1):
+	State.enforcement_layer = layer
+	State.singles["Insights Settings"]["apply_user_permissions"] = apply_user_permissions
+	State.elevated_users = set()
+	State.users = set()
+	State.roles = set()
+	State.shares = set()
+	return namespace["stage_4_permission_test"](execute_results)
+
+
+denied = rerun("deny")
+report(
+	all(r["verdict"] == "GO" for r in denied.values()),
+	"TABLE-LAYER DENIAL: a hard PermissionError is a PASS -- it discloses nothing and refuses earlier than a filtered 0",
+)
+report(
+	all(r["enforcement"] == "denied" for r in denied.values()),
+	"...and is recorded as 'denied', so a change of enforcement layer stays VISIBLE rather than silently normalised",
+)
+report(
+	all("table layer" in r["reason"] for r in denied.values()),
+	"...with a reason naming the layer that refused",
+)
+
+broken = rerun("broken")
+report(
+	all(r["verdict"] == "NEEDS REVIEW" for r in broken.values()),
+	"NOT LOOSENED: a NON-permission error (timeout) is still NEEDS REVIEW -- it yields no data too, but proves nothing about access",
+)
+report(
+	all(r["enforcement"] == "inconclusive" for r in broken.values()),
+	"...and is classified inconclusive rather than quietly counted as a denial",
+)
+
+# The one outcome that is an actual leak must be named as one, not lumped in
+# with "something looked odd". Driven for real, not asserted against source.
+leaked = rerun("leak")
+report(
+	all(r["verdict"] == "PERMISSION BREACH" for r in leaked.values()),
+	"BREACH: rows reaching a restricted user gets its OWN verdict, not the same NEEDS REVIEW as a timeout",
+)
+report(
+	all(r["enforcement"] == "breach" for r in leaked.values()),
+	"BREACH: a non-zero restricted row count classifies as a breach, never as filtered",
+)
+report(
+	all(r["restricted_rows"] > 0 for r in leaked.values()),
+	"BREACH: the leaked row count is reported, so the size of the exposure is visible",
+)
+
+# apply_user_permissions is the second layer. When denial happens at the
+# table layer the query never runs, so this run does not exercise row
+# filtering at all -- the setting is then the only evidence it still exists.
+denied_no_row_filter = rerun("deny", apply_user_permissions=0)
+report(
+	all(r["verdict"] == "NEEDS REVIEW" for r in denied_no_row_filter.values()),
+	"DEFENCE IN DEPTH: table-layer denial with apply_user_permissions OFF is NOT a clean GO -- "
+	"row filtering is then both unproven by this run and disabled",
+)
+filtered_no_setting = rerun("filter", apply_user_permissions=0)
+report(
+	all(r["enforcement"] == "filtered" for r in filtered_no_setting.values()),
+	"...whereas a run that actually observed row-level filtering still reports what it saw",
+)
+
+# The control read is what turns a restricted result into evidence. Without
+# it, a query broken or empty for EVERYONE reads as a clean denial.
+empty_table = rerun("empty")
+report(
+	all(r["verdict"] == "NEEDS REVIEW" for r in empty_table.values()),
+	"CONTROL READ: 0 restricted rows with 0 control rows is NEEDS REVIEW -- an empty table is not proof of filtering",
+)
+report(
+	all("control read" in r["reason"] for r in empty_table.values()),
+	"...and the reason says the control read is what was missing, not the permission model",
+)
+
+State.enforcement_layer = "filter"
+State.singles["Insights Settings"]["apply_user_permissions"] = 1
 
 passed = all(checks)
 print()
