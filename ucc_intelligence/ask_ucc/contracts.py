@@ -15,7 +15,12 @@ BLOCKED_STATUSES = ("permission_denied", "not_found", "unavailable")
 def build_response(module_key, conversation, result):
 	module = MODULES[module_key]
 	facts = result.get("facts") or {}
-	primary = facts.get(module["primary_tool"]) or {}
+	# The source link comes from the primary tool's FULL result, not from
+	# `facts`. A narrowly-routed question ("what is this student's
+	# nationality?") may not display the primary tool at all, or may display
+	# only two of its fields -- neither of which should cost the answer its
+	# link back to the record it came from (CLAUDE.md §8.4).
+	primary = result.get("primary") or facts.get(module["primary_tool"]) or {}
 
 	if primary.get("status") == "available":
 		sources = [{
