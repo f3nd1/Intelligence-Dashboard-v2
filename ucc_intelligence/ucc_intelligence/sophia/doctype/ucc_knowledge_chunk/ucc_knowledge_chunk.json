@@ -9,20 +9,67 @@
 	"engine": "InnoDB",
 	"autoname": "hash",
 	"fields": [
-		{"fieldname": "source", "fieldtype": "Link", "options": "UCC Knowledge Source", "label": "Source", "reqd": 1},
-		{"fieldname": "section_index", "fieldtype": "Int", "label": "Section Index"},
-		{"fieldname": "heading", "fieldtype": "Data", "label": "Heading",
-		 "description": "The section this text came from. Retrieval cites document + section, never just the document -- CLAUDE.md §9 requires exact source segments."},
-		{"fieldname": "content", "fieldtype": "Text", "label": "Content"},
-		{"fieldname": "column_break_1", "fieldtype": "Column Break"},
-		{"fieldname": "source_title", "fieldtype": "Data", "label": "Source Title",
-		 "description": "Denormalised so a citation can be rendered without a second read."},
-		{"fieldname": "permission_role", "fieldtype": "Link", "options": "Role", "label": "Restricted To Role",
-		 "description": "Copied from the source at index time so retrieval can filter without joining."},
-		{"fieldname": "is_current", "fieldtype": "Check", "label": "From Current Version", "default": "1"}
+		{
+			"fieldname": "source",
+			"fieldtype": "Link",
+			"options": "UCC Knowledge Source",
+			"label": "Source",
+			"reqd": 1
+		},
+		{
+			"fieldname": "section_index",
+			"fieldtype": "Int",
+			"label": "Section Index"
+		},
+		{
+			"fieldname": "heading",
+			"fieldtype": "Data",
+			"label": "Heading",
+			"description": "The section this text came from. Retrieval cites document + section, never just the document -- CLAUDE.md \u00a79 requires exact source segments."
+		},
+		{
+			"fieldname": "content",
+			"fieldtype": "Text",
+			"label": "Content"
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "source_title",
+			"fieldtype": "Data",
+			"label": "Source Title",
+			"description": "Denormalised so a citation can be rendered without a second read. Re-synced from the parent on every save."
+		},
+		{
+			"fieldname": "permission_role",
+			"fieldtype": "Link",
+			"options": "Role",
+			"label": "Restricted To Role",
+			"description": "DISPLAY ONLY -- do NOT filter on this. Retrieval gates on the SOURCE's permission_role, read live per request (knowledge/retrieval.py current_source_names). This is a copy kept for rendering, re-synced from the parent on every save so it can never be more permissive than the source."
+		},
+		{
+			"fieldname": "is_current",
+			"fieldtype": "Check",
+			"label": "From Current Version",
+			"default": "1"
+		}
 	],
 	"permissions": [
-		{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-		{"role": "All", "read": 1, "write": 0, "create": 0, "delete": 0}
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1
+		},
+		{
+			"role": "All",
+			"read": 1,
+			"write": 0,
+			"create": 0,
+			"delete": 0
+		}
 	]
 }

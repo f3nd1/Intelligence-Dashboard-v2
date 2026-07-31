@@ -16,6 +16,7 @@ rather than by ranking, so both are tested by asserting absence.
 
     python3 tools/test_ucc_intelligence_knowledge.py
 """
+import json
 import pathlib
 import sys
 import types
@@ -120,8 +121,23 @@ utils.today = staticmethod(lambda: "2026-07-31")
 utils.cint = lambda v: int(v) if str(v or "").strip().lstrip("-").isdigit() else 0
 utils.cstr = lambda v: "" if v is None else str(v)
 frappe_stub.utils = utils
+# The DocType controller does `from frappe.model.document import Document`,
+# so those submodules must exist as packages under the stub.
+model_stub = types.ModuleType("frappe.model")
+document_stub = types.ModuleType("frappe.model.document")
+
+
+class _StubDocument:
+	pass
+
+
+document_stub.Document = _StubDocument
+model_stub.document = document_stub
+frappe_stub.model = model_stub
 sys.modules["frappe"] = frappe_stub
 sys.modules["frappe.utils"] = utils
+sys.modules["frappe.model"] = model_stub
+sys.modules["frappe.model.document"] = document_stub
 
 from ucc_intelligence.knowledge import retrieval  # noqa: E402
 
@@ -393,6 +409,101 @@ report(any(r["source"] == new["source"] for r in after), "...and the new one sti
 report(all(chunk.get("is_current") == 0 for chunk in State.chunks.values()
 	if chunk.get("source") == old["source"]),
 	"...and the superseded document's chunks are marked not-current in the index too")
+
+
+
+
+# ============================================================
+# UCC Knowledge Chunk's controller -- the denormalisation guard
+#
+# `permission_role` on a chunk is a COPY of the source's. Retrieval gates on
+# the SOURCE, so the copy is display-only -- but it looks like a permission
+# field, and a stale copy would be LOOSER than the source it came from.
+# ============================================================
+import ucc_intelligence.sophia.doctype.ucc_knowledge_chunk.ucc_knowledge_chunk as chunk_module  # noqa: E402
+
+
+class ThrowError(Exception):
+	pass
+
+
+frappe_stub.throw = lambda msg, **kw: (_ for _ in ()).throw(ThrowError(msg))
+_prev_db = frappe_stub.db
+
+
+def _chunk_get_value(doctype, name, fields, as_dict=False):
+	if doctype == "UCC Knowledge Source" and name in State.sources:
+		source = State.sources[name]
+		return {f: source.get(f) for f in fields} if as_dict else source.get(fields)
+	return None
+
+
+frappe_stub.db = types.SimpleNamespace(get_value=_chunk_get_value, set_value=_set_value)
+
+
+class FakeChunkDoc(chunk_module.UCCKnowledgeChunk):
+	def __init__(self, **values):
+		self.__dict__.update({"source": None, "source_title": None, "permission_role": None})
+		self.__dict__.update(values)
+
+
+# A bare `pass` controller -- which is what was on the bench -- makes the
+# checks below crash with AttributeError instead of failing by name. Assert
+# the guard exists first, so the report says WHAT is missing before it does.
+report(hasattr(chunk_module.UCCKnowledgeChunk, "validate"),
+	"the chunk controller defines validate() -- without it the denormalisation guard never runs")
+report(hasattr(chunk_module.UCCKnowledgeChunk, "sync_denormalised_fields"),
+	"...and defines sync_denormalised_fields(), the guard itself")
+
+State.sources["KS-SYNC"] = FakeDoc({
+	"doctype": "UCC Knowledge Source", "name": "KS-SYNC", "title": "Staff Disciplinary Procedure",
+	"permission_role": "HR Manager", "is_active": 1, "superseded_by": None, "effective_date": None,
+})
+
+# A chunk carrying a STALE, looser role must be corrected on save.
+stale = FakeChunkDoc(source="KS-SYNC", source_title="Old Title", permission_role=None)
+stale.validate()
+report(stale.permission_role == "HR Manager",
+	"a chunk whose permission_role is STALE and LOOSER is re-synced from its source on save")
+report(stale.source_title == "Staff Disciplinary Procedure",
+	"the denormalised title is re-synced too, so a citation never shows a renamed document's old name")
+
+# Tightening the source must propagate, not linger.
+State.sources["KS-SYNC"]["permission_role"] = "Principal"
+stale.validate()
+report(stale.permission_role == "Principal",
+	"TIGHTENING a source's restriction propagates to its chunks on the next save")
+
+# An unrestricted source clears the copy rather than leaving an old role.
+State.sources["KS-SYNC"]["permission_role"] = None
+stale.validate()
+report(stale.permission_role is None,
+	"removing a restriction clears the copy -- it never keeps a role the source dropped")
+
+orphan = FakeChunkDoc(source=None)
+try:
+	orphan.validate()
+	report(False, "a chunk with no source should be rejected")
+except ThrowError:
+	report(True, "a chunk with NO source is rejected -- it could be neither cited nor permission-checked")
+
+missing_parent = FakeChunkDoc(source="KS-DELETED")
+try:
+	missing_parent.validate()
+	report(False, "a chunk pointing at a deleted source should be rejected")
+except ThrowError:
+	report(True, "a chunk pointing at a DELETED source is rejected rather than silently keeping stale copies")
+
+# The field must not be documented as a filter target.
+chunk_json = json.loads((ROOT / "ucc_intelligence/ucc_intelligence/sophia/doctype/"
+	"ucc_knowledge_chunk/ucc_knowledge_chunk.json").read_text(encoding="utf-8"))
+role_field = next(f for f in chunk_json["fields"] if f["fieldname"] == "permission_role")
+report("DISPLAY ONLY" in role_field["description"],
+	"the chunk's permission_role is documented as display-only, not a filter target")
+report("retrieval can filter" not in role_field["description"],
+	"...and no longer claims retrieval filters on it, which was never true")
+
+frappe_stub.db = _prev_db
 
 
 passed = all(checks)
