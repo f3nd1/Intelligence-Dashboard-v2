@@ -51,9 +51,16 @@ class FakeDoc(dict):
 		return None
 
 	def insert(self, ignore_permissions=False):
+		# Route by doctype, as a real database does. An earlier version put
+		# every insert into chunks, so register_source() created a Source that
+		# could never be read back -- the fake, not the code, was wrong.
 		State.counter += 1
-		self["name"] = self.get("name") or "CHUNK-%04d" % State.counter
-		State.chunks[self["name"]] = self
+		if self.get("doctype") == "UCC Knowledge Source":
+			self["name"] = self.get("name") or "KS-%04d" % State.counter
+			State.sources[self["name"]] = self
+		else:
+			self["name"] = self.get("name") or "CHUNK-%04d" % State.counter
+			State.chunks[self["name"]] = self
 		return self
 
 	def save(self, ignore_permissions=False):
@@ -76,6 +83,12 @@ def _get_all(doctype, filters=None, fields=None, limit_page_length=None,
 		rows = [dict(r) for r in State.sources.values()]
 		if filters and "is_active" in filters:
 			rows = [r for r in rows if r.get("is_active")]
+		# A real frappe.get_all returns every REQUESTED field, using None for
+		# ones never set. The fake returned only keys that happened to exist,
+		# so a source created through register_source() (which does not set
+		# superseded_by) raised KeyError in code that is correct.
+		if fields:
+			rows = [{f: r.get(f) for f in fields} for r in rows]
 	else:
 		rows = [dict(r) for r in State.chunks.values()]
 		if filters:
@@ -252,6 +265,135 @@ source_text = (ROOT / "ucc_intelligence/ucc_intelligence/knowledge/retrieval.py"
 for forbidden in ("requests.", "make_post_request", "make_get_request", "openai", "embedding", "http://", "https://"):
 	report(forbidden not in source_text.lower().replace("embeddings would mean", "").replace("embeddings provider", ""),
 		"NO EXTERNAL CALLS: retrieval.py contains no %r -- no document content leaves the estate" % forbidden)
+
+
+
+# ============================================================
+# THE FULL INGEST PATH, on the REAL sample documents
+#
+# Not a synthetic string: the actual files in docs/samples/knowledge/ go
+# through register -> extract -> chunk -> index -> retrieve -> cite. If the
+# pipeline breaks on a real document with real headings, this catches it.
+# ============================================================
+frappe_stub.get_all = _get_all
+frappe_stub.delete_doc = lambda dt, name, **kw: State.chunks.pop(name, None)
+
+_files = {}
+
+
+def _file_get_value(doctype, filters, fieldname):
+	if doctype == "File" and isinstance(filters, dict):
+		url = filters.get("file_url")
+		return url if url in _files else None
+	return None
+
+
+def _set_value(doctype, name, field, value):
+	store = State.sources if doctype == "UCC Knowledge Source" else State.chunks
+	if name in store:
+		store[name][field] = value
+
+
+frappe_stub.db = types.SimpleNamespace(get_value=_file_get_value, set_value=_set_value)
+
+
+class FakeFile(dict):
+	def __init__(self, values):
+		super().__init__(values)
+		self.__dict__ = self
+
+	def get_content(self):
+		return _files[self["file_url"]]["content"]
+
+
+_original_get_doc = frappe_stub.get_doc
+
+
+def _get_doc_with_files(arg, name=None):
+	if arg == "File":
+		return FakeFile(dict(_files[name], file_url=name))
+	return _original_get_doc(arg, name)
+
+
+frappe_stub.get_doc = _get_doc_with_files
+frappe_stub.utils.cstr = lambda v: "" if v is None else str(v)
+
+from ucc_intelligence.knowledge import ingestion  # noqa: E402
+
+SAMPLES = ROOT / "docs" / "samples" / "knowledge"
+report(SAMPLES.is_dir(), "the sample knowledge documents exist")
+sample_files = sorted(p for p in SAMPLES.glob("SAMPLE-*.md"))
+report(len(sample_files) >= 2, "there are at least two sample documents to index (%d)" % len(sample_files))
+for path in sample_files:
+	head = path.read_text(encoding="utf-8").splitlines()[0]
+	report("SAMPLE" in head.upper(),
+		"%s announces itself as a SAMPLE on its FIRST line -- a retrieved chunk is self-identifying" % path.name)
+
+# register + index straight from pasted text (the no-attachment path)
+State.sources.clear(); State.chunks.clear(); State.counter = 0
+refund_text = (SAMPLES / "SAMPLE-refund-policy.md").read_text(encoding="utf-8")
+registered = ingestion.register_source(
+	"SAMPLE Refund Policy", "Policy", text=refund_text,
+	document_version="1", effective_date="2026-01-01", classification="Internal")
+report(registered["ok"] and registered["indexed"], "a pasted document registers and indexes in one step")
+report(registered["sections"] >= 4, "the real sample splits into its real sections (%d)" % registered["sections"])
+refund_source = registered["source"]
+report(State.sources[refund_source]["sync_status"] == "Indexed", "the source records that it is indexed")
+
+# retrieve it back, with a citation
+found = retrieval.search("refund within 14 days")
+report(found["results"], "the indexed sample is retrievable")
+top = found["results"][0]
+report("Refund" in top["citation"], "the citation names the document")
+report("v1" in top["citation"], "the citation carries the version")
+report(top["heading"], "the citation names the exact section, not just the document")
+report("14" in top["content"], "the retrieved section contains the answer")
+
+# the attachment path, using a real File
+State.sources.clear(); State.chunks.clear(); State.counter = 0
+attendance_text = (SAMPLES / "SAMPLE-attendance-procedure.md").read_text(encoding="utf-8")
+_files["/files/SAMPLE-attendance-procedure.md"] = {
+	"name": "/files/SAMPLE-attendance-procedure.md",
+	"file_name": "SAMPLE-attendance-procedure.md",
+	"content": attendance_text,
+}
+attached = ingestion.register_source(
+	"SAMPLE Attendance Procedure", "Procedure",
+	attached_file="/files/SAMPLE-attendance-procedure.md", document_version="2")
+report(attached["ok"] and attached["indexed"], "a document indexes from an ATTACHED FILE, not just pasted text")
+report(retrieval.search("attendance 90%")["results"], "the attached document is retrievable")
+
+# an unsupported file type is REFUSED, not half-extracted
+_files["/files/policy.pdf"] = {"name": "/files/policy.pdf", "file_name": "policy.pdf", "content": b"%PDF-1.4 binary"}
+pdf = ingestion.register_source("SAMPLE PDF Policy", "Policy", attached_file="/files/policy.pdf")
+report(not pdf["indexed"], "a PDF is REFUSED rather than partially extracted")
+report("PDF" in pdf["message"] or "plain text" in pdf["message"],
+	"...and the refusal explains what is supported")
+report(State.sources[pdf["source"]]["sync_status"] == "Failed",
+	"the source is marked Failed, not left silently at Not Indexed")
+
+empty = ingestion.register_source("SAMPLE Empty", "Other", text="   ")
+report(not empty["indexed"] and "empty" in empty["message"].lower(),
+	"an empty document is refused with a reason")
+
+# supersession end to end: the old version becomes unquotable
+State.sources.clear(); State.chunks.clear(); State.counter = 0
+old = ingestion.register_source("SAMPLE Refund Policy", "Policy",
+	text="# Refund Eligibility\n\nA student may request a refund within thirty (30) days.\n",
+	document_version="1")
+new = ingestion.register_source("SAMPLE Refund Policy", "Policy",
+	text="# Refund Eligibility\n\nA student may request a refund within fourteen (14) days.\n",
+	document_version="2")
+report(len(retrieval.search("refund request")["results"]) == 2, "precondition: both versions are findable")
+ingestion.supersede(old["source"], new["source"])
+after = retrieval.search("refund request")["results"]
+report(all(r["source"] != old["source"] for r in after),
+	"SUPERSESSION: the old version can no longer be quoted as current")
+report(any(r["source"] == new["source"] for r in after), "...and the new one still answers")
+report(all(chunk.get("is_current") == 0 for chunk in State.chunks.values()
+	if chunk.get("source") == old["source"]),
+	"...and the superseded document's chunks are marked not-current in the index too")
+
 
 passed = all(checks)
 print()

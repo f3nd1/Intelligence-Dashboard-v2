@@ -839,7 +839,15 @@ for _chart_id, _spec in CHARTS.items():
 	if not _authored:
 		continue
 	if _authored.get("composite"):
+		# Felix's Decision A: these are NOT Insights charts and never will be.
+		# They render from the criterion API, which is where the numbers
+		# genuinely live, and are labelled "Computed live" so nobody mistakes
+		# one for an Insights chart. Leaving two thirds of the dashboard blank
+		# to satisfy a rule that turned out to be unachievable is the wrong
+		# outcome; being honest about which engine answered is the right one.
+		_spec["status"] = "computed"
 		_spec["composite_reason"] = _authored["reason"]
+		_spec["insights_query_title"] = ""
 	else:
 		_spec["status"] = "authored"
 		_spec["spec"] = _authored
@@ -860,13 +868,13 @@ def counts():
 	than asserted."""
 	real = sum(1 for spec in CHARTS.values() if spec["status"] == "real")
 	authored = sum(1 for spec in CHARTS.values() if spec["status"] == "authored")
-	composite = sum(1 for spec in CHARTS.values() if spec.get("composite_reason"))
+	computed = sum(1 for spec in CHARTS.values() if spec["status"] == "computed")
 	return {
 		"total": len(CHARTS),
 		"real": real,
 		"authored": authored,
-		"placeholder": len(CHARTS) - real - authored,
-		"composite": composite,
+		"computed": computed,
+		"placeholder": len(CHARTS) - real - authored - computed,
 	}
 
 
@@ -875,14 +883,14 @@ def per_criterion():
 	without counting by hand."""
 	out = {}
 	for spec in CHARTS.values():
-		row = out.setdefault(spec["criterion"], {"total": 0, "real": 0, "authored": 0, "composite": 0, "unspecified": 0})
+		row = out.setdefault(spec["criterion"], {"total": 0, "real": 0, "authored": 0, "computed": 0, "unspecified": 0})
 		row["total"] += 1
 		if spec["status"] == "real":
 			row["real"] += 1
 		elif spec["status"] == "authored":
 			row["authored"] += 1
-		elif spec.get("composite_reason"):
-			row["composite"] += 1
+		elif spec["status"] == "computed":
+			row["computed"] += 1
 		else:
 			row["unspecified"] += 1
 	return dict(sorted(out.items()))

@@ -165,21 +165,20 @@ from ucc_intelligence.analytics import chart_registry  # noqa: E402
 counts = chart_registry.counts()
 report(counts["total"] >= 107, "every chart in the platform is registered (%d)" % counts["total"])
 report(counts["real"] >= 6, "at least the 6 bench-verified admission charts are REAL (%d)" % counts["real"])
-print("        real=%(real)d authored=%(authored)d composite=%(composite)d placeholder=%(placeholder)d total=%(total)d" % counts)
+print("        real=%(real)d authored=%(authored)d computed=%(computed)d placeholder=%(placeholder)d total=%(total)d" % counts)
 
 per = chart_registry.per_criterion()
-print("\n        %-14s %6s %5s %9s %10s %12s" % ("criterion", "total", "real", "authored", "composite", "unspecified"))
+print("\n        %-14s %6s %5s %9s %10s %12s" % ("criterion", "total", "real", "authored", "computed", "unspecified"))
 for key, row in per.items():
 	print("        %-14s %6d %5d %9d %10d %12d" % (
-		key, row["total"], row["real"], row["authored"], row["composite"], row["unspecified"]))
+		key, row["total"], row["real"], row["authored"], row["computed"], row["unspecified"]))
 	report(row["unspecified"] == 0,
-		"%s: every chart is classified (real / authored / composite), none left unexamined" % key,
+		"%s: every chart is classified (real / authored / computed), none left unexamined" % key,
 		"%d unclassified" % row["unspecified"])
 
-unlabelled = [c for c, s in chart_registry.CHARTS.items()
-	if s["status"] == "placeholder" and "PLACEHOLDER" not in s["insights_query_title"].upper()]
-report(not unlabelled, "EVERY placeholder chart is labelled as one, never disguised as real",
-	"unlabelled: %s" % unlabelled[:5])
+report(counts["placeholder"] == 0,
+	"no chart is left as a bare placeholder -- every one is real, authored or computed")
+report(counts["computed"] > 0, "composite charts render from the criterion API (%d)" % counts["computed"])
 
 # An authored chart must carry a runnable spec, not just a promise.
 for chart_id, spec in chart_registry.CHARTS.items():
@@ -194,9 +193,13 @@ else:
 
 # A composite chart must say WHY, so an empty card is explained rather than
 # looking like an oversight.
-composites = [c for c, s in chart_registry.CHARTS.items() if s.get("composite_reason")]
-report(all(chart_registry.CHARTS[c]["composite_reason"].startswith("COMPOSITE:") for c in composites),
-	"every composite chart records why it cannot be a single Insights query (%d)" % len(composites))
+computed_charts = [c for c, s in chart_registry.CHARTS.items() if s["status"] == "computed"]
+report(all(chart_registry.CHARTS[c].get("composite_reason", "").startswith("COMPOSITE:") for c in computed_charts),
+	"every computed chart records why it is not an Insights chart (%d)" % len(computed_charts))
+report(all(not chart_registry.CHARTS[c]["insights_query_title"] for c in computed_charts),
+	"a computed chart claims NO Insights query -- it must not look like one that failed")
+report('badge.textContent = "Computed live"' in page_source,
+	"computed charts are labelled 'Computed live', visibly distinct from 'Insights'")
 
 # "real" means the runtime WILL execute the query. A chart promoted without
 # anyone seeing it return data produces an error card on a live dashboard.
@@ -220,10 +223,24 @@ report("run_chart_query" in chart_service_source,
 # Insights or they come up empty, with nothing in between.
 render_block = page_source[page_source.index("function renderLiveChartCardNow("):]
 render_block = render_block[:render_block.index("function renderKpis(")]
-report("metricRows(" not in render_block,
-	"the chart path no longer derives rows from the criterion API (metricRows is unreachable)")
+# Decision B: the hand-rolled per-type SVG renderers stay unreachable. One
+# renderer, two data engines -- metricRows() is a DATA extractor and is
+# legitimately used by the computed path; chartForLive() is the renderer and
+# must never run again.
 report("chartForLive(" not in render_block,
-	"the chart path no longer calls the hand-rolled SVG renderer (chartForLive is unreachable)")
+	"the hand-rolled SVG renderer is unreachable (chartForLive never called)")
+report("paintComputedChart" in render_block,
+	"computed charts have their own explicit path, not a silent fallback")
+report(render_block.count("paintChartSeries(") >= 2,
+	"Insights and computed charts share ONE renderer -- paintChartSeries")
+insights_branch = render_block[render_block.index("function renderInsightsChartInto("):]
+insights_branch = insights_branch[:insights_branch.index("function paintComputedChart(")]
+# Strip comment lines: the block EXPLAINS the computed path in prose, and a
+# mention of metricRows in a comment is documentation, not a call.
+insights_code = "\n".join(
+	line for line in insights_branch.splitlines() if not line.strip().startswith("//"))
+report("metricRows(" not in insights_code,
+	"an INSIGHTS chart never falls back to criterion-API rows -- no third case where the rule applies")
 report("ucc_intelligence.api.get_chart_data" in page_source,
 	"charts are fetched from Insights through the app's own endpoint")
 report("renderInsightsChartInto" in page_source, "there is exactly one chart renderer, and it is the Insights one")
@@ -266,14 +283,85 @@ report("if not ai_client.is_enabled()" in orchestration_source,
 	"AI is optional -- facts are returned when it is off")
 
 
+
 # ===========================================================================
-section("5. Bench scripts exist for what cannot be proved offline")
+section("5. Controlled actions -- nothing executes without a human")
+# ===========================================================================
+from ucc_intelligence.actions import registry as action_registry  # noqa: E402
+
+summary = action_registry.summary()
+report(summary["max_level"] <= action_registry.LEVEL_CONFIRM_BEFORE_EXECUTE,
+	"no action above level 2 exists -- levels 3 (automatic) and 4 are unimplemented")
+print("        %d actions, %d placeholder, max level %d" % (
+	summary["total"], summary["placeholder"], summary["max_level"]))
+
+service_source = (APP / "actions" / "service.py").read_text(encoding="utf-8")
+report("apply_workflow" in service_source, "approval runs on Frappe's native Workflow, not a hand-rolled engine")
+report('check_permission("write")' in service_source,
+	"permissions are RE-checked at execute, not trusted from propose time")
+report("idempotency_key" in service_source, "repeated proposals collapse to one request")
+
+workflow = json.loads((APP / "fixtures" / "workflow.json").read_text(encoding="utf-8"))[0]
+approve = next(t for t in workflow["transitions"] if t["action"] == "Approve")
+report(approve["allow_self_approval"] == 0, "the proposer cannot approve their own request")
+execute_from = [t["state"] for t in workflow["transitions"] if t["action"] == "Execute"]
+report(execute_from == ["Approved"], "Execute is reachable ONLY from Approved")
+
+# ===========================================================================
+section("6. Monitoring -- all 7 CLAUDE.md use cases, scheduled")
+# ===========================================================================
+from ucc_intelligence.monitoring import engine as monitoring_engine  # noqa: E402
+from ucc_intelligence.monitoring import rule_registry as monitoring_rules  # noqa: E402
+
+report(len(monitoring_rules.RULES) >= 7, "all seven §11 use cases have a rule (%d)" % len(monitoring_rules.RULES))
+placeholders = monitoring_rules.placeholder_rules()
+print("        %d rule(s) on PLACEHOLDER field mappings: %s" % (len(placeholders), placeholders))
+for rule_id in placeholders:
+	report(monitoring_rules.RULES[rule_id]["version"].endswith("placeholder"),
+		"%s declares a placeholder version, so a finding traces to provisional logic" % rule_id)
+covered = set()
+for cadence in ("daily", "weekly", "quarterly"):
+	due = monitoring_engine.rules_due(cadence)
+	covered.update(due)
+	print("        %-10s %s" % (cadence, due))
+report(covered == set(monitoring_rules.RULES),
+	"EVERY rule is on a schedule -- none is on-demand only",
+	"unscheduled: %s" % sorted(set(monitoring_rules.RULES) - covered))
+for entry in ("run_daily", "run_weekly", "run_quarterly"):
+	report(hasattr(monitoring_engine, entry), "scheduler entry point %s() exists" % entry)
+hooks_doc = (ROOT / "docs" / "migration" / "hooks-reference.md").read_text(encoding="utf-8")
+report("scheduler_events" in hooks_doc and "run_daily" in hooks_doc,
+	"the hooks.py entries needed to actually schedule it are documented")
+
+# ===========================================================================
+section("7. Document knowledge -- full ingest path")
+# ===========================================================================
+from ucc_intelligence.knowledge import ingestion  # noqa: E402
+
+for function in ("register_source", "index_source", "supersede", "extract_text", "reindex_stale"):
+	report(hasattr(ingestion, function), "ingestion.%s() exists" % function)
+samples = sorted((ROOT / "docs" / "samples" / "knowledge").glob("SAMPLE-*.md"))
+report(len(samples) >= 2, "sample documents exist so the flow is testable (%d)" % len(samples))
+for path in samples:
+	report("SAMPLE" in path.read_text(encoding="utf-8").splitlines()[0].upper(),
+		"%s is labelled SAMPLE on its first line" % path.name)
+ingestion_source = (APP / "knowledge" / "ingestion.py").read_text(encoding="utf-8")
+report("UNSUPPORTED_NOTE" in ingestion_source,
+	"an unsupported file type is refused with an explanation, never half-extracted")
+report((ROOT / "docs" / "migration" / "scripts" / "load_sample_knowledge.py").exists(),
+	"a bench script loads the samples and retrieves them back")
+
+
+# ===========================================================================
+section("8. Bench scripts exist for what cannot be proved offline")
 # ===========================================================================
 for name, purpose in [
 	("verify_cutover.py", "Server Scripts disabled, every surface re-exercised"),
 	("verify_ai_live.py", "one real OpenAI call, AI on vs off"),
 	("build_placeholder_insights_charts.py", "materialise placeholder Insights definitions"),
 	("build_admission_intelligence_embed.py", "build + permission-test the real Insights charts"),
+	("build_insights_charts_from_specs.py", "build the 30 authored chart queries"),
+	("load_sample_knowledge.py", "load + retrieve the sample documents"),
 ]:
 	path = ROOT / "docs" / "migration" / "scripts" / name
 	report(path.exists(), "bench script present: %-42s (%s)" % (name, purpose))

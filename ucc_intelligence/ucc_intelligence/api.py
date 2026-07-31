@@ -9,6 +9,9 @@ from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
 from ucc_intelligence.ask_ucc import conversations as _ask_ucc_conversations
 from ucc_intelligence.ask_ucc import guided_questions as _ask_ucc_guided
+from ucc_intelligence.actions import registry as _action_registry
+from ucc_intelligence.actions import service as _action_service
+from ucc_intelligence.knowledge import ingestion as _knowledge_ingestion
 from ucc_intelligence.knowledge import retrieval as _knowledge_retrieval
 from ucc_intelligence.monitoring import engine as _monitoring_engine
 from ucc_intelligence.monitoring import rule_registry as _monitoring_rules
@@ -223,6 +226,109 @@ def get_chart_data(chart_id=None, chart_ids=None):
 	if not chart_id:
 		frappe.throw(frappe._("A chart id is required."))
 	return _chart_service.get_chart(chart_id)
+
+
+
+# ---------------------------------------------------------------------------
+# CONTROLLED ACTIONS (CLAUDE.md Phase 12)
+#
+# Nothing here executes anything. propose() creates a Draft; approval runs
+# through Frappe's own Workflow; execute() only works from Approved and
+# re-checks permissions at that moment. See actions/service.py.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_action_types():
+	"""The allowlist, so a UI can offer only what exists. Metadata only."""
+	return {"ok": True, "summary": _action_registry.summary(), "actions": [
+		{"action_type": key, "label": spec["label"], "level": spec["level"],
+			"placeholder": spec["placeholder"], "description": spec["description"]}
+		for key, spec in sorted(_action_registry.ACTIONS.items())
+	]}
+
+
+@frappe.whitelist()
+def propose_action(action_type, title=None, payload=None, target_record=None, reason="", sources=None):
+	"""Propose an action. Creates a Draft and nothing else.
+
+	No only_for: proposing is harmless by construction -- a Draft executes
+	nothing, and propose() already checks the proposer can READ the target.
+	Approval and execution are where the gates belong, and they are gated.
+	"""
+	return _action_service.propose(
+		frappe.utils.cstr(action_type).strip(),
+		frappe.utils.cstr(title).strip() or None,
+		payload=payload, target_record=frappe.utils.cstr(target_record).strip() or None,
+		reason=frappe.utils.cstr(reason).strip(), sources=sources,
+	)
+
+
+@frappe.whitelist()
+def transition_action(action_request, workflow_action):
+	"""Move a request through the approval workflow.
+
+	Deliberately NOT gated with only_for here -- Frappe's Workflow decides
+	which roles may take which transition, including whether the proposer may
+	approve their own request. A second check here could disagree with it.
+	"""
+	return _action_service.transition(
+		frappe.utils.cstr(action_request).strip(),
+		frappe.utils.cstr(workflow_action).strip(),
+	)
+
+
+@frappe.whitelist()
+def execute_action(action_request):
+	"""Carry out an APPROVED request. System Manager only, on top of the
+	workflow's own gate -- this is the one call in the platform that writes
+	to another system, so it carries a belt as well as braces."""
+	frappe.only_for("System Manager")
+	return _action_service.execute(frappe.utils.cstr(action_request).strip())
+
+
+@frappe.whitelist()
+def get_action_requests(state=None, limit=50):
+	"""Requests visible to this user. frappe.get_list applies the DocType's
+	own permissions, which grant if_owner read to All -- so a proposer sees
+	their own requests and an approver sees everything."""
+	return {"ok": True, "requests": _action_service.list_requests(
+		frappe.utils.cstr(state).strip() or None, limit)}
+
+
+# ---------------------------------------------------------------------------
+# KNOWLEDGE INGESTION (CLAUDE.md Phase 9)
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def register_knowledge_source(title, source_type, text=None, attached_file=None,
+		document_version=None, effective_date=None, classification=None, permission_role=None):
+	"""Register and index a document in one step. System Manager only:
+	registering a source decides what the assistant will quote as policy."""
+	frappe.only_for("System Manager")
+	return _knowledge_ingestion.register_source(
+		frappe.utils.cstr(title).strip(),
+		frappe.utils.cstr(source_type).strip(),
+		text=text,
+		attached_file=frappe.utils.cstr(attached_file).strip() or None,
+		document_version=frappe.utils.cstr(document_version).strip() or None,
+		effective_date=effective_date or None,
+		classification=frappe.utils.cstr(classification).strip() or None,
+		permission_role=frappe.utils.cstr(permission_role).strip() or None,
+	)
+
+
+@frappe.whitelist()
+def reindex_knowledge_source(source):
+	"""Re-index one source after its file changed."""
+	frappe.only_for("System Manager")
+	return _knowledge_ingestion.index_source(frappe.utils.cstr(source).strip())
+
+
+@frappe.whitelist()
+def supersede_knowledge_source(old_source, new_source):
+	"""Retire a document in favour of its replacement, so the old one can
+	never again be quoted as current."""
+	frappe.only_for("System Manager")
+	return _knowledge_ingestion.supersede(
+		frappe.utils.cstr(old_source).strip(), frappe.utils.cstr(new_source).strip())
 
 
 @frappe.whitelist()

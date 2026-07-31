@@ -121,6 +121,7 @@ def _throw(message, **kwargs):
 frappe_stub.throw = _throw
 utils = types.ModuleType("frappe.utils")
 utils.now = staticmethod(lambda: "2026-07-31 04:00:00")
+utils.today = staticmethod(lambda: "2026-07-31")
 utils.cstr = lambda v: "" if v is None else str(v)
 utils.cint = lambda v: int(v) if str(v or "").strip().lstrip("-").isdigit() else 0
 frappe_stub.utils = utils

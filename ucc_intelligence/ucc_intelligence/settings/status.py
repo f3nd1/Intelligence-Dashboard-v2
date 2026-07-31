@@ -102,6 +102,37 @@ def get_chart_layer_status():
 	except Exception:
 		return {"total": None, "real": None, "placeholder": None}
 
+
+def get_action_status():
+	"""Controlled actions, and their ceiling. CLAUDE.md §12 caps what may be
+	automatic; showing the max implemented level makes "nothing runs without
+	a human" a visible fact rather than a claim in a docstring."""
+	try:
+		from ucc_intelligence.actions import registry
+		summary = registry.summary()
+		summary["nothing_automatic"] = summary["max_level"] <= registry.LEVEL_CONFIRM_BEFORE_EXECUTE
+		return summary
+	except Exception:
+		return {"total": None, "placeholder": None, "max_level": None}
+
+
+def get_monitoring_rule_status():
+	"""How many monitoring rules run on UNVERIFIED field mappings. A rule with
+	a wrong field name records a failed run rather than silently passing, but
+	an operator should be able to see that four of seven are provisional
+	without reading the registry."""
+	try:
+		from ucc_intelligence.monitoring import engine, rule_registry
+		placeholders = rule_registry.placeholder_rules()
+		return {
+			"total": len(rule_registry.RULES),
+			"placeholder_field_mappings": placeholders,
+			"placeholder_count": len(placeholders),
+			"cadences": {c: engine.rules_due(c) for c in ("daily", "weekly", "quarterly")},
+		}
+	except Exception:
+		return {"total": None, "placeholder_count": None}
+
 def get_status_summary():
 	return {
 		"ok": True,
@@ -112,5 +143,7 @@ def get_status_summary():
 		"ai_provider_configured": get_ai_provider_configured(),
 		"ai_prompts": get_ai_prompt_status(),
 		"chart_layer": get_chart_layer_status(),
+		"controlled_actions": get_action_status(),
+		"monitoring_rules": get_monitoring_rule_status(),
 		"db_reachable": get_db_reachable(),
 	}
