@@ -816,7 +816,32 @@ PLACEHOLDER_CHARTS = {
 # Promotion is a deliberate edit HERE -- add the chart id after checking its
 # output. build_insights_charts_from_specs.py tells you which are ready; it
 # cannot promote them itself, by design.
-BENCH_VERIFIED_CHARTS = set(REAL_ADMISSION_CHARTS)
+# Charts a human has SEEN return correct, readable categories on the real
+# site. Promotion is a deliberate edit here, never automatic -- "real" makes
+# the runtime execute the query, so a chart promoted on optimism produces an
+# error card, and one promoted on a bad dimension produces something worse:
+# a confident-looking chart of nothing.
+#
+# Promoted 2026-08-01 from the second bench run, after Felix reviewed each
+# preview. These returned real business categories. The other 20 authored
+# charts did NOT and are deliberately still unpromoted -- ten had fallen back
+# to `docstatus` (Frappe's internal draft/submitted flag) and rendered a
+# single bar labelled "0", which is exactly the confidently-wrong output this
+# whole project has been guarding against.
+FELIX_VERIFIED_2026_08_01 = {
+	"c3-overview-policy",
+	"c5-531-status",
+	"c6-overview-actions",
+	"c6-overview-policy",
+	"c611-findings",
+	"criterion_1-11-status",
+	"criterion_2-21-status",
+	"criterion_2-23-status",
+	"criterion_2-24-status",
+	"criterion_7-71-status",
+}
+
+BENCH_VERIFIED_CHARTS = set(REAL_ADMISSION_CHARTS) | FELIX_VERIFIED_2026_08_01
 
 CHARTS = dict(PLACEHOLDER_CHARTS)
 CHARTS.update(REAL_ADMISSION_CHARTS)
@@ -852,6 +877,14 @@ for _chart_id, _spec in CHARTS.items():
 		_spec["status"] = "authored"
 		_spec["spec"] = _authored
 		_spec["insights_query_title"] = "UCC AUTHORED - " + _authored["label"]
+
+
+# Apply the verified list AFTER the authored pass, so a promoted chart keeps
+# its spec (the runtime needs the query title) but is executed rather than
+# shown as pending.
+for _chart_id in FELIX_VERIFIED_2026_08_01:
+	if _chart_id in CHARTS and CHARTS[_chart_id]["status"] == "authored":
+		CHARTS[_chart_id]["status"] = "real"
 
 
 def get(chart_id):
