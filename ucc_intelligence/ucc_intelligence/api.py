@@ -2,9 +2,11 @@ import frappe
 
 from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_5, criterion_6, criterion_7
+from ucc_intelligence.analytics.contracts import is_permission_error as _is_permission_error
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
 from ucc_intelligence.ask_ucc import conversations as _ask_ucc_conversations
+from ucc_intelligence.ask_ucc import guided_questions as _ask_ucc_guided
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 from ucc_intelligence.settings import status as _settings_status
 
@@ -274,17 +276,80 @@ def ask_ucc(module, question, record):
 
 
 @frappe.whitelist()
+def search_ask_ucc_records(module, term=None):
+	"""Record-picker search for the Ask UCC tab.
+
+	The legacy picker bulk-loaded up to 5000 records into the browser and
+	filtered them client-side (custom-html-block/JAVASCRIPT.js's
+	uniqueStudentsFromRoll). Same *behaviour* here -- match the human name
+	as well as the record id, so typing "Mei" finds EDU-APP-2025-00001 --
+	but done server-side, so no bulk personal data crosses to the browser
+	just to power a search box.
+
+	Which fields are searched and returned comes from the fixed MODULES
+	registry, never from the caller: a request cannot ask this to search or
+	disclose an arbitrary field. frappe.get_list applies ordinary
+	permissions, so a user only ever sees records they could already read.
+	"""
+	module = frappe.utils.cstr(module).strip()
+	term = frappe.utils.cstr(term).strip()
+	if module not in _ask_ucc_orchestration.MODULES:
+		frappe.throw("Unsupported Ask UCC module.")
+	if not term:
+		return {"ok": True, "records": []}
+
+	config = _ask_ucc_orchestration.MODULES[module]
+	search_fields = config["search_fields"]
+	label_fields = config.get("label_fields") or [config.get("label_field")]
+	label_fields = [f for f in label_fields if f]
+
+	fields = ["name"]
+	for fieldname in search_fields + label_fields:
+		if fieldname not in fields:
+			fields.append(fieldname)
+
+	meta = frappe.get_meta(config["doctype"])
+	fields = [f for f in fields if f == "name" or meta.has_field(f)]
+	or_filters = [[f, "like", "%" + term + "%"] for f in search_fields if f == "name" or meta.has_field(f)]
+
+	try:
+		rows = frappe.get_list(
+			config["doctype"], fields=fields, or_filters=or_filters,
+			order_by="modified desc", limit_page_length=10,
+		) or []
+	except Exception as error:
+		if _is_permission_error(error):
+			return {"ok": True, "records": [], "status": "permission_denied"}
+		return {"ok": True, "records": [], "status": "unavailable"}
+
+	records = []
+	for row in rows:
+		parts = []
+		for fieldname in label_fields:
+			value = frappe.utils.cstr(row.get(fieldname)).strip()
+			if value and value not in parts:
+				parts.append(value)
+		records.append({"id": row.get("name"), "label": " ".join(parts) or row.get("name")})
+	return {"ok": True, "records": records}
+
+
+@frappe.whitelist()
 def get_ask_ucc_modules():
 	"""Which Ask UCC modules this user's roles allow the interface to build,
-	plus each one's record DocType so the frontend's record picker knows what
-	to search. Interface composition only -- same contract as
+	plus each one's record DocType and its guided-question categories (the
+	legacy "FAQ" buttons, see ask_ucc/guided_questions.py). Interface composition only -- same contract as
 	get_dashboard_access(), which is where the gating actually comes from."""
 	access = _get_dashboard_access()
 	allowed = access.get("ask_ucc_modules") or {}
 	return {
 		"ok": True,
 		"modules": [
-			{"key": key, "label": config["label"], "doctype": config["doctype"]}
+			{
+				"key": key,
+				"label": config["label"],
+				"doctype": config["doctype"],
+				"categories": _ask_ucc_guided.supported_questions(key),
+			}
 			for key, config in _ask_ucc_orchestration.MODULES.items()
 			if allowed.get(key)
 		],

@@ -670,6 +670,153 @@ report(modules_response["ok"] is True, "get_ask_ucc_modules returns ok")
 report(isinstance(modules_response["modules"], list), "get_ask_ucc_modules returns a module list")
 
 
+
+# ============================================================
+# GUIDED QUESTIONS -- must match the legacy maps EXACTLY, not be invented
+# ============================================================
+import ucc_intelligence.ask_ucc.guided_questions as guided  # noqa: E402
+import re as _re
+
+legacy_js = (ROOT / "custom-html-block" / "JAVASCRIPT.js").read_text(encoding="utf-8")
+
+
+def legacy_pairs(map_name):
+	"""Re-extract a question map straight from the legacy source, so this
+	proves the port matches the real thing rather than matching itself."""
+	start = legacy_js.index("const %s = {" % map_name)
+	end = legacy_js.index("\n};", start)
+	block_src = legacy_js[start:end]
+	# each entry is ["label", "question"] possibly with escaped apostrophes
+	return [
+		(a.replace("\\'", "'"), b.replace("\\'", "'"))
+		for a, b in _re.findall(r'\["([^"]*)",\s*"((?:[^"\\]|\\.)*)"\]', block_src)
+	]
+
+
+for map_name, module_key in [
+	("studentQuestionMap", "student_journey"),
+	("recruitmentQuestionMap", "recruitment_agent"),
+	("qualityActionQuestionMap", "quality_action"),
+]:
+	legacy = legacy_pairs(map_name)
+	report(len(legacy) > 10, "legacy %s re-extracted from JAVASCRIPT.js (%d questions)" % (map_name, len(legacy)))
+	ported_map = guided.MODULE_QUESTIONS[module_key][0]
+	ported = [(item[0], item[1]) for questions in ported_map.values() for item in questions]
+	report(sorted(ported) == sorted(legacy),
+		"GUIDED/%s: ported question map matches the legacy source EXACTLY (labels and question text)" % module_key)
+
+# category labels match the legacy renderCategoryOptions sets
+for module_key, expected_first in [
+	("student_journey", "Profile"),
+	("recruitment_agent", "Profile and Contract"),
+	("quality_action", "Overview"),
+]:
+	categories = guided.MODULE_QUESTIONS[module_key][1]
+	report(categories[0][1] == expected_first,
+		"GUIDED/%s: category labels are the module's own legacy set, not the student one" % module_key)
+	report([c[0] for c in categories] == ["profile", "journey", "academic", "attendance", "finance", "graduation", "cohort"],
+		"GUIDED/%s: the seven legacy category keys are all present" % module_key)
+
+# the filtering is real and honest
+for module_key in ("student_journey", "recruitment_agent", "quality_action"):
+	supported = guided.supported_questions(module_key)
+	keys = [c["key"] for c in supported]
+	report("cohort" not in keys,
+		"GUIDED/%s: the cohort category is held back (every question in it is cross-record, which is deferred)" % module_key)
+	report(len(supported) > 0, "GUIDED/%s: at least one category survives filtering" % module_key)
+	shown = {q["question"] for c in supported for q in c["questions"]}
+	unsupported = guided.UNSUPPORTED_QUESTIONS.get(module_key, set())
+	report(not (shown & unsupported),
+		"GUIDED/%s: no question whose backing tool was deferred is offered" % module_key)
+	report(all(c["questions"] for c in supported),
+		"GUIDED/%s: no empty category is rendered" % module_key)
+
+student_supported = {q["question"] for c in guided.supported_questions("student_journey") for q in c["questions"]}
+report("Show this student's profile" in student_supported, "GUIDED: a real, answerable question IS offered")
+report("Show this student's invoices" not in student_supported,
+	"GUIDED: the finance question backed by the dropped invoice name-match is NOT offered")
+
+
+# ============================================================
+# RECORD SEARCH -- must return real matching records, by human name
+# ============================================================
+State.list_rows["Student Applicant"] = [
+	{"name": "EDU-APP-2025-00001", "first_name": "Mei", "middle_name": "", "last_name": "Lim"},
+	{"name": "EDU-APP-2025-00002", "first_name": "Ravi", "middle_name": "", "last_name": "Kumar"},
+]
+
+
+def _search_get_list(doctype, fields=None, or_filters=None, order_by=None, limit_page_length=None):
+	if doctype in State.denied_doctypes:
+		raise frappe_stub.PermissionError("not permitted to read " + doctype)
+	rows = [dict(r) for r in State.list_rows.get(doctype, [])]
+	if not or_filters:
+		return rows
+	out = []
+	for row in rows:
+		for fieldname, _op, pattern in or_filters:
+			needle = pattern.strip("%").lower()
+			if needle and needle in str(row.get(fieldname, "")).lower():
+				out.append(row)
+				break
+	return out
+
+
+_prev_get_list = frappe_stub.get_list
+frappe_stub.get_list = _search_get_list
+
+
+class _SearchMeta:
+	def __init__(self, doctype):
+		self.doctype = doctype
+
+	def has_field(self, fieldname):
+		rows = State.list_rows.get(self.doctype) or [{}]
+		return fieldname in rows[0]
+
+
+_prev_get_meta = frappe_stub.get_meta
+frappe_stub.get_meta = lambda dt: _SearchMeta(dt)
+
+result = api.search_ask_ucc_records("student_journey", "Mei")
+report(result["ok"] is True, "SEARCH: returns ok")
+report(len(result["records"]) == 1, "SEARCH: typing a HUMAN NAME ('Mei') returns exactly the matching record")
+report(result["records"][0]["id"] == "EDU-APP-2025-00001", "SEARCH: the returned record is the right one")
+report(result["records"][0]["label"] == "Mei Lim", "SEARCH: the label is the composed human name, not the opaque id")
+
+by_id = api.search_ask_ucc_records("student_journey", "EDU-APP-2025-00002")
+report(len(by_id["records"]) == 1 and by_id["records"][0]["id"] == "EDU-APP-2025-00002",
+	"SEARCH: searching by record id still works (both paths, like the legacy version)")
+
+report(api.search_ask_ucc_records("student_journey", "")["records"] == [],
+	"SEARCH: an empty term returns nothing rather than dumping every record")
+report(api.search_ask_ucc_records("student_journey", "zzzznomatch")["records"] == [],
+	"SEARCH: a non-matching term returns no records")
+
+State.denied_doctypes.add("Student Applicant")
+denied = api.search_ask_ucc_records("student_journey", "Mei")
+report(denied["records"] == [] and denied.get("status") == "permission_denied",
+	"SEARCH: a permission-denied DocType reports permission_denied, never leaks rows")
+State.denied_doctypes.clear()
+
+try:
+	api.search_ask_ucc_records("not_a_module", "x")
+	report(False, "SEARCH: an unknown module should be rejected")
+except Exception:
+	report(True, "SEARCH: an unknown module is rejected -- fields can never be caller-supplied")
+
+for module_key, expected in [
+	("student_journey", "first_name"),
+	("recruitment_agent", "party_name"),
+	("quality_action", "custom_subject"),
+]:
+	fields = orchestration.MODULES[module_key]["search_fields"]
+	report(expected in fields,
+		"SEARCH/%s: searches its own legacy human-name field (%s), not just `name`" % (module_key, expected))
+
+frappe_stub.get_list = _prev_get_list
+frappe_stub.get_meta = _prev_get_meta
+
 passed = all(checks)
 print()
 print(("PASS" if passed else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))

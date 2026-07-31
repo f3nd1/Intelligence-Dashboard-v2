@@ -102,6 +102,66 @@ report(analytics_css == legacy_css,
 report(not (PAGE_DIR / "ask_ucc.css").exists(),
 	"no competing stylesheet file; the page injects its own scoped styles instead")
 
+# --- record picker autocomplete (gap 1) ---
+# The first version searched only `name` -- the record id -- so typing a
+# human name matched nothing and the box looked dead. It must go through
+# the server endpoint, which searches the module registry's declared
+# fields, and it must never fall back to a client-driven get_list.
+report("ucc_intelligence.api.search_ask_ucc_records" in page_js,
+	"the picker searches via the server endpoint, not a client-side name-only query")
+report("frappe.client.get_list" not in ask_block,
+	"the Ask block does NOT reach for a raw client get_list to power the picker")
+report(re.search(r"args:\s*\{\s*module:\s*module\.key,\s*term:", page_js) is not None,
+	"the search is called with the module key and the typed term")
+report("setTimeout" in ask_block and "clearTimeout" in ask_block,
+	"typing is debounced rather than firing a request per keystroke")
+report("ucc-ask-suggestion" in page_js, "matches render as a suggestion list under the input")
+report("r.label" in page_js and "r.id" in page_js,
+	"a suggestion shows the human label AND the record id, so the id stays visible")
+report(re.search(r'askEsc\(r\.label\)', page_js) is not None and re.search(r'askEsc\(r\.id\)', page_js) is not None,
+	"suggestion text is escaped -- record labels are user-entered data")
+report("hideSuggestions" in page_js, "the suggestion list closes again (blur/no-match/module change)")
+
+# --- guided question buttons (gap 2) ---
+report("[data-ask-guided]" in page_js, "there is a guided-question panel in the Ask surface")
+report("data-ask-category" in page_js and "data-ask-question-text" in page_js,
+	"guided questions render as category pills plus question buttons")
+report("module.categories" in page_js or "module && module.categories" in page_js,
+	"the guided questions come from the server payload, not a hardcoded list in the page")
+guided_start = page_js.index("function renderGuided(")
+guided_block = page_js[guided_start:guided_start + 4000]
+for legacy_label in ("Student Journey", "Quality Action", "Attendance and Leave"):
+	report(legacy_label not in guided_block,
+		"category label %r is NOT hardcoded in the page -- it is ported server-side" % legacy_label)
+report("Select a record first." in page_js,
+	"clicking a guided question with no record chosen prompts for one instead of firing a doomed request")
+report(re.search(r"questionInput\.value = text;", page_js) is not None and "ask();" in page_js,
+	"a guided question is sent on click (legacy one-click behaviour), not merely typed into the box")
+
+# The buttons must match the ported set exactly -- the page renders whatever
+# the server sends, so this checks the server side is the ported module.
+api_py = (ROOT / "ucc_intelligence" / "ucc_intelligence" / "api.py").read_text(encoding="utf-8")
+report("guided_questions" in api_py and "supported_questions" in api_py,
+	"get_ask_ucc_modules serves the ported legacy question maps, not an invented set")
+
+# --- settings link (gap 3) ---
+report("[data-ucc-settings-link]" in page_js, "the platform header carries a settings control")
+shell_html = page_js[page_js.index("const SHELL_HTML"):page_js.index("function initPlatformShell(")]
+report("data-ucc-settings-link" in shell_html,
+	"the settings control lives in SHELL_HTML, not injected ad hoc after boot")
+report("ucc-shell-collapse-toggle" in shell_html,
+	"the gear reuses the shell's existing header button class rather than a new control style")
+report('frappe.set_route("Form", "UCC Intelligence Settings")' in page_js,
+	"the settings control navigates to the real UCC Intelligence Settings doctype form")
+report("initSettingsLink(root)" in page_js, "the settings link is wired into boot()")
+report("frappe.client.get_count" in page_js and "button.hidden = false" in page_js,
+	"the gear stays hidden unless the user can actually read the Settings doctype")
+settings_dir = ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "doctype" / "ucc_intelligence_settings"
+report(settings_dir.exists(), "the UCC Intelligence Settings doctype the link points at really exists")
+settings_json = json.loads((settings_dir / "ucc_intelligence_settings.json").read_text(encoding="utf-8"))
+report(settings_json.get("name") == "UCC Intelligence Settings",
+	"the doctype name in the route matches the doctype's actual name")
+
 passed = all(checks)
 print()
 print(("PASS" if passed else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
