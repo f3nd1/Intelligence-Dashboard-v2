@@ -13,6 +13,7 @@ conversation/message/usage-log persistence.
 
     python3 tools/test_ucc_intelligence_ask_ucc.py
 """
+import json
 import pathlib
 import sys
 import types
@@ -162,10 +163,26 @@ def _get_single(doctype):
 	raise frappe_stub.DoesNotExistError(doctype)
 
 
-def _make_post_request(url, headers=None, data=None, timeout=None):
+# client.py talks to the provider through `requests`, NOT through
+# frappe.make_post_request -- that top-level attribute does not exist on a
+# real frappe, which is what made every live AI call fail with a generic
+# message. This suite is about orchestration rather than HTTP, so it stubs
+# the network boundary client.py actually uses, at the same place a real
+# call would leave the process.
+class FakeResponse:
+	def __init__(self, payload, status_code=200):
+		self._payload = payload
+		self.status_code = status_code
+		self.text = json.dumps(payload) if isinstance(payload, dict) else str(payload)
+
+	def json(self):
+		return self._payload
+
+
+def _requests_request(method, url, headers=None, data=None, timeout=None):
 	if State.post_request_error:
 		raise State.post_request_error
-	return State.post_request_response
+	return FakeResponse(State.post_request_response)
 
 
 class FakeUtils:
@@ -205,7 +222,6 @@ frappe_stub.session = _Session()
 frappe_stub.utils = FakeUtils()
 frappe_stub.conf = State.conf
 frappe_stub.as_json = lambda v: str(v)
-frappe_stub.make_post_request = _make_post_request
 frappe_stub.generate_hash = lambda length=10: "h" * length
 frappe_stub.whitelist = lambda *a, **k: (lambda f: f)
 frappe_stub.logger = lambda *a, **k: types.SimpleNamespace(
@@ -224,6 +240,14 @@ class _PermissionError(Exception):
 
 frappe_stub.DoesNotExistError = _DoesNotExistError
 frappe_stub.PermissionError = _PermissionError
+requests_stub = types.ModuleType("requests")
+requests_stub.request = _requests_request
+requests_stub.exceptions = types.SimpleNamespace(
+	Timeout=type("Timeout", (Exception,), {}),
+	ConnectionError=type("ConnectionError", (Exception,), {}),
+)
+sys.modules["requests"] = requests_stub
+
 sys.modules["frappe"] = frappe_stub
 
 frappe_model_stub = types.ModuleType("frappe.model")
