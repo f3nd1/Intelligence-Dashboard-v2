@@ -17,18 +17,20 @@
 			"fieldname": "enable_ai",
 			"fieldtype": "Check",
 			"label": "Enable AI",
-			"description": "Placeholder -- no AI client exists yet to read this. Phase 8 will consume it once built."
+			"description": "When on, Ask UCC layers an AI interpretation on top of the retrieved facts. Facts are always returned either way."
 		},
 		{
 			"fieldname": "ai_provider",
-			"fieldtype": "Data",
+			"fieldtype": "Select",
 			"label": "AI Provider",
-			"description": "Free text, not a fixed list -- which provider is approved is still an open decision (CLAUDE.md §19)."
+			"description": "Provider identifier only -- NEVER a key. The API key is read exclusively from site_config.json (ucc_intelligence_ai_api_key) and has no field here by design. OpenAI is the only option because it is the only one implemented; which providers are institutionally approved is still open (CLAUDE.md \u00a719).",
+			"options": "\nOpenAI"
 		},
 		{
 			"fieldname": "ai_model",
-			"fieldtype": "Data",
-			"label": "AI Model"
+			"fieldtype": "Select",
+			"label": "AI Model",
+			"description": "Use \u201cFetch Available Models\u201d to populate this from the provider\u2019s own model list. Not free text -- a free-text field is where a pasted secret ends up."
 		},
 		{
 			"fieldname": "ai_settings_column_break",
@@ -44,7 +46,7 @@
 			"fieldtype": "Float",
 			"label": "Default Temperature",
 			"default": "0.2",
-			"description": "CLAUDE.md §7.1: \"normally low for institutional answers.\" Clamped to 0-2 on save."
+			"description": "CLAUDE.md \u00a77.1: \"normally low for institutional answers.\" Clamped to 0-2 on save."
 		},
 		{
 			"fieldname": "ai_request_timeout_seconds",

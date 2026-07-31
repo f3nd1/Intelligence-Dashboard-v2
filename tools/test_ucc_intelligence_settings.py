@@ -12,6 +12,7 @@ anything.
     python3 tools/test_ucc_intelligence_settings.py
 """
 import json
+import re
 import pathlib
 import sys
 import types
@@ -81,6 +82,18 @@ frappe_stub.only_for = lambda *a, **k: None
 frappe_stub.logger = lambda *a, **k: types.SimpleNamespace(
 	info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None,
 )
+
+
+class FrappeThrow(Exception):
+	pass
+
+
+def _throw(message, title=None, **kwargs):
+	raise FrappeThrow(message)
+
+
+frappe_stub.throw = _throw
+frappe_stub._ = lambda text, *a, **k: text
 sys.modules["frappe"] = frappe_stub
 
 frappe_model_stub = types.ModuleType("frappe.model")
@@ -205,15 +218,108 @@ report(perm["role"] == "System Manager" and perm["read"] == 1 and perm["write"] 
 import ucc_intelligence.sophia.doctype.ucc_intelligence_settings.ucc_intelligence_settings as settings_doctype  # noqa: E402
 
 
+class FakeField:
+	def __init__(self, fieldname, fieldtype, label=None):
+		self.fieldname = fieldname
+		self.fieldtype = fieldtype
+		self.label = label or fieldname
+
+
+class FakeMeta:
+	"""Mirrors the real DocType's own field list, read from the JSON rather
+	than hand-listed, so a field added there is covered here automatically."""
+	fields = [FakeField(f["fieldname"], f["fieldtype"], f.get("label")) for f in doctype_json["fields"]]
+
+
 class FakeSettingsDoc(settings_doctype.UCCIntelligenceSettings):
-	def __init__(self, temperature):
-		self.default_temperature = temperature
+	def __init__(self, **values):
+		self.meta = FakeMeta()
+		self.__dict__.setdefault("default_temperature", None)
+		self.__dict__.update(values)
+
+	def get(self, fieldname):
+		return getattr(self, fieldname, None)
 
 
 for given, expected in [(-5.0, 0.0), (0.2, 0.2), (2.0, 2.0), (9.0, 2.0), (None, None)]:
-	doc = FakeSettingsDoc(given)
+	doc = FakeSettingsDoc(default_temperature=given)
 	doc.validate()
 	report(doc.default_temperature == expected, "default_temperature %r clamps to %r" % (given, expected))
+
+
+# ============================================================
+# SECURITY: no field on this DocType may hold an API key.
+#
+# The AI Provider field was a plain Data field and a real key was pasted
+# into it, in cleartext, on a saved and viewable form. Making that one
+# field a Select fixes that one field. These check the DocType as a whole
+# refuses a key, so a field added later inherits the protection.
+# ============================================================
+provider_field = next(f for f in doctype_json["fields"] if f["fieldname"] == "ai_provider")
+report(provider_field["fieldtype"] == "Select",
+	"SECURITY: AI Provider is a Select -- free text is what let a key be pasted in")
+report([o for o in provider_field["options"].split("\n") if o] == ["OpenAI"],
+	"SECURITY: OpenAI is the ONLY option -- no provider is invented while CLAUDE.md §19 approval is open")
+report("NEVER a key" in provider_field["description"] and "site_config" in provider_field["description"],
+	"SECURITY: the field says on the form itself where the key actually belongs")
+report(next(f for f in doctype_json["fields"] if f["fieldname"] == "ai_model")["fieldtype"] == "Select",
+	"SECURITY: AI Model is a Select too -- it was the other free-text box on the AI row")
+for field in doctype_json["fields"]:
+	report(field["fieldtype"] != "Password",
+		"SECURITY: %r is not a Password field -- a stored secret is still a stored secret" % field["fieldname"])
+
+# Shapes that must be REFUSED, on every text-ish field, not just ai_provider.
+KEY_SHAPES = [
+	"sk-proj-" + "A" * 40,          # the shape actually pasted
+	"sk-" + "B" * 48,               # classic OpenAI
+	"sk-ant-api03-" + "C" * 40,     # Anthropic, in case a provider is added
+	"Bearer sk-" + "D" * 40,        # pasted with the header prefix
+	"  sk-" + "E" * 32 + "  ",      # pasted with whitespace
+]
+TEXT_FIELDS = [f["fieldname"] for f in doctype_json["fields"]
+	if f["fieldtype"] in ("Data", "Select", "Small Text", "Text", "Long Text", "Code", "Password")]
+report(len(TEXT_FIELDS) >= 2, "SECURITY: there are text fields to protect (%s)" % TEXT_FIELDS)
+
+for fieldname in TEXT_FIELDS:
+	for shape in KEY_SHAPES:
+		doc = FakeSettingsDoc(**{fieldname: shape})
+		try:
+			doc.validate()
+			report(False, "SECURITY: %s accepted an API-key-shaped value -- it MUST be rejected" % fieldname)
+		except FrappeThrow as error:
+			# The refusal must not echo the secret into the error, the error
+			# log, or the user's screen.
+			report(shape.strip() not in str(error),
+				"SECURITY: %s rejects a key and does NOT echo the value back" % fieldname)
+
+# ...and must not become unusable for legitimate values.
+for fieldname, legitimate in [("ai_provider", "OpenAI"), ("ai_model", "gpt-4o-mini"), ("ai_model", "o3-mini")]:
+	doc = FakeSettingsDoc(**{fieldname: legitimate})
+	try:
+		doc.validate()
+		report(True, "SECURITY: %s still accepts the legitimate value %r" % (fieldname, legitimate))
+	except FrappeThrow:
+		report(False, "SECURITY: %s wrongly rejected the legitimate value %r" % (fieldname, legitimate))
+
+# The key must be read from site_config and NOWHERE else.
+client_source = (ROOT / "ucc_intelligence" / "ucc_intelligence" / "ai" / "client.py").read_text(encoding="utf-8")
+report(client_source.count("frappe.conf.get(AI_API_KEY_SITE_CONFIG_KEY)") >= 1,
+	"SECURITY: client.py reads the key from frappe.conf (site_config.json)")
+report("settings.api_key" not in client_source and "settings.ai_api_key" not in client_source
+	and "settings.ai_key" not in client_source,
+	"SECURITY: client.py never reads a key off the Settings DocType")
+for read_site_config in ("def complete(", "def list_models("):
+	body_start = client_source.index(read_site_config)
+	body = client_source[body_start:body_start + 2500]
+	report("frappe.conf.get(AI_API_KEY_SITE_CONFIG_KEY)" in body,
+		"SECURITY: %s reads the key FRESH from site_config on every call -- a rotated key takes effect immediately"
+		% read_site_config.strip("def ("))
+# Module-level = evaluated once at import; the key would then survive a
+# rotation until the workers restart. Every read must be inside a function.
+report(re.search(r"^\w+\s*=\s*frappe\.conf\.get", client_source, re.M) is None,
+	"SECURITY: the key is not captured into a module-level variable at import time")
+report("AI_API_KEY_SITE_CONFIG_KEY = \"ucc_intelligence_ai_api_key\"" in client_source,
+	"SECURITY: the site_config key NAME is the documented convention, unchanged")
 
 # ============================================================
 # get_settings_status gates on System Manager before returning data

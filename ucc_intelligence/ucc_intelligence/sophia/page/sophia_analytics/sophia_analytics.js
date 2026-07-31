@@ -1153,12 +1153,18 @@ const ASK_STYLE_TEXT = `
 .ucc-ask-suggestions{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card-bg,#fff);border:1px solid var(--border-color,#d1d8dd);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)}
 .ucc-ask-suggestion{padding:6px 10px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:1px}
 .ucc-ask-suggestion-id{font-size:11px;opacity:.65}
-.ucc-ask-categories{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 8px}
-.ucc-ask-category{padding:3px 10px;border:1px solid var(--border-color,#d1d8dd);border-radius:999px;background:transparent;font-size:11px;cursor:pointer}
-.ucc-ask-category.is-active{background:var(--bg-light-gray,#f4f5f6);font-weight:600}
-.ucc-ask-questions{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 12px}
-.ucc-ask-question{padding:4px 10px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;background:var(--card-bg,#fff);font-size:12px;cursor:pointer;text-align:left}
-.ucc-ask-question:hover{background:var(--bg-light-gray,#f4f5f6)}
+/* Two rows, two jobs, so two visual weights. Row 1 is navigation: which
+   topic am I in -- uppercase, tracked, borderless, the selected one filled
+   solid so the current topic is unmistakable. Row 2 is the actions inside
+   that topic -- sentence case, outlined cards, larger text. Previously both
+   rows were near-identical pills and the hierarchy was invisible. */
+.ucc-ask-categories{display:flex;flex-wrap:wrap;gap:2px;padding:2px 16px 0;border-bottom:1px solid var(--border-color,#e6e9ec);margin:0 0 10px}
+.ucc-ask-category{padding:6px 12px;border:0;border-bottom:2px solid transparent;background:transparent;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted,#8d99a6);cursor:pointer}
+.ucc-ask-category:hover{color:var(--text-color,#36414c)}
+.ucc-ask-category.is-active{color:var(--text-color,#36414c);border-bottom-color:var(--text-color,#36414c)}
+.ucc-ask-questions{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}
+.ucc-ask-question{padding:6px 12px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;background:var(--card-bg,#fff);font-size:13px;cursor:pointer;text-align:left}
+.ucc-ask-question:hover{background:var(--bg-light-gray,#f4f5f6);border-color:var(--text-muted,#8d99a6)}
 .ucc-shell-settings-link{margin-left:18px;padding:5px 9px;font-size:19px;line-height:1;background:transparent;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;opacity:.7;cursor:pointer}
 .ucc-shell-settings-link:hover{opacity:1;background:var(--bg-light-gray,#f4f5f6)}
 .ucc-ask-suggestion:hover,.ucc-ask-suggestion.is-active{background:var(--bg-light-gray,#f4f5f6)}
@@ -1486,10 +1492,16 @@ function renderAnswerZone(message, module) {
 	// on every answer it is just noise. So the notice is only shown when
 	// something was actually lost:
 	//
-	//   disabled / unavailable -> AI never ran; it is a configuration state,
-	//       not an event. If the facts rendered, the question is answered and
-	//       there is nothing to report. Only worth saying when the facts zone
-	//       will be empty too, so the user isn't left with a blank answer.
+	//   disabled -> an administrator deliberately turned AI off. That is a
+	//       choice, not an event; if the facts rendered, there is nothing to
+	//       report. Only worth saying when the facts zone will be empty too,
+	//       so the user isn't left with a blank answer.
+	//   unavailable -> AI is switched ON but cannot run: no key in
+	//       site_config, provider/model blank, unimplemented provider. ALWAYS
+	//       shown. This is a fault, not a setting, and suppressing it is what
+	//       made "Enable AI is on but nothing happens" impossible to diagnose
+	//       -- the message names the exact missing piece, so it must reach
+	//       the person who can fix it.
 	//   error / guardrail_blocked -> AI DID run and its output was lost or
 	//       withheld. Always shown; silently dropping a withheld answer would
 	//       hide a guardrail firing.
@@ -1502,11 +1514,11 @@ function renderAnswerZone(message, module) {
 	// interpretation" hint, that tagging is where it goes.
 	const hasFacts = Object.keys(message.facts || {})
 		.some((k) => message.facts[k] && message.facts[k].status === "available");
-	if (hasFacts && (status === "disabled" || status === "unavailable")) return "";
+	if (hasFacts && status === "disabled") return "";
 
 	const reasons = {
 		disabled: "AI interpretation is turned off. The facts below come straight from live records.",
-		unavailable: "AI interpretation is not configured. The facts below come straight from live records.",
+		unavailable: "AI is enabled but could not run, so this answer is facts only.",
 		guardrail_blocked: "An AI answer was generated but referenced something not present in the retrieved facts, so it was withheld. The facts below are unaffected.",
 		error: "AI interpretation could not be produced. The facts below come straight from live records.",
 		not_found: "That record could not be found.",

@@ -40,14 +40,27 @@ const FACTS_PRESENT = { get_student_profile: { status: "available", nationality:
 const FACTS_EMPTY = {};
 const FACTS_BLOCKED = { get_student_profile: { status: "permission_denied" } };
 
-// --- UX FIX 2: a plain data lookup must NOT be told AI was turned off -------
-for (const status of ["disabled", "unavailable"]) {
-	assert.strictEqual(
-		renderAnswerZone({ ai_status: status, facts: FACTS_PRESENT }, MODULE), "",
-		"ai_status=" + status + " with facts present must render NO ai zone -- the facts answered it");
-}
+// --- a plain data lookup must NOT be told AI was deliberately turned off ----
+assert.strictEqual(
+	renderAnswerZone({ ai_status: "disabled", facts: FACTS_PRESENT }, MODULE), "",
+	"ai_status=disabled with facts present renders NO ai zone -- an admin chose that, nothing was lost");
 
-// --- ...but with nothing else to show, the user must not get a blank answer -
+// --- ...but "enabled and BROKEN" is a fault and must always be visible ------
+// This is the reported "Enable AI is on but no AI text ever appears" bug: the
+// status carries the exact missing piece (no key in site_config, blank
+// provider/model) and suppressing it made that impossible to diagnose.
+const misconfigured = renderAnswerZone(
+	{ ai_status: "unavailable", facts: FACTS_PRESENT,
+	  answer_error: "No API key configured (site_config.json: ucc_intelligence_ai_api_key)." },
+	MODULE);
+assert.ok(misconfigured.length > 0,
+	"ai_status=unavailable is NEVER suppressed -- AI is on and failing, which the admin must see");
+assert.ok(misconfigured.includes("could not run"),
+	"the notice says AI was enabled but could not run, not that it is switched off");
+assert.ok(misconfigured.includes("site_config.json"),
+	"the specific missing piece reaches the screen, so it is actionable rather than mysterious");
+
+// --- with nothing else to show, the user must not get a blank answer --------
 for (const status of ["disabled", "unavailable"]) {
 	const html = renderAnswerZone({ ai_status: status, facts: FACTS_EMPTY }, MODULE);
 	assert.ok(html.includes("AI interpretation unavailable"),
@@ -125,4 +138,44 @@ assert.ok(/thread\.innerHTML = "";/.test(SRC), "clear chat empties the on-screen
 assert.ok(!/delete_conversation|frappe\.client\.delete/.test(SRC),
 	"clear chat must NOT delete stored UCC AI Conversation records -- it is a display control");
 
-console.log("PASS: Ask UCC answer-zone + settings-gear behaviour (" + 20 + " assertions)");
+// --- an AI answer and a facts-only answer must be TELLABLE APART -----------
+// The whole point of labelling: a reader must never have to guess whether
+// they are looking at generated text or retrieved records.
+const withAi = renderAnswerZone(
+	{ ai_status: "available", answer: { text: "Mei Lim is Singaporean.", model: "gpt-4o-mini" }, facts: FACTS_PRESENT },
+	MODULE);
+const withoutAi = renderAnswerZone({ ai_status: "disabled", facts: FACTS_PRESENT }, MODULE);
+assert.ok(withAi.includes("ucc-ask-zone-ai") && withAi.includes("Mei Lim is Singaporean."),
+	"an AI answer renders in the labelled AI zone");
+assert.ok(!withAi.includes("unavailable"), "an AI answer is not also labelled unavailable");
+assert.strictEqual(withoutAi, "", "a facts-only answer renders no AI zone at all -- nothing to mistake for AI");
+
+// --- FAQ rows must be visually distinct (category vs question) -------------
+const catStyle = SRC.match(/\.ucc-ask-category\{([^}]*)\}/)[1];
+const qStyle = SRC.match(/\.ucc-ask-question\{([^}]*)\}/)[1];
+assert.ok(catStyle.includes("text-transform:uppercase"),
+	"category row is uppercase -- it reads as a section header, not another button");
+assert.ok(!qStyle.includes("text-transform:uppercase"),
+	"question row is NOT uppercase, so the two rows differ at a glance");
+assert.ok(/border:\s*0/.test(catStyle) && /border:1px solid/.test(qStyle),
+	"categories are borderless tabs; questions are outlined cards -- different shapes, not two pill rows");
+assert.notStrictEqual(
+	(catStyle.match(/font-size:([^;]*)/) || [])[1],
+	(qStyle.match(/font-size:([^;]*)/) || [])[1],
+	"the two rows differ in type size, giving the hierarchy real visual weight");
+assert.ok(/\.ucc-ask-category\.is-active\{[^}]*border-bottom-color/.test(SRC),
+	"the selected category is marked by an underline, so the current topic is unmistakable");
+
+// --- the settings form must never take a key from the browser --------------
+const SETTINGS_JS = fs.readFileSync(path.join(__dirname, "..", "ucc_intelligence", "ucc_intelligence",
+	"sophia", "doctype", "ucc_intelligence_settings", "ucc_intelligence_settings.js"), "utf8");
+assert.ok(/ucc_intelligence\.api\.fetch_ai_models/.test(SETTINGS_JS),
+	"the model list is fetched through the server method, never called from the browser");
+assert.ok(!/api\.openai\.com/.test(SETTINGS_JS),
+	"the browser NEVER talks to the provider directly -- that would need a key client-side");
+assert.ok(!/api_key|apiKey|sk-/.test(SETTINGS_JS),
+	"there is no API key entry, storage, or reference anywhere in the settings form");
+assert.ok(/set_headline_alert\(\s*__\("Could not fetch models/.test(SETTINGS_JS),
+	"a failed fetch shows an inline message rather than crashing the form");
+
+console.log("PASS: Ask UCC answer-zone, FAQ hierarchy, settings-gear and model-fetch behaviour");

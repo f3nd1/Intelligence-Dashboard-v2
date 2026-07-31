@@ -210,10 +210,32 @@ report("delete_conversation" not in page_js and "frappe.client.delete" not in pa
 	"Clear chat does NOT delete stored conversation records -- it is a display control only")
 
 # --- the AI notice is no longer shown on plain data lookups (UX FIX 2) ---
-report('if (hasFacts && (status === "disabled" || status === "unavailable")) return "";' in page_js,
-	"a config-level AI-off state is not announced when the facts already answered the question")
+report('if (hasFacts && status === "disabled") return "";' in page_js,
+	"a deliberately-disabled AI state is not announced when the facts already answered the question")
+report('|| status === "unavailable"' not in page_js,
+	"'unavailable' is NOT suppressed -- AI enabled-but-broken is a fault, not a setting")
 report('reasons = {' in page_js and "guardrail_blocked" in page_js,
 	"states where AI ran and its output was lost are still explained")
+report("could not run" in page_js,
+	"the enabled-but-broken notice says AI could not run, rather than implying it is switched off")
+report("message.answer_error" in page_js,
+	"the specific cause (missing site_config key, blank model) reaches the screen")
+
+# --- FAQ hierarchy: the two rows must not look the same (item 3) ---
+report("text-transform:uppercase" in page_js,
+	"the category row is uppercase, reading as a section header rather than a second button row")
+report(re.search(r"\.ucc-ask-category\.is-active\{[^}]*border-bottom-color", page_js) is not None,
+	"the selected category is underlined, so the current topic is unmistakable")
+
+# --- model fetch: server-side only (item 1) ---
+settings_js = (settings_dir / "ucc_intelligence_settings.js").read_text(encoding="utf-8")
+report("ucc_intelligence.api.fetch_ai_models" in settings_js,
+	"the model list comes from a server method, so the key stays server-side")
+report("api.openai.com" not in settings_js,
+	"the browser never calls the provider directly -- that would require a client-side key")
+report("Could not fetch models" in settings_js,
+	"a bad or missing key shows an inline message instead of crashing the form")
+report("Fetch Available Models" in settings_js, "there is a real fetch button on the form")
 
 passed = all(checks)
 print()
