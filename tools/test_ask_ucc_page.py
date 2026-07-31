@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Self-check for the Ask UCC Desk Page.
+"""Self-check for the Ask UCC workspace TAB inside sophia-analytics.
 
-The page is plain DOM + frappe.call, so this checks the things that
-actually break in this codebase's history rather than re-testing the
-browser: the page.body jQuery trap that already bit sophia_analytics.js,
-whether the module list is server-driven or hardcoded, whether the three
-answer zones the plan requires are genuinely distinct, and whether a
-blocked record reuses the existing permission notice instead of inventing
-a second one.
+Ask UCC was first built as a standalone Frappe Page (route "ask-ucc").
+That was an architecture mistake: the original platform design is ONE
+page with Analytics / Explore / Ask UCC workspace tabs (the
+data-ucc-workspace pattern in custom-html-block). This test now checks
+the tab, and asserts the standalone page is genuinely gone rather than
+left alongside it.
+
+Checks what actually breaks in this codebase's history rather than
+re-testing the browser: whether the module list is server-driven or
+hardcoded, whether the three answer zones the plan requires are genuinely
+distinct, whether a blocked record reuses the existing permission notice,
+and whether the legacy Ask markup (with its forbidden browser API-key
+modal) stayed out.
 
     python3 tools/test_ask_ucc_page.py
 """
@@ -16,7 +22,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PAGE_DIR = ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "page" / "ask_ucc"
+PAGE_DIR = ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "page" / "sophia_analytics"
 
 checks = []
 
@@ -27,28 +33,18 @@ def report(ok, message):
 	return ok
 
 
-page_json = json.loads((PAGE_DIR / "ask_ucc.json").read_text(encoding="utf-8"))
-page_js = (PAGE_DIR / "ask_ucc.js").read_text(encoding="utf-8")
+page_js = (PAGE_DIR / "sophia_analytics.js").read_text(encoding="utf-8")
 
-# --- Page registration ---
-report(page_json.get("doctype") == "Page", "ask_ucc.json declares a Page")
-report(page_json.get("name") == "ask-ucc", "page name is ask-ucc")
-report(page_json.get("module") == "Sophia", "page is registered under the Sophia module, like sophia-analytics")
-report((PAGE_DIR / "__init__.py").exists(), "page directory has __init__.py so Frappe treats it as a module")
-
-# --- the page.body jQuery trap (already cost this project once) ---
-wireup = re.search(r'frappe\.pages\["ask-ucc"\]\.on_page_load[\s\S]*?\n};', page_js)
-report(bool(wireup), "on_page_load wiring found")
-if wireup:
-	body = wireup.group(0)
-	report("page.body[0]" in body, "page.body is unwrapped via [0] before use as a DOM node")
-	report("page.body.innerHTML" not in body and "page.body.querySelector" not in body,
-		"page.body is never used directly as a DOM node")
-
-# --- shared.js is required before use, not assumed ---
-report("frappe.require(\"/assets/ucc_intelligence/js/shared.js\"" in page_js,
-	"shared.js is loaded via frappe.require when UCCShared isn't already present")
-report("if (window.UCCShared)" in page_js, "UCCShared presence is checked before booting")
+# --- it is a TAB, not a page ---
+report(not (ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "page" / "ask_ucc").exists(),
+	"the standalone ask-ucc Page directory is gone")
+report('frappe.pages["ask-ucc"]' not in page_js and "frappe.pages['ask-ucc']" not in page_js,
+	"nothing registers a separate ask-ucc route any more")
+report("function initAskUcc(" in page_js, "Ask UCC initialises as part of the platform shell")
+report("initAskUcc(root)" in page_js, "initAskUcc is wired into the page's boot()")
+report('data-ucc-ask' in page_js, "the Ask surface mounts into the shell's Ask workspace panel")
+report(re.search(r'root\.dataset\.askReady', page_js) is not None,
+	"Ask UCC guards against double-initialisation, like the shell and engine do")
 
 # --- module list is server-driven, never hardcoded ---
 report("ucc_intelligence.api.get_ask_ucc_modules" in page_js,
@@ -84,8 +80,15 @@ report('permission_denied' in page_js, "the page checks for permission_denied ex
 
 # --- escaping: nothing user- or model-supplied reaches innerHTML raw ---
 report("UCCShared.escapeHtml" in page_js, "the page escapes via the shared helper")
-report(re.search(r"function esc\(", page_js) is not None, "there is a single esc() wrapper used throughout")
-raw_interp = re.findall(r"\+\s*(message\.answer\.text|question)\s*\+", page_js)
+# Ask's own wrapper is askEsc(), renamed on the move so it can't collide
+# with the analytics engine's existing esc() -- checking for plain "esc("
+# here would now pass on the engine's copy and prove nothing about Ask.
+report("function askEsc(" in page_js, "Ask UCC has its own askEsc() wrapper, distinct from the engine's esc()")
+ask_block = page_js[page_js.index("// ASK UCC -- the chat surface"):page_js.index("frappe.pages['sophia-analytics']")]
+report(re.search(r"(?<![A-Za-z0-9_.])esc\(", ask_block) is None,
+	"the Ask block never calls the engine's esc() by accident -- every call is askEsc()")
+report(ask_block.count("askEsc(") > 10, "askEsc is used throughout the Ask rendering, not just once")
+raw_interp = re.findall(r"\+\s*(message\.answer\.text|question)\s*\+", ask_block)
 report(not raw_interp,
 	"neither the model's answer text nor the user's question is concatenated into HTML unescaped")
 

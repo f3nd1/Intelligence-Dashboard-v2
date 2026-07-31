@@ -33,6 +33,23 @@ def report(ok, message):
 
 checks = []
 
+
+# Same two helpers the criterion ports' tests use, for the Explore check below.
+def spaces_to_tabs_graceful(block_lines):
+	out = []
+	for text in block_lines:
+		if not text.strip():
+			out.append("")
+			continue
+		indent = len(text) - len(text.lstrip(" "))
+		out.append("\t" * (indent // 4) + text.lstrip(" ") if indent % 4 == 0 else text)
+	return out
+
+
+def indent_one_more(block_lines):
+	return ["\t" + text if text.strip() else "" for text in block_lines]
+
+
 # --- platform shell: re-extract, re-transform, confirm present verbatim ---
 shell_source = "\n".join(js_lines[265:435])
 shell_head_original = (
@@ -118,15 +135,42 @@ if m:
 		'data-build-id="UCC-PLATFORM-2.0.1-SHARED" data-platform-version="2.0.1"',
 		'data-build-id="SOPHIA-ANALYTICS-PAGE" data-platform-version="phase-3"',
 	)
-	expected_shell_html = header_no_changelog + nav_line + dashboard_line + criteria_line + "</section>"
-	shell_match = re.search(r'const SHELL_HTML = (".*?");\n\n', ported, re.S)
+	# All three workspace tabs, per the original platform design. Phase 3
+	# trimmed Explore/Ask under "Decision A/B"; that was reversed once both
+	# workspaces had real implementations to mount, so the shell is rebuilt
+	# from the same legacy lines it was always cut from -- lines 1-6 for the
+	# header/buttons/analytics panel, 8-56 for the Explore panel.
+	explore_panel = "\n".join(html_lines[7:56])
+	expected_shell_prefix = (
+		header_no_changelog + nav_line + html_lines[2] + html_lines[3]
+		+ dashboard_line + criteria_line + "</section>" + explore_panel
+	)
+	shell_match = re.search(r'const SHELL_HTML = (".*?");\n', ported, re.S)
 	checks.append(report(bool(shell_match), "SHELL_HTML constant found in the ported page"))
 	if shell_match:
 		embedded = json.loads(shell_match.group(1))
-		checks.append(report(embedded == expected_shell_html, "embedded shell HTML matches HTML.html's Analytics section minus the changelog/Explore/Ask trims"))
+		checks.append(report(embedded.startswith(expected_shell_prefix),
+			"shell HTML matches HTML.html's header + all 3 workspace buttons + Analytics + Explore panels verbatim"))
+		checks.append(report(embedded.endswith("</main></div>"), "shell HTML closes <main> and the platform wrapper"))
+		# The Ask panel is deliberately OURS, not legacy line 57's aja-app markup,
+		# which embeds the browser OpenAI key modal CLAUDE.md forbids.
+		checks.append(report('data-ucc-workspace-panel="ask"' in embedded, "an Ask workspace panel exists in the shell"))
+		checks.append(report("ajaApiKeyInput" not in embedded and "aja-api-modal" not in embedded,
+			"the legacy aja-app Ask markup (with its browser API-key modal) is NOT reintroduced"))
+		checks.append(report('data-ucc-ask=""' in embedded, "the Ask panel hosts our own server-backed Ask UCC surface"))
 
 checks.append(report(criteria_line.count('data-dashboard-panel="criterion_') == 7, "all seven criterion mount divs present in the source HTML"))
-checks.append(report('data-ucc-workspace="explore"' not in ported and 'data-ucc-workspace="ask"' not in ported, "Explore/Ask workspace buttons correctly excluded (Decision A/B)"))
+# Both forms count: SHELL_HTML is a JSON-escaped string literal, while the
+# Explore code also uses an unescaped selector. "ask" legitimately appears
+# only in the shell -- nothing needs to select it by name.
+def has_workspace(key):
+	return ('data-ucc-workspace="%s"' % key) in ported or ('data-ucc-workspace=\\"%s\\"' % key) in ported
+
+
+checks.append(report(has_workspace("explore") and has_workspace("ask"),
+	"Explore and Ask UCC are workspace TABS in this one page, not separate Frappe Pages"))
+checks.append(report(not (ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "page" / "ask_ucc").exists(),
+	"the standalone ask-ucc Page is gone -- one page with tabs, not parallel pages"))
 checks.append(report("show-changelog" not in ported, "changelog button correctly excluded (no changelog system ported)"))
 
 # --- CSS: byte-identical copy ---
@@ -185,6 +229,39 @@ if load_live_match:
 		"result.sources=(result.sources||[]).concat(embed.sources||[])" in load_live_body,
 		"embed's blocked sources are merged into result.sources so the existing permission-notice path picks them up",
 	))
+
+# --- Explore (Diagram Explorer): verbatim port of the legacy IIFE ---
+# Same technique and same guarantee as the shell/engine ports above: the
+# legacy body is re-extracted and re-transformed here, so drift on either
+# side is caught rather than assumed away.
+explore_source = "\n".join(js_lines[2707:3064])
+explore_head_original = (
+	'const platformRoot = typeof root_element !== "undefined"\n'
+	'? root_element.querySelector("#uccIntelligencePlatform")\n'
+	': document.querySelector("#uccIntelligencePlatform");\n'
+	'\n'
+	'if (!platformRoot || platformRoot.dataset.exploreReady === "1") return;\n'
+	'platformRoot.dataset.exploreReady = "1";'
+)
+checks.append(report(explore_head_original in explore_source,
+	"Explore IIFE head matches the live deployed source verbatim"))
+explore_transformed = explore_source.replace(
+	explore_head_original,
+	'if (!platformRoot || platformRoot.dataset.exploreReady === "1") return;\n'
+	'platformRoot.dataset.exploreReady = "1";', 1)
+# The IIFE's `global` parameter is gone, so its two uses become window.
+explore_transformed = explore_transformed.replace("global.UCCLiveVisualDefinitions", "window.UCCLiveVisualDefinitions")
+explore_transformed = explore_transformed.replace("global.UCCExplore", "window.UCCExplore")
+expected_explore = "\n".join(indent_one_more(spaces_to_tabs_graceful(explore_transformed.split("\n"))))
+checks.append(report(expected_explore in ported,
+	"Explore body matches the legacy Diagram Explorer verbatim (modulo the documented head/global transforms)"))
+checks.append(report("function initDiagramExplorer(platformRoot) {" in ported,
+	"Explore is a named init function, not a self-invoking IIFE"))
+checks.append(report("initDiagramExplorer(root)" in ported, "initDiagramExplorer is wired into boot()"))
+explore_block_src = ported[ported.index("function initDiagramExplorer"):ported.index("// ASK UCC -- the chat surface")]
+checks.append(report("global." not in explore_block_src,
+	"no bare `global.` references survive in the ported Explore (its IIFE parameter is gone)"))
+checks.append(report('data-ucc-explore' in ported, "the Explore panel markup is present in the shell"))
 
 passed = all(checks)
 print()

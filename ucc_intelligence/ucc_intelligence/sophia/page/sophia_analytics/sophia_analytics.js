@@ -18,7 +18,7 @@
 // custom-html-block/CSS.css (sophia_analytics.css, same folder) loaded
 // page-scoped, not site-wide -- see the plan doc for why.
 
-const SHELL_HTML = "<div class=\"ucc-platform ucc-embed-safe\" data-build-id=\"SOPHIA-ANALYTICS-PAGE\" data-platform-version=\"phase-3\" id=\"uccIntelligencePlatform\"><header class=\"ucc-platform-shell\"><div class=\"ucc-platform-brand\"><div aria-hidden=\"true\" class=\"ucc-platform-mark\">UCC</div><div class=\"ucc-platform-brand-copy\"><div class=\"ucc-platform-brand-title\"><strong>UCC Intelligence Platform</strong></div><small>Analytics, evidence and guided answers</small></div></div><nav aria-label=\"Platform workspaces\" class=\"ucc-platform-workspaces\"><button aria-pressed=\"true\" class=\"is-active\" data-ucc-workspace=\"analytics\" type=\"button\">Analytics</button></nav><div class=\"ucc-platform-dashboard-control\" data-ucc-dashboard-control=\"\"><label for=\"uccDashboardSelect\">Dashboard</label><select id=\"uccDashboardSelect\"><option value=\"criterion_1\">Criterion 1 \u00b7 Leadership and Strategic Planning</option><option value=\"criterion_2\">Criterion 2 \u00b7 Corporate Administration</option><option value=\"criterion_3\">Criterion 3 \u00b7 External Recruitment Agents</option><option value=\"criterion_4\">Criterion 4 \u00b7 Student Protection and Support Services</option><option selected=\"\" value=\"criterion_5\">Criterion 5 \u00b7 Academic Systems and Processes</option><option value=\"criterion_6\">Criterion 6 \u00b7 Quality Assurance, Innovation and Continual Improvement</option><option value=\"criterion_7\">Criterion 7 \u00b7 Performance Outcomes</option></select></div><button aria-expanded=\"true\" aria-label=\"Minimise UCC navigation\" class=\"ucc-shell-collapse-toggle\" data-shell-toggle=\"\" title=\"Minimise navigation\" type=\"button\"><span aria-hidden=\"true\" class=\"ucc-shell-toggle-icon\" data-shell-toggle-icon=\"\">\u2039</span><span class=\"ucc-visually-hidden\" data-shell-toggle-label=\"\">Minimise navigation</span></button></header><main class=\"ucc-platform-main\"><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"analytics\"><div class=\"ucc-criterion-dashboard\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_5\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_5\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_4\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_4\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_1\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_1\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_2\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_2\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_3\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_3\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_6\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_6\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_7\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_7\" data-live-api=\"1\"></div></section>";
+const SHELL_HTML = "<div class=\"ucc-platform ucc-embed-safe\" data-build-id=\"SOPHIA-ANALYTICS-PAGE\" data-platform-version=\"phase-3\" id=\"uccIntelligencePlatform\"><header class=\"ucc-platform-shell\"><div class=\"ucc-platform-brand\"><div aria-hidden=\"true\" class=\"ucc-platform-mark\">UCC</div><div class=\"ucc-platform-brand-copy\"><div class=\"ucc-platform-brand-title\"><strong>UCC Intelligence Platform</strong></div><small>Analytics, evidence and guided answers</small></div></div><nav aria-label=\"Platform workspaces\" class=\"ucc-platform-workspaces\"><button aria-pressed=\"true\" class=\"is-active\" data-ucc-workspace=\"analytics\" type=\"button\">Analytics</button><button aria-pressed=\"false\" data-ucc-workspace=\"explore\" type=\"button\">Explore</button><button aria-pressed=\"false\" data-ucc-workspace=\"ask\" type=\"button\">Ask UCC</button></nav><div class=\"ucc-platform-dashboard-control\" data-ucc-dashboard-control=\"\"><label for=\"uccDashboardSelect\">Dashboard</label><select id=\"uccDashboardSelect\"><option value=\"criterion_1\">Criterion 1 \u00b7 Leadership and Strategic Planning</option><option value=\"criterion_2\">Criterion 2 \u00b7 Corporate Administration</option><option value=\"criterion_3\">Criterion 3 \u00b7 External Recruitment Agents</option><option value=\"criterion_4\">Criterion 4 \u00b7 Student Protection and Support Services</option><option selected=\"\" value=\"criterion_5\">Criterion 5 \u00b7 Academic Systems and Processes</option><option value=\"criterion_6\">Criterion 6 \u00b7 Quality Assurance, Innovation and Continual Improvement</option><option value=\"criterion_7\">Criterion 7 \u00b7 Performance Outcomes</option></select></div><button aria-expanded=\"true\" aria-label=\"Minimise UCC navigation\" class=\"ucc-shell-collapse-toggle\" data-shell-toggle=\"\" title=\"Minimise navigation\" type=\"button\"><span aria-hidden=\"true\" class=\"ucc-shell-toggle-icon\" data-shell-toggle-icon=\"\">\u2039</span><span class=\"ucc-visually-hidden\" data-shell-toggle-label=\"\">Minimise navigation</span></button></header><main class=\"ucc-platform-main\"><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"analytics\"><div class=\"ucc-criterion-dashboard\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_5\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_5\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_4\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_4\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_1\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_1\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_2\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_2\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_3\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_3\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_6\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_6\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_7\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_7\" data-live-api=\"1\"></div></section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"explore\" hidden=\"\">\n<div class=\"ucc-explore-hub\" data-ucc-explore=\"\">\n<header class=\"ucc-explore-hero\">\n<div>\n<span class=\"ucc-explore-kicker\">DIAGRAM EXPLORER</span>\n<h1>Find live diagrams without opening another dashboard page</h1>\n<p>Search all Criterion 1\u20137 visual catalogues. Criteria 1, 2, 3, 6 and 7 use permission-aware live API foundations; Criteria 4 and 5 retain their established live implementations.</p>\n</div>\n<div class=\"ucc-explore-summary\">\n<article><span>Criterion 4</span><strong data-ucc-explore-count=\"criterion_4\">0</strong><small>live visuals</small></article>\n<article><span>Criterion 5</span><strong data-ucc-explore-count=\"criterion_5\">0</strong><small>live visuals</small></article>\n<article><span>Live foundations</span><strong>5</strong><small>permission-aware APIs</small></article>\n</div>\n</header>\n<div class=\"ucc-explore-controls\">\n<label><span>Search</span><input autocomplete=\"off\" data-ucc-explore-search=\"\" placeholder=\"Search diagram, section, type or source\" role=\"searchbox\" spellcheck=\"false\" type=\"text\"/></label>\n<label><span>Section</span><select data-ucc-explore-section=\"\"><option value=\"\">All sections</option></select></label>\n<label><span>Visual type</span><select data-ucc-explore-type=\"\"><option value=\"\">All visual types</option></select></label>\n<button data-ucc-explore-clear=\"\" type=\"button\">Clear</button>\n</div>\n<div class=\"ucc-explore-layout\">\n<aside class=\"ucc-explore-catalogue\">\n<div class=\"ucc-explore-catalogue-head\">\n<div><strong>Available diagrams</strong><small data-ucc-explore-result-count=\"\">Scanning platform\u2026</small></div>\n<span class=\"ucc-explore-live-pill\">Live</span>\n</div>\n<div class=\"ucc-explore-list\" data-ucc-explore-list=\"\"></div>\n</aside>\n<section class=\"ucc-explore-guide\">\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">1</span>\n<div><strong>Choose the dashboard</strong><p>Use the existing Criterion selector in the top bar.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">2</span>\n<div><strong>Search or filter</strong><p>The catalogue is generated from the real chart elements, so future diagrams appear automatically.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">3</span>\n<div><strong>Open the live card</strong><p>One click takes you to the original analytics card. No duplicate rendering logic or copied data.</p></div>\n</div>\n<div class=\"ucc-explore-note\">\n<strong>Why this approach scales</strong>\n<p>Explore is a fast index over the existing dashboards\u2014not a second dashboard system. Criterion-specific calculations, D3 renderers, tables, exports and record links remain in their original tested components.</p>\n</div>\n</section>\n</div>\n</div>\n</section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"ask\" hidden=\"\"><div class=\"ucc-ask\" data-ucc-ask=\"\"><section class=\"panel ucc-shared-panel ucc-ask-controls\"><div class=\"panel-head ucc-card-header\"><div class=\"ucc-card-heading-copy\"><h2>Ask UCC</h2><p class=\"ucc-card-description\">Answers are built from live records you already have permission to see. Facts come from ERPNext; any AI text is labelled separately.</p></div></div><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field\"><span>Module</span><select data-ask-module=\"\"></select></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Record</span><input autocomplete=\"off\" data-ask-record=\"\" placeholder=\"Search for a record...\" type=\"text\"/><div class=\"ucc-ask-suggestions\" data-ask-suggestions=\"\" hidden=\"\"></div></label></div><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Question</span><textarea data-ask-question=\"\" placeholder=\"e.g. Is this ready to close?\" rows=\"2\"></textarea></label><button class=\"btn btn-primary ucc-ask-submit\" data-ask-submit=\"\" type=\"button\">Ask</button></div><div class=\"ucc-ask-status\" data-ask-status=\"\" hidden=\"\"></div></section><section class=\"ucc-ask-thread\" data-ask-thread=\"\"></section></div></section></main></div>";
 
 function initPlatformShell(root) {
 "use strict";
@@ -764,6 +764,711 @@ if(doctype)window.open(doctypeListRoute(doctype),"_blank","noopener");
 window.UCCLiveAnalytics=Object.freeze({config:CONFIG,registerResponseAdapter:registerResponseAdapter,registerChartPlugin:registerChartPlugin,refresh:function(criterion){const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(criterion)}"]`);if(dashboard)return loadLive(dashboard,true);},showTab:function(criterion,tab){const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(criterion)}"]`);if(dashboard)showTab(dashboard,tab);}});
 }
 
+function initDiagramExplorer(platformRoot) {
+	if (!platformRoot || platformRoot.dataset.exploreReady === "1") return;
+	platformRoot.dataset.exploreReady = "1";
+
+	const exploreRoot = platformRoot.querySelector("[data-ucc-explore]");
+	if (!exploreRoot) return;
+
+	const listNode = exploreRoot.querySelector("[data-ucc-explore-list]");
+	const searchNode = exploreRoot.querySelector("[data-ucc-explore-search]");
+	const sectionNode = exploreRoot.querySelector("[data-ucc-explore-section]");
+	const typeNode = exploreRoot.querySelector("[data-ucc-explore-type]");
+	const resultNode = exploreRoot.querySelector("[data-ucc-explore-result-count]");
+	const clearButton = exploreRoot.querySelector("[data-ucc-explore-clear]");
+	const dashboardSelect = platformRoot.querySelector("#uccDashboardSelect");
+	const workspaceButtons = Array.from(platformRoot.querySelectorAll("[data-ucc-workspace]"));
+
+	const parentTabMap = Object.freeze({});
+
+	let entries = [];
+	let lastExploreScroll = 0;
+	let highlightedCard = null;
+
+	const returnButton = document.createElement("button");
+	returnButton.type = "button";
+	returnButton.className = "ucc-explore-return";
+	returnButton.textContent = "← Back to Explore";
+	returnButton.hidden = true;
+	platformRoot.appendChild(returnButton);
+
+	function text(value) {
+	return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+	}
+
+	function titleFrom(node) {
+	const card = node.closest("article, .panel");
+	const heading = card ? card.querySelector("h2,h3") : null;
+	return text(heading ? heading.textContent : node.dataset.chart || node.dataset.c4Visual || "Untitled visual");
+	}
+
+	function sectionLabel(entry) {
+	if (entry.kind === "demo") {
+	const button = platformRoot.querySelector(`[data-dashboard-panel="${CSS.escape(entry.dashboard)}"] [data-demo-tab="${CSS.escape(entry.panel || "overview")}"]`);
+	return text(button ? button.textContent : entry.panel || "Live foundation");
+	}
+	const button = platformRoot.querySelector(`[data-tab="${CSS.escape(parentTabMap[entry.panel] || entry.panel || "overview")}"]`);
+	const local = entry.panel && entry.panel !== (parentTabMap[entry.panel] || entry.panel)
+	? platformRoot.querySelector(`[data-section="${CSS.escape(entry.panel)}"]`)
+	: null;
+	return text(local ? local.textContent : button ? button.textContent : entry.panel || "Criterion 5");
+	}
+
+	function inferType(id, title) {
+	const value = `${id} ${title}`.toLowerCase();
+	const rules = [
+	["network", ["network"]],
+	["timeline", ["timeline", "trend", "aging", "recency"]],
+	["funnel", ["funnel", "flow", "lifecycle", "cycle"]],
+	["donut", ["donut", "ring", "orbit"]],
+	["heatmap", ["heatmap", "matrix"]],
+	["bubble", ["bubble", "constellation"]],
+	["radial", ["radial", "radar"]],
+	["decision", ["decision"]],
+	["ladder", ["ladder"]],
+	["reconciliation", ["reconciliation"]]
+	];
+	for (const [type, terms] of rules) {
+	if (terms.some(term => value.includes(term))) return type;
+	}
+	return "chart";
+	}
+
+	function sourceHint(node) {
+	const card = node.closest("article, .panel");
+	if (!card) return "Configured live source";
+	const sourceLink = card.querySelector(".source-doctype-link,.source-link,[data-source]");
+	return text(sourceLink ? sourceLink.textContent : "Configured live source");
+	}
+
+	function createEntry(node, dashboard, kind) {
+	const id = kind === "c4" ? node.dataset.c4Visual : kind === "demo" ? node.dataset.demoChart : node.dataset.chart;
+	if (!id) return null;
+	const panelNode = kind === "demo" ? node.closest("[data-demo-panel]") : node.closest("[data-panel]");
+	const title = kind === "demo" ? text(node.dataset.demoChartTitle || titleFrom(node)) : titleFrom(node);
+	const entry = {
+	key: `${dashboard}:${kind}:${id}`,id,kind,dashboard,node,title,
+	panel: kind === "demo" ? panelNode?.dataset.demoPanel || "overview" : panelNode?.dataset.panel || "overview",
+	c511Panel: "",
+	localPanel: node.closest("[data-local-panel]")?.dataset.localPanel || "",
+	type: kind === "demo" ? node.dataset.demoChartType || "live-foundation" : inferType(id, title),
+	source: kind === "demo" ? "Permission-aware live API foundation" : sourceHint(node),
+	description: ""
+	};
+	entry.section = sectionLabel(entry);
+	return entry;
+	}
+
+	function buildRegistry() {
+	const registry = new Map();
+
+	Object.entries(window.UCCLiveVisualDefinitions || {}).forEach(([dashboard, sections]) => {
+	Object.entries(sections || {}).forEach(([panel, definitions]) => {
+	(definitions || []).forEach(definition => {
+	if (definition.enabled === false) return;
+	const entry = {
+	key: `${dashboard}:demo:${definition.id}`,
+	id: definition.id,
+	kind: "demo",
+	dashboard,
+	node: platformRoot.querySelector(`[data-demo-chart="${CSS.escape(definition.id)}"]`),
+	title: text(definition.title),
+	panel,
+	c511Panel: "",
+	localPanel: "",
+	type: definition.type || inferType(definition.id, definition.title),
+	source: "Permission-aware live API metrics",
+	description: text(definition.description || "")
+	};
+	entry.section = sectionLabel(entry);
+	if (!registry.has(entry.key)) registry.set(entry.key, entry);
+	});
+	});
+	});
+
+	entries = Array.from(registry.values()).sort((a, b) =>
+	a.section.localeCompare(b.section) || a.title.localeCompare(b.title)
+	);
+
+	["criterion_1", "criterion_2", "criterion_3", "criterion_4", "criterion_5", "criterion_6", "criterion_7"].forEach(dashboard => {
+	const count = exploreRoot.querySelector(`[data-ucc-explore-count="${dashboard}"]`);
+	if (count) count.textContent = String(entries.filter(entry => entry.dashboard === dashboard).length);
+	});
+	}
+
+	function currentDashboard() {
+	return dashboardSelect ? dashboardSelect.value : "criterion_5";
+	}
+
+	function fillFilters() {
+	const dashboard = currentDashboard();
+	const dashboardEntries = entries.filter(entry => entry.dashboard === dashboard);
+	const previousSection = sectionNode.value;
+	const previousType = typeNode.value;
+	const sections = Array.from(new Set(dashboardEntries.map(entry => entry.section))).sort();
+	const types = Array.from(new Set(dashboardEntries.map(entry => entry.type))).sort();
+
+	sectionNode.innerHTML = '<option value="">All sections</option>' +
+	sections.map(value => `<option value="${value.replace(/"/g, "&quot;")}">${value}</option>`).join("");
+	typeNode.innerHTML = '<option value="">All visual types</option>' +
+	types.map(value => `<option value="${value.replace(/"/g, "&quot;")}">${value}</option>`).join("");
+
+	if (sections.includes(previousSection)) sectionNode.value = previousSection;
+	if (types.includes(previousType)) typeNode.value = previousType;
+	}
+
+	function filteredEntries() {
+	const dashboard = currentDashboard();
+	const query = text(searchNode.value).toLowerCase();
+	return entries.filter(entry =>
+	entry.dashboard === dashboard &&
+	(!query || `${entry.title} ${entry.section} ${entry.type} ${entry.source}`.toLowerCase().includes(query)) &&
+	(!sectionNode.value || entry.section === sectionNode.value) &&
+	(!typeNode.value || entry.type === typeNode.value)
+	);
+	}
+
+	function renderList() {
+	const dashboard = currentDashboard();
+	const liveDashboard = dashboard === "criterion_4" || dashboard === "criterion_5";
+	const rows = filteredEntries();
+	resultNode.textContent = `${rows.length} live diagram${rows.length === 1 ? "" : "s"}`;
+
+	const grouped = rows.reduce((result, entry) => {
+	(result[entry.section] ||= []).push(entry);
+	return result;
+	}, {});
+
+	listNode.innerHTML = Object.entries(grouped).map(([section, sectionEntries]) => `
+	<section class="ucc-explore-group">
+	<h2>${section}</h2>
+	${sectionEntries.map(entry => `
+	<button type="button" class="ucc-explore-item" data-ucc-explore-entry="${entry.key}">
+	<span>
+	<strong>${entry.title}</strong>
+	${entry.description ? `<small>${entry.description}</small>` : ""}
+	<small>${entry.source}</small>
+	</span>
+	<em>${entry.type}</em>
+	</button>
+	`).join("")}
+	</section>
+	`).join("") || '<div class="ucc-explore-empty">No diagrams match the current search and filters.</div>';
+	}
+
+	function chooseDashboard(dashboard) {
+	if (!dashboardSelect) return;
+	dashboardSelect.value = dashboard;
+	dashboardSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	}
+
+	function resolveEntryNode(entry) {
+	if (entry.node && entry.node.isConnected) return entry.node;
+	if (entry.kind === "demo") {
+	entry.node = platformRoot.querySelector(`[data-demo-chart="${CSS.escape(entry.id)}"]`);
+	}
+	return entry.node || null;
+	}
+
+	function revealNestedViews(entry) {
+	const node = resolveEntryNode(entry);
+	if (entry.kind === "demo") {
+	window.UCCLiveAnalytics?.showTab(entry.dashboard, entry.panel || "overview");
+	node?.closest("[data-demo-card]")?.querySelector('[data-demo-view="diagram"]')?.click();
+	return;
+	}
+	if (entry.localPanel) {
+	const panel = node?.closest("[data-panel]");
+	const button = panel ? panel.querySelector(
+	`[data-local-tab="${CSS.escape(entry.localPanel)}"]`
+	) : null;
+	if (button) button.click();
+	}
+	const card = node?.closest("article, .panel");
+	if (card) {
+	const diagramButton = card.querySelector('[data-card-view="diagram"]');
+	if (diagramButton) diagramButton.click();
+	}
+	}
+
+	function highlightEntry(entry, attempt = 0) {
+	const node = resolveEntryNode(entry);
+	if (!node) {
+	if (attempt < 24) setTimeout(() => highlightEntry(entry, attempt + 1), 250);
+	else if (window.frappe && frappe.show_alert) frappe.show_alert({ message: "The selected visual could not be mounted. Open Source Mapping Report for details.", indicator: "orange" });
+	return;
+	}
+	if (highlightedCard) highlightedCard.classList.remove("ucc-explore-highlight");
+	highlightedCard = node.closest("article, .panel") || node;
+	highlightedCard.classList.add("ucc-explore-highlight");
+	highlightedCard.scrollIntoView({ behavior: "smooth", block: "center" });
+	setTimeout(() => highlightedCard?.classList.remove("ucc-explore-highlight"), 4200);
+	returnButton.hidden = false;
+	}
+
+	function openLiveEntry(entry) {
+	lastExploreScroll = Math.max(
+	Number(window.scrollY || 0),
+	Number(document.documentElement?.scrollTop || 0)
+	);
+	platformRoot.querySelector('[data-ucc-workspace="analytics"]')?.click();
+	chooseDashboard(entry.dashboard);
+
+	const finish = () => {
+	revealNestedViews(entry);
+	setTimeout(() => {
+	revealNestedViews(entry);
+	highlightEntry(entry);
+	window.dispatchEvent(new Event("resize"));
+	}, 220);
+	};
+
+	if (entry.kind === "demo") {
+	window.UCCLiveAnalytics?.showTab(entry.dashboard, entry.panel || "overview");
+	setTimeout(finish, 120);
+	} else {
+	setTimeout(finish, 120);
+	}
+	}
+
+	listNode.addEventListener("click", event => {
+	const switchButton = event.target.closest("[data-ucc-explore-switch]");
+	if (switchButton) {
+	chooseDashboard(switchButton.dataset.uccExploreSwitch);
+	fillFilters();
+	renderList();
+	return;
+	}
+	const button = event.target.closest("[data-ucc-explore-entry]");
+	if (!button) return;
+	const entry = entries.find(item => item.key === button.dataset.uccExploreEntry);
+	if (entry) openLiveEntry(entry);
+	});
+
+	function resetFilters() {
+	searchNode.value = "";
+	sectionNode.value = "";
+	typeNode.value = "";
+	renderList();
+	}
+
+	searchNode.addEventListener("input", renderList);
+	sectionNode.addEventListener("change", renderList);
+	typeNode.addEventListener("change", renderList);
+	["pointerdown", "mousedown", "click", "keydown", "keyup", "keypress", "focus", "focusin"].forEach(function (eventName) {
+	searchNode.addEventListener(eventName, function (event) {
+	event.stopPropagation();
+	if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+	});
+	});
+	searchNode.addEventListener("keydown", function (event) {
+	if (event.key === "Escape") {
+	event.preventDefault();
+	resetFilters();
+	searchNode.focus();
+	}
+	});
+	clearButton.addEventListener("pointerdown", function (event) {
+	event.stopPropagation();
+	});
+	clearButton.addEventListener("click", function (event) {
+	event.preventDefault();
+	event.stopPropagation();
+	resetFilters();
+	searchNode.focus();
+	});
+
+	dashboardSelect?.addEventListener("change", () => {
+	fillFilters();
+	renderList();
+	});
+
+	workspaceButtons.forEach(button => {
+	button.addEventListener("click", () => {
+	if (button.dataset.uccWorkspace === "explore") {
+	returnButton.hidden = true;
+	setTimeout(() => window.scrollTo({ top: lastExploreScroll, behavior: "smooth" }), 0);
+	}
+	});
+	});
+
+	returnButton.addEventListener("click", () => {
+	platformRoot.querySelector('[data-ucc-workspace="explore"]')?.click();
+	});
+
+	buildRegistry();
+	fillFilters();
+	renderList();
+
+	window.UCCExplore = Object.freeze({
+	entries: () => entries.slice(),
+	openEntry: keyOrEntry => {
+	const entry = typeof keyOrEntry === "string" ? entries.find(item => item.key === keyOrEntry) : keyOrEntry;
+	if (entry) openLiveEntry(entry);
+	},
+	openNavigator: dashboard => {
+	if (dashboard) chooseDashboard(dashboard);
+	platformRoot.querySelector('[data-ucc-workspace="explore"]')?.click();
+	setTimeout(() => searchNode?.focus(), 80);
+	},
+	rebuild: () => {
+	buildRegistry();
+	fillFilters();
+	renderList();
+	}
+	});
+}
+
+// ---------------------------------------------------------------------------
+// ASK UCC -- the chat surface for ucc_intelligence.api.ask_ucc.
+//
+// Lives here, inside the platform shell's `ask` workspace panel, NOT as a
+// separate Frappe Page. The original design (custom-html-block's
+// data-ucc-workspace pattern) is one page with Analytics / Explore / Ask UCC
+// tabs; a standalone /app/ask-ucc route was an architecture mistake and was
+// removed rather than left alongside this.
+//
+// The markup is in SHELL_HTML above. Deliberately NOT the legacy `aja-app`
+// Ask panel from custom-html-block/HTML.html line 57 -- that carries the
+// browser-held OpenAI API key modal CLAUDE.md §1.1.9 forbids. This surface
+// talks to the server-side ai/ layer, which never exposes a key to the browser.
+//
+// The plan doc's §2.1 step 8 requirement -- a reader can always tell AI text
+// from retrieved facts -- is why the answer renders as three separately
+// labelled zones rather than one prose blob.
+// ---------------------------------------------------------------------------
+const ASK_STYLE_ID = "ucc-ask-style";
+const ASK_STYLE_TEXT = `
+.ucc-ask{display:flex;flex-direction:column;gap:16px;padding:16px}
+.ucc-ask-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding:0 16px 16px}
+.ucc-ask-field{display:flex;flex-direction:column;gap:4px;position:relative;min-width:200px}
+.ucc-ask-field-grow{flex:1}
+.ucc-ask-field>span{font-size:12px;font-weight:600;opacity:.75}
+.ucc-ask-field select,.ucc-ask-field input,.ucc-ask-field textarea{padding:8px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;font:inherit;width:100%}
+.ucc-ask-submit{white-space:nowrap}
+.ucc-ask-suggestions{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card-bg,#fff);border:1px solid var(--border-color,#d1d8dd);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+.ucc-ask-suggestion{padding:8px 10px;cursor:pointer;font-size:13px}
+.ucc-ask-suggestion:hover,.ucc-ask-suggestion.is-active{background:var(--bg-light-gray,#f4f5f6)}
+.ucc-ask-status{padding:0 16px 16px;font-size:13px}
+.ucc-ask-status[data-tone="error"]{color:var(--red-600,#c0392b)}
+.ucc-ask-thread{display:flex;flex-direction:column;gap:16px}
+.ucc-ask-turn{display:flex;flex-direction:column;gap:12px}
+.ucc-ask-question-bubble{align-self:flex-end;max-width:70%;background:var(--bg-light-gray,#f4f5f6);padding:10px 14px;border-radius:12px;font-size:14px}
+.ucc-ask-zone{border:1px solid var(--border-color,#d1d8dd);border-radius:8px;overflow:hidden}
+.ucc-ask-zone-head{padding:8px 12px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--bg-light-gray,#f4f5f6)}
+.ucc-ask-zone-body{padding:12px}
+.ucc-ask-zone-ai .ucc-ask-zone-head{background:#eef4ff;color:#2c5aa0}
+.ucc-ask-zone-facts .ucc-ask-zone-head{background:#eefaf1;color:#1e7a45}
+.ucc-ask-answer-text{white-space:pre-wrap;font-size:14px;line-height:1.55}
+.ucc-ask-fact-group{margin-bottom:12px}
+.ucc-ask-fact-group:last-child{margin-bottom:0}
+.ucc-ask-fact-group>h4{font-size:12px;margin:0 0 6px;opacity:.8}
+.ucc-ask-fact-table{width:100%;border-collapse:collapse;font-size:12px}
+.ucc-ask-fact-table th,.ucc-ask-fact-table td{border:1px solid var(--border-color,#e6e9ec);padding:4px 8px;text-align:left;vertical-align:top}
+.ucc-ask-fact-table th{width:34%;font-weight:600;opacity:.8}
+.ucc-ask-source{display:inline-flex;gap:6px;align-items:center;font-size:12px;padding:4px 8px;border:1px solid var(--border-color,#d1d8dd);border-radius:999px;margin:0 6px 6px 0;text-decoration:none}
+.ucc-ask-ai-unavailable{font-size:13px;opacity:.8;font-style:italic}
+`;
+
+function injectAskStyles() {
+	if (document.getElementById(ASK_STYLE_ID)) return;
+	const style = document.createElement("style");
+	style.id = ASK_STYLE_ID;
+	style.textContent = ASK_STYLE_TEXT;
+	document.head.appendChild(style);
+}
+
+function askEsc(value) {
+	return window.UCCShared.escapeHtml(value == null ? "" : String(value));
+}
+
+function initAskUcc(platformRoot) {
+	const root = platformRoot.querySelector("[data-ucc-ask]");
+	if (!root || root.dataset.askReady === "1") return;
+	root.dataset.askReady = "1";
+	injectAskStyles();
+
+	const moduleSelect = root.querySelector("[data-ask-module]");
+	const recordInput = root.querySelector("[data-ask-record]");
+	const suggestionBox = root.querySelector("[data-ask-suggestions]");
+	const questionInput = root.querySelector("[data-ask-question]");
+	const submitButton = root.querySelector("[data-ask-submit]");
+	const statusNode = root.querySelector("[data-ask-status]");
+	const thread = root.querySelector("[data-ask-thread]");
+
+	const state = { modules: [], busy: false };
+
+	function setStatus(text, tone) {
+		if (!text) {
+			statusNode.hidden = true;
+			statusNode.textContent = "";
+			return;
+		}
+		statusNode.hidden = false;
+		statusNode.textContent = text;
+		statusNode.dataset.tone = tone || "info";
+	}
+
+	function currentModule() {
+		return state.modules.find((m) => m.key === moduleSelect.value) || null;
+	}
+
+	// Which modules this user may see comes from the server
+	// (get_dashboard_access's ask_ucc_modules), never from a hardcoded list
+	// here -- the same interface-composition rule Analytics follows.
+	frappe.call({
+		method: "ucc_intelligence.api.get_ask_ucc_modules",
+		callback(response) {
+			const modules = (response && response.message && response.message.modules) || [];
+			state.modules = modules;
+			if (!modules.length) {
+				moduleSelect.innerHTML = "";
+				submitButton.disabled = true;
+				recordInput.disabled = true;
+				questionInput.disabled = true;
+				setStatus("No Ask UCC modules are enabled for your account. Ask an administrator if you need access.", "error");
+				return;
+			}
+			moduleSelect.innerHTML = modules
+				.map((m) => `<option value="${askEsc(m.key)}">${askEsc(m.label)}</option>`)
+				.join("");
+		},
+		error() {
+			setStatus("Could not load the available modules.", "error");
+		},
+	});
+
+	// --- record picker: a plain search against the module's own DocType,
+	// permission-checked server-side by frappe.client.get_list like any
+	// other Desk link field. No custom search endpoint needed.
+	let searchTimer = null;
+	function hideSuggestions() {
+		suggestionBox.hidden = true;
+		suggestionBox.innerHTML = "";
+	}
+
+	function searchRecords(term) {
+		const module = currentModule();
+		if (!module || !term) {
+			hideSuggestions();
+			return;
+		}
+		frappe.call({
+			method: "frappe.client.get_list",
+			args: {
+				doctype: module.doctype,
+				filters: [["name", "like", "%" + term + "%"]],
+				fields: ["name"],
+				limit_page_length: 10,
+			},
+			callback(response) {
+				const rows = (response && response.message) || [];
+				if (!rows.length) {
+					hideSuggestions();
+					return;
+				}
+				suggestionBox.innerHTML = rows
+					.map((r) => `<div class="ucc-ask-suggestion" data-value="${askEsc(r.name)}">${askEsc(r.name)}</div>`)
+					.join("");
+				suggestionBox.hidden = false;
+			},
+			error: hideSuggestions,
+		});
+	}
+
+	recordInput.addEventListener("input", () => {
+		window.clearTimeout(searchTimer);
+		searchTimer = window.setTimeout(() => searchRecords(recordInput.value.trim()), 250);
+	});
+	suggestionBox.addEventListener("click", (event) => {
+		const option = event.target.closest("[data-value]");
+		if (!option) return;
+		recordInput.value = option.dataset.value;
+		hideSuggestions();
+		questionInput.focus();
+	});
+	document.addEventListener("click", (event) => {
+		if (!suggestionBox.contains(event.target) && event.target !== recordInput) hideSuggestions();
+	});
+	moduleSelect.addEventListener("change", () => {
+		recordInput.value = "";
+		hideSuggestions();
+	});
+
+	// --- asking
+	function ask() {
+		if (state.busy) return;
+		const module = currentModule();
+		const record = recordInput.value.trim();
+		const question = questionInput.value.trim();
+		if (!module) return;
+		if (!record) {
+			setStatus("Select a record first.", "error");
+			return;
+		}
+		if (!question) {
+			setStatus("Enter a question first.", "error");
+			return;
+		}
+
+		state.busy = true;
+		submitButton.disabled = true;
+		setStatus("Asking...");
+
+		frappe.call({
+			method: "ucc_intelligence.api.ask_ucc",
+			args: { module: module.key, question: question, record: record },
+			callback(response) {
+				const message = response && response.message;
+				if (message) {
+					thread.insertAdjacentHTML("afterbegin", renderTurn(question, message, module));
+					questionInput.value = "";
+					setStatus("");
+				} else {
+					setStatus("The server returned no answer.", "error");
+				}
+			},
+			error(error) {
+				setStatus(window.UCCShared.errorText(error) || "The request failed.", "error");
+			},
+			always() {
+				state.busy = false;
+				submitButton.disabled = false;
+			},
+		});
+	}
+
+	submitButton.addEventListener("click", ask);
+	questionInput.addEventListener("keydown", (event) => {
+		if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) ask();
+	});
+}
+
+// --- rendering -------------------------------------------------------------
+// Three visually distinct zones, per the plan doc: what the AI said, the
+// facts it was given, and where those came from. A reader must never have to
+// guess which is which.
+
+function renderTurn(question, message, module) {
+	return (
+		'<article class="ucc-ask-turn">'
+		+ '<div class="ucc-ask-question-bubble">' + askEsc(question) + "</div>"
+		+ renderAnswerZone(message, module)
+		+ renderFactsZone(message)
+		+ renderSourcesZone(message)
+		+ "</article>"
+	);
+}
+
+function renderAnswerZone(message, module) {
+	// A blocked record renders the SAME notice Analytics uses for a blocked
+	// source -- not a bespoke error box, and never a raw exception string.
+	const blocked = (message.sources || []).find((s) => s.status === "permission_denied");
+	if (blocked) {
+		return window.UCCShared.permissionNoticeHtml({
+			view: module ? module.label : "This answer",
+			source: blocked.doctype,
+			detail: blocked.message,
+		});
+	}
+
+	const status = message.ai_status;
+	if (status === "available" && message.answer) {
+		return (
+			'<div class="ucc-ask-zone ucc-ask-zone-ai">'
+			+ '<div class="ucc-ask-zone-head">AI interpretation'
+			+ (message.answer.model ? " &middot; " + askEsc(message.answer.model) : "")
+			+ "</div>"
+			+ '<div class="ucc-ask-zone-body"><div class="ucc-ask-answer-text">'
+			+ askEsc(message.answer.text)
+			+ "</div></div></div>"
+		);
+	}
+
+	// Everything else -- AI disabled, unconfigured, errored, or its output
+	// rejected by the citation guardrail -- says so plainly and leaves the
+	// facts below standing on their own. That is the progressive-enhancement
+	// contract, not a degraded failure state.
+	const reasons = {
+		disabled: "AI interpretation is turned off. The facts below come straight from live records.",
+		unavailable: "AI interpretation is not configured. The facts below come straight from live records.",
+		guardrail_blocked: "An AI answer was generated but referenced something not present in the retrieved facts, so it was withheld. The facts below are unaffected.",
+		error: "AI interpretation could not be produced. The facts below come straight from live records.",
+		not_found: "That record could not be found.",
+	};
+	const text = reasons[status] || "AI interpretation is unavailable. The facts below come straight from live records.";
+	return (
+		'<div class="ucc-ask-zone ucc-ask-zone-ai">'
+		+ '<div class="ucc-ask-zone-head">AI interpretation unavailable</div>'
+		+ '<div class="ucc-ask-zone-body"><div class="ucc-ask-ai-unavailable">'
+		+ askEsc(text)
+		+ (message.answer_error ? "<br>" + askEsc(message.answer_error) : "")
+		+ "</div></div></div>"
+	);
+}
+
+function humanise(key) {
+	return String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function renderFactValue(value) {
+	if (value == null || value === "") return "&mdash;";
+	if (Array.isArray(value)) {
+		if (!value.length) return "&mdash;";
+		if (typeof value[0] !== "object") return askEsc(value.join(", "));
+		return askEsc(value.length + " record(s)");
+	}
+	if (typeof value === "object") return askEsc(JSON.stringify(value));
+	if (typeof value === "boolean") return value ? "Yes" : "No";
+	return askEsc(value);
+}
+
+function renderFactsZone(message) {
+	const facts = message.facts || {};
+	const groups = Object.keys(facts).filter((k) => facts[k] && facts[k].status === "available");
+	if (!groups.length) return "";
+
+	const body = groups
+		.map((toolName) => {
+			const group = facts[toolName];
+			const rows = Object.keys(group)
+				.filter((k) => k !== "status" && k !== "note")
+				.map((k) => "<tr><th>" + askEsc(humanise(k)) + "</th><td>" + renderFactValue(group[k]) + "</td></tr>")
+				.join("");
+			return (
+				'<div class="ucc-ask-fact-group"><h4>' + askEsc(humanise(toolName)) + "</h4>"
+				+ '<table class="ucc-ask-fact-table">' + rows + "</table>"
+				+ (group.note ? '<p class="ucc-card-description">' + askEsc(group.note) + "</p>" : "")
+				+ "</div>"
+			);
+		})
+		.join("");
+
+	return (
+		'<div class="ucc-ask-zone ucc-ask-zone-facts">'
+		+ '<div class="ucc-ask-zone-head">Facts from live records</div>'
+		+ '<div class="ucc-ask-zone-body">' + body + "</div></div>"
+	);
+}
+
+function renderSourcesZone(message) {
+	const sources = (message.sources || []).filter((s) => s.status === "available" && s.record);
+	if (!sources.length) return "";
+	const links = sources
+		.map((s) => {
+			const route = window.UCCShared.doctypeRoute(s.doctype) + "/" + encodeURIComponent(s.record);
+			return '<a class="ucc-ask-source" href="' + askEsc(route) + '" target="_blank" rel="noopener">'
+				+ askEsc(s.doctype) + ": " + askEsc(s.record) + " &#8599;</a>";
+		})
+		.join("");
+	return (
+		'<div class="ucc-ask-zone">'
+		+ '<div class="ucc-ask-zone-head">Sources</div>'
+		+ '<div class="ucc-ask-zone-body">' + links + "</div></div>"
+	);
+}
+
 frappe.pages['sophia-analytics'].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -783,6 +1488,8 @@ frappe.pages['sophia-analytics'].on_page_load = function (wrapper) {
 	function boot() {
 		initPlatformShell(root);
 		initAnalyticsEngine(root);
+		initDiagramExplorer(root);
+		initAskUcc(root);
 	}
 
 	if (window.UCCShared) {
