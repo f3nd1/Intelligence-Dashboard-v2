@@ -22,9 +22,11 @@ failure must degrade, never crash, the response.
 """
 
 import json
+import re
 import time
 
 import frappe
+import requests
 
 AI_API_KEY_SITE_CONFIG_KEY = "ucc_intelligence_ai_api_key"
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
@@ -92,21 +94,12 @@ def complete(system_prompt, user_prompt):
 	}
 
 	started = time.monotonic()
-	try:
-		response = frappe.make_post_request(
-			OPENAI_CHAT_COMPLETIONS_URL,
-			headers={
-				"Authorization": "Bearer " + api_key,
-				"Content-Type": "application/json",
-			},
-			data=json.dumps(payload),
-			timeout=timeout_seconds,
-		)
-	except Exception as error:
-		# Never let the raw exception (which can embed request headers,
-		# including the Authorization header, in some HTTP client error
-		# reprs) propagate -- classify and pass through a clean message only.
-		return unavailable("error", classify_error(error))
+	response, error_message = request_json(
+		"POST", OPENAI_CHAT_COMPLETIONS_URL, api_key,
+		body=json.dumps(payload), timeout_seconds=timeout_seconds,
+	)
+	if error_message:
+		return unavailable("error", error_message)
 	latency_ms = int((time.monotonic() - started) * 1000)
 
 	try:
@@ -146,14 +139,11 @@ def list_models():
 	if settings:
 		timeout_seconds = frappe.utils.cint(settings.ai_request_timeout_seconds) or DEFAULT_TIMEOUT_SECONDS
 
-	try:
-		response = frappe.make_get_request(
-			OPENAI_MODELS_URL,
-			headers={"Authorization": "Bearer " + api_key},
-			timeout=timeout_seconds,
-		)
-	except Exception as error:
-		return unavailable("error", classify_error(error))
+	response, error_message = request_json(
+		"GET", OPENAI_MODELS_URL, api_key, timeout_seconds=timeout_seconds,
+	)
+	if error_message:
+		return unavailable("error", error_message)
 
 	rows = (response or {}).get("data")
 	if not isinstance(rows, list):
@@ -181,13 +171,99 @@ def is_chat_model(model_id):
 	return lowered.startswith("gpt-") or lowered.startswith("o1") or lowered.startswith("o3") or lowered.startswith("chatgpt")
 
 
-def classify_error(error):
-	text = frappe.utils.cstr(error)
-	lowered = text.lower()
-	if "timeout" in lowered or "timed out" in lowered:
-		return "Request to the AI provider timed out."
-	if "401" in text or "unauthorized" in lowered or "invalid_api_key" in lowered:
-		return "The AI provider rejected the request as unauthorized -- check the configured API key."
-	if "429" in text or "rate limit" in lowered:
-		return "The AI provider reported a rate limit."
-	return "The AI provider request failed."
+# Anything key-shaped, not just OUR key. These messages now carry provider
+# error bodies and exception text for diagnosability, and a proxy or an
+# upstream error can echo back a credential that is not the one we
+# configured. Sibling pattern, deliberately stricter because it gates saving
+# rather than scrubbing: ucc_intelligence_settings.py's API_KEY_PATTERN.
+ANY_API_KEY = re.compile(r"sk-[A-Za-z0-9_\-]{8,}", re.IGNORECASE)
+
+
+def redact(text, api_key):
+	"""Any message leaving this module gets credentials stripped. Error reprs
+	from HTTP clients can embed request headers, and the Authorization header
+	carries the key."""
+	out = frappe.utils.cstr(text)
+	if api_key:
+		out = out.replace(api_key, "<redacted>")
+		# The tail alone is enough to identify a key in a leak report.
+		if len(api_key) > 8:
+			out = out.replace(api_key[-8:], "<redacted>")
+	return ANY_API_KEY.sub("<redacted>", out)
+
+
+def provider_error_message(status_code, body_text, api_key):
+	"""The provider's OWN error, not a generic sentence.
+
+	OpenAI returns {"error": {"message", "type", "code"}}. Surfacing that
+	verbatim (minus the key) is the difference between "The AI provider
+	request failed" -- which sends someone to a bench console with urllib to
+	find out what actually happened -- and a message that names the problem.
+	"""
+	detail = ""
+	try:
+		payload = json.loads(body_text or "{}")
+		error = payload.get("error") or {}
+		detail = error.get("message") or ""
+		code = error.get("code") or error.get("type")
+		if code:
+			detail = "%s (%s)" % (detail, code) if detail else str(code)
+	except Exception:
+		pass
+	if not detail:
+		detail = (body_text or "").strip()[:300] or "no response body"
+	return redact("The AI provider returned HTTP %s: %s" % (status_code, detail), api_key)
+
+
+def request_json(method, url, api_key, body=None, timeout_seconds=DEFAULT_TIMEOUT_SECONDS):
+	"""One HTTP call to the provider. Returns (parsed_json, error_message);
+	exactly one of the two is populated, and it never raises.
+
+	Uses `requests` directly rather than Frappe's make_get_request /
+	make_post_request helpers, for two reasons, both learned the hard way:
+
+	1. Those helpers are NOT reliably available as `frappe.make_*`. They
+	   live in `frappe.integrations.utils`, and the top-level aliases this
+	   module used to call do not exist on every Frappe version -- which
+	   raised AttributeError, got swallowed by a bare `except Exception`,
+	   and was reported as the generic "The AI provider request failed."
+	   A valid key and a reachable network looked identical to a bad key.
+	   `requests` is a hard Frappe dependency, so it is always importable
+	   and there is no version-dependent name to get wrong.
+
+	2. Those helpers call raise_for_status() and hand back only an
+	   exception, discarding the response body -- which is exactly where
+	   OpenAI puts the reason. We need the status AND the body to say
+	   anything useful.
+
+	The key travels only in the Authorization header and is redacted from
+	every message returned.
+	"""
+	headers = {"Authorization": "Bearer " + api_key}
+	if body is not None:
+		headers["Content-Type"] = "application/json"
+
+	try:
+		response = requests.request(
+			method, url, headers=headers, data=body, timeout=timeout_seconds,
+		)
+	except requests.exceptions.Timeout:
+		return None, "Request to the AI provider timed out after %ss." % timeout_seconds
+	except requests.exceptions.ConnectionError as error:
+		return None, redact("Could not reach the AI provider: %s" % error, api_key)
+	except Exception as error:
+		# Still never raises out, but no longer anonymous: the exception type
+		# is what tells you a misconfiguration from a network fault.
+		return None, redact("The AI provider request failed (%s: %s)" % (type(error).__name__, error), api_key)
+
+	if response.status_code >= 400:
+		return None, provider_error_message(response.status_code, response.text, api_key)
+
+	try:
+		return response.json(), None
+	except Exception:
+		return None, redact(
+			"The AI provider returned HTTP %s with a non-JSON body: %s"
+			% (response.status_code, (response.text or "")[:300]),
+			api_key,
+		)
