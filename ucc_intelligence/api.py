@@ -3,6 +3,7 @@ import frappe
 from ucc_intelligence.ai import client as _ai_client
 from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_5, criterion_6, criterion_7
+from ucc_intelligence.analytics import chart_service as _chart_service
 from ucc_intelligence.analytics.contracts import is_permission_error as _is_permission_error
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
@@ -57,6 +58,28 @@ CRITERION_7_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
 	"question_registry", "drilldown",
 ]
+
+
+def _relabel_api_method(result, criterion_number):
+	"""Stamp the response with the method that ACTUALLY served it.
+
+	Each criterion module's run() is a verbatim port of the legacy Server
+	Script, right down to the `api_method` string it puts in meta -- so a
+	response served by this app still announced itself as
+	`ucc_analytics_criterion_N`. That was harmless while the frontend really
+	did call the Server Script; after the Phase 13 cutover it is simply
+	untrue, and meta.api_method is exactly what someone reads when
+	diagnosing which layer answered.
+
+	Corrected HERE rather than in the criterion modules because those are
+	byte-identical ports and their own tests re-extract the legacy source to
+	prove it. Relabelling inside them would break that guarantee to fix a
+	label; this is app-authored code, so it costs nothing.
+	"""
+	if isinstance(result, dict) and isinstance(result.get("meta"), dict):
+		result["meta"]["api_method"] = "ucc_intelligence.api.get_criterion_%s" % criterion_number
+		result["meta"]["served_by"] = "ucc_intelligence app"
+	return result
 
 
 @frappe.whitelist()
@@ -167,6 +190,41 @@ def get_monitoring_findings(status="Open", limit=100):
 	}
 
 
+
+@frappe.whitelist()
+def get_chart_definitions(criterion=None):
+	"""The chart layer's own manifest: every chart, its Insights query, and
+	whether that query is real yet.
+
+	No only_for -- this is chart METADATA (ids, titles, types, migration
+	status), not data. It contains no institutional figures, and the data
+	behind each chart is separately permission-checked when fetched.
+	"""
+	criterion = frappe.utils.cstr(criterion).strip() or None
+	return _chart_service.get_definitions(criterion)
+
+
+@frappe.whitelist()
+def get_chart_data(chart_id=None, chart_ids=None):
+	"""One chart, or a batch, executed through Insights.
+
+	Permissions are unchanged from the mechanism proved on the bench: the
+	Insights Query v3 is private, executed server-side with
+	check_permission("read") and row-level filtering via
+	Insights Settings.apply_user_permissions. The public-dashboard
+	mechanism is never used -- it applies no permissions at all.
+
+	The chart id is resolved against the fixed registry; a caller can never
+	name an arbitrary Insights query to execute.
+	"""
+	if chart_ids:
+		return _chart_service.get_charts(chart_ids)
+	chart_id = frappe.utils.cstr(chart_id).strip()
+	if not chart_id:
+		frappe.throw(frappe._("A chart id is required."))
+	return _chart_service.get_chart(chart_id)
+
+
 @frappe.whitelist()
 def get_dashboard_access():
 	"""Which dashboard workspaces and criteria the signed-in user's roles allow
@@ -189,7 +247,7 @@ def get_criterion_1():
 		allowed_actions=CRITERION_1_ALLOWED_ACTIONS,
 		criterion_label="Criterion 1",
 	)
-	return criterion_1.run(**parsed)
+	return _relabel_api_method(criterion_1.run(**parsed), "1")
 
 
 @frappe.whitelist()
@@ -205,7 +263,7 @@ def get_criterion_2():
 		allowed_actions=CRITERION_2_ALLOWED_ACTIONS,
 		criterion_label="Criterion 2",
 	)
-	return criterion_2.run(**parsed)
+	return _relabel_api_method(criterion_2.run(**parsed), "2")
 
 
 @frappe.whitelist()
@@ -237,7 +295,7 @@ def get_criterion_4():
 		allowed_actions=CRITERION_4_ALLOWED_ACTIONS,
 		criterion_label="Criterion 4",
 	)
-	return criterion_4.run(**parsed)
+	return _relabel_api_method(criterion_4.run(**parsed), "4")
 
 
 @frappe.whitelist()
@@ -253,7 +311,7 @@ def get_criterion_3():
 		allowed_actions=CRITERION_3_ALLOWED_ACTIONS,
 		criterion_label="Criterion 3",
 	)
-	return criterion_3.run(**parsed)
+	return _relabel_api_method(criterion_3.run(**parsed), "3")
 
 
 @frappe.whitelist()
@@ -292,7 +350,7 @@ def get_criterion_5():
 	except Exception:
 		parsed["row_limit"] = CRITERION_5_DEFAULT_ROW_LIMIT
 
-	return criterion_5.run(question_id=payload.get("question_id"), **parsed)
+	return _relabel_api_method(criterion_5.run(question_id=payload.get("question_id"), **parsed), "5")
 
 
 @frappe.whitelist()
@@ -308,7 +366,7 @@ def get_criterion_6():
 		allowed_actions=CRITERION_6_ALLOWED_ACTIONS,
 		criterion_label="Criterion 6",
 	)
-	return criterion_6.run(**parsed)
+	return _relabel_api_method(criterion_6.run(**parsed), "6")
 
 
 @frappe.whitelist()
@@ -324,7 +382,7 @@ def get_criterion_7():
 		allowed_actions=CRITERION_7_ALLOWED_ACTIONS,
 		criterion_label="Criterion 7",
 	)
-	return criterion_7.run(**parsed)
+	return _relabel_api_method(criterion_7.run(**parsed), "7")
 
 
 @frappe.whitelist()

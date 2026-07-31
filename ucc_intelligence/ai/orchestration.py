@@ -25,18 +25,14 @@ import json
 
 from ucc_intelligence.ai import client as ai_client
 from ucc_intelligence.ai import guardrails
+from ucc_intelligence.ai import prompts
 from ucc_intelligence.ask_ucc import guided_questions
 from ucc_intelligence.ask_ucc import quality_action as quality_action_tools
 from ucc_intelligence.ask_ucc import recruitment_agent as recruitment_agent_tools
 from ucc_intelligence.ask_ucc import student_journey as student_journey_tools
 
-SYSTEM_PROMPT = (
-	"You are Ask UCC, an assistant for United Ceres College staff. Answer the "
-	"question using ONLY the facts supplied below, in the 'FACTS' section. "
-	"Never state anything not present in those facts. Never invent a record "
-	"name, status, date, or person that is not in the facts. If the facts do "
-	"not answer the question, say so plainly rather than guessing. Be concise."
-)
+# Prompt text lives in ai/prompts.py -- see that file for why, and for which
+# prompts are still placeholder wording awaiting review.
 
 # module key -> how to run it. `primary_tool` must be the tool that resolves
 # the record itself: if it can't (not found / permission denied), the
@@ -166,8 +162,8 @@ def ask(module_key, question, record_name):
 			"known_record_names": known_record_names,
 		}
 
-	user_prompt = "QUESTION: " + question + "\n\nFACTS (JSON):\n" + json.dumps(facts, default=str)
-	completion = ai_client.complete(SYSTEM_PROMPT, user_prompt)
+	user_prompt = prompts.build_user_prompt(question, json.dumps(facts, default=str))
+	completion = ai_client.complete(prompts.system_prompt_for(module_key), user_prompt)
 
 	if not completion.get("ok"):
 		return {
