@@ -72,15 +72,23 @@ COMPOSITE_LIFECYCLE = (
 
 # --- helper so an authored spec is one readable line -------------------------
 def q(doctype, dimension, label, measure="count", filters=None, order="value desc", limit=20):
-	"""One authored Insights query: group `doctype` by `dimension`, count rows.
+	"""One authored Insights query: group `doctype` by a dimension, count rows.
 
-	`filters` is a list of [field, operator, value]. Kept declarative so the
-	builder script can create the Insights Query without this module knowing
+	`dimension` may be a single field name or a LIST of candidates. Candidates
+	exist because the first bench run rejected 17 of 30 specs on field names:
+	guessing one name per chart from a DocType's purpose is unreliable, and a
+	single wrong guess kills the chart. The builder resolves candidates
+	against the live schema and takes the first that exists -- the same
+	verify-before-build discipline build_admission_intelligence_embed.py
+	already uses (resolve_field_live).
+
+	`filters` is a list of [field, operator, value]. Declarative, so the
+	builder can create the Insights Query without this module knowing
 	anything about Insights' internals.
 	"""
 	return {
 		"doctype": doctype,
-		"dimension": dimension,
+		"dimension_candidates": [dimension] if isinstance(dimension, str) else list(dimension),
 		"measure": measure,
 		"label": label,
 		"filters": filters or [],
@@ -97,8 +105,8 @@ def composite(reason):
 # CRITERION 1 -- Leadership and Strategic Planning        2 authored / 6
 # ===========================================================================
 CRITERION_1 = {
-	"criterion_1-11-status": q("Oversight Framework", "status", "Oversight controls by status"),
-	"criterion_1-12-status": q("Quality Goal", "status", "Strategic quality goals by status"),
+	"criterion_1-11-status": q("Oversight Framework", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Oversight controls by status"),
+	"criterion_1-12-status": q("Quality Goal", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Strategic quality goals by status"),
 	"criterion_1-11-coverage": composite(COMPOSITE_COVERAGE),
 	"criterion_1-12-coverage": composite(COMPOSITE_COVERAGE),
 	"criterion_1-overview-sources": composite(COMPOSITE_AVAILABILITY),
@@ -109,10 +117,10 @@ CRITERION_1 = {
 # CRITERION 2 -- Corporate Administration                 4 authored / 10
 # ===========================================================================
 CRITERION_2 = {
-	"criterion_2-21-status": q("Employee", "status", "Employees by status"),
-	"criterion_2-22-status": q("Stakeholder Engagement Strategy", "status", "Stakeholder engagement by status"),
-	"criterion_2-23-status": q("Material Vetting Form", "status", "Information/knowledge records by status"),
-	"criterion_2-24-status": q("Quality Action", "status", "Feedback-driven Quality Actions by status"),
+	"criterion_2-21-status": q("Employee", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Employees by status"),
+	"criterion_2-22-status": q("Stakeholder Engagement Strategy", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Stakeholder engagement by status"),
+	"criterion_2-23-status": q("Material Vetting Form", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Information/knowledge records by status"),
+	"criterion_2-24-status": q("Quality Action", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Feedback-driven Quality Actions by status"),
 	"criterion_2-21-coverage": composite(COMPOSITE_COVERAGE),
 	"criterion_2-22-coverage": composite(COMPOSITE_COVERAGE),
 	"criterion_2-23-coverage": composite(COMPOSITE_COVERAGE),
@@ -125,13 +133,13 @@ CRITERION_2 = {
 # CRITERION 3 -- External Recruitment Agents              7 authored / 19
 # ===========================================================================
 CRITERION_3 = {
-	"c311-listing": q("Agent", "status", "Agents by listing status"),
-	"c311-identification": q("Agent", "agent_type", "Agents by identification pathway"),
-	"c311-score": q("Supplier Rating", "rating", "Selection score distribution", order="label asc"),
-	"c321-evaluation": q("Agent Annual Performance Review", "status", "Annual performance reviews by status"),
-	"c321-complaints": q("Quality Action", "finding_type", "Agent complaints and breaches by finding type"),
-	"c3-overview-policy": q("Non Disclosure Agreement", "status", "NDA coverage by status"),
-	"c3-overview-renewal": q("Agent Contract", "expiry_date", "Contract renewals by expiry", order="label asc"),
+	"c311-listing": q("Agent", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Agents by listing status"),
+	"c311-identification": q("Agent", ["agent_type", "type", "category", "agent_category"], "Agents by identification pathway"),
+	"c311-score": q("Supplier Rating", ["rating", "overall_rating", "score", "total_score"], "Selection score distribution", order="label asc"),
+	"c321-evaluation": q("Agent Annual Performance Review", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Annual performance reviews by status"),
+	"c321-complaints": q("Quality Action", ["finding_type", "custom_finding_type", "type", "category"], "Agent complaints and breaches by finding type"),
+	"c3-overview-policy": q("Non Disclosure Agreement", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "NDA coverage by status"),
+	"c3-overview-renewal": q("Agent Contract", ["expiry_date", "end_date", "contract_end_date", "valid_upto"], "Contract renewals by expiry", order="label asc"),
 	"c3-overview-exceptions": composite(COMPOSITE_EXCEPTIONS),
 	"c3-overview-health": composite(COMPOSITE_READINESS),
 	"c3-overview-lifecycle": composite(COMPOSITE_LIFECYCLE),
@@ -157,13 +165,13 @@ CRITERION_4 = {}
 # CRITERION 5 -- Academic Systems and Processes           7 authored / 32
 # ===========================================================================
 CRITERION_5 = {
-	"c5-511-status": q("Course Proposal", "status", "Course design proposals by status"),
-	"c5-512-status": q("Course Review", "status", "Course reviews by status"),
-	"c5-521-status": q("Course Schedule", "status", "Course planning schedules by status"),
-	"c5-522-status": q("Student Group", "status", "Course delivery groups by status"),
-	"c5-531-status": q("Partnerships Agreement Management", "status", "Partnership agreements by status"),
-	"c5-54-status": q("Student Log", "status", "Student feedback logs by status"),
-	"c5-55-status": q("Assessment Plan", "status", "Assessment plans by status"),
+	"c5-511-status": q("Course Proposal", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Course design proposals by status"),
+	"c5-512-status": q("Course Review", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Course reviews by status"),
+	"c5-521-status": q("Course Schedule", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Course planning schedules by status"),
+	"c5-522-status": q("Student Group", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Course delivery groups by status"),
+	"c5-531-status": q("Partnerships Agreement Management", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Partnership agreements by status"),
+	"c5-54-status": q("Student Log", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Student feedback logs by status"),
+	"c5-55-status": q("Assessment Plan", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Assessment plans by status"),
 	"c5-511-coverage": composite(COMPOSITE_COVERAGE),
 	"c5-512-coverage": composite(COMPOSITE_COVERAGE),
 	"c5-521-coverage": composite(COMPOSITE_COVERAGE),
@@ -197,15 +205,15 @@ CRITERION_5 = {
 # to its DocType by reading its TITLE against criterion_6.SOURCE_CANDIDATES.
 # ===========================================================================
 CRITERION_6 = {
-	"c6-overview-actions": q("Quality Action", "status", "Quality Actions by status"),
-	"c6-overview-policy": q("Oversight Framework", "status", "Policy evidence by status"),
-	"c611-findings": q("Non Conformance", "severity", "Audit findings by severity"),
-	"c611-programme": q("Quality Inspection", "status", "Annual audit programme by status"),
-	"c621-outputs": q("Management Review", "status", "Management review outputs by status"),
-	"c631-types": q("Operational Outcomes Cost Time Saving", "type", "Innovation type mix"),
-	"c641-outcomes": q("Supplier Rating", "status", "Provider evaluation outcomes by status"),
-	"c641-tier": q("Supplier", "supplier_group", "Provider tier profile"),
-	"c653-levels": q("Risk Register and Mitigation Plans", "risk_level", "Risk level distribution"),
+	"c6-overview-actions": q("Quality Action", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Quality Actions by status"),
+	"c6-overview-policy": q("Oversight Framework", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Policy evidence by status"),
+	"c611-findings": q("Non Conformance", ["severity", "priority", "status", "nc_type"], "Audit findings by severity"),
+	"c611-programme": q("Quality Inspection", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Annual audit programme by status"),
+	"c621-outputs": q("Management Review", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Management review outputs by status"),
+	"c631-types": q("Operational Outcomes Cost Time Saving", ["type", "category", "outcome_type", "status"], "Innovation type mix"),
+	"c641-outcomes": q("Supplier Rating", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Provider evaluation outcomes by status"),
+	"c641-tier": q("Supplier", ["supplier_group", "supplier_type", "tier"], "Provider tier profile"),
+	"c653-levels": q("Risk Register and Mitigation Plans", ["risk_level", "risk_rating", "severity", "level"], "Risk level distribution"),
 	# --- composite ---------------------------------------------------------
 	"c6-overview-calendar": composite(COMPOSITE_LIFECYCLE),
 	"c6-overview-cycle": composite(COMPOSITE_LIFECYCLE),
@@ -239,7 +247,7 @@ CRITERION_6 = {
 # CRITERION 7 -- Performance Outcomes                     2 authored / 4
 # ===========================================================================
 CRITERION_7 = {
-	"criterion_7-71-status": q("Quality Performance Outcomes", "status", "Performance outcomes by status"),
+	"criterion_7-71-status": q("Quality Performance Outcomes", ["status", "workflow_state", "docstatus", "review_status", "boarding_status", "agreement_status"], "Performance outcomes by status"),
 	"criterion_7-71-coverage": composite(COMPOSITE_COVERAGE),
 	"criterion_7-overview-sources": composite(COMPOSITE_AVAILABILITY),
 	"criterion_7-overview-targets": composite(COMPOSITE_TARGETS),

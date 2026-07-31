@@ -49,6 +49,21 @@ VOLATILE_KEYS = {
 	"creation", "last_indexed_at", "started_at", "finished_at",
 }
 
+# Keys holding LANGUAGE-MODEL OUTPUT. A model writes different wording every
+# call, so any response containing AI text can never compare equal between
+# two runs -- regardless of Server Scripts.
+#
+# This is NOT a relaxation. The comparison is SPLIT rather than loosened:
+#   - facts, sources, structure, ai_status  compared strictly. If a Server
+#     Script were still involved, this is where it would show.
+#   - answer text                           compared separately and reported,
+#     because a difference here is expected and proves nothing either way.
+#
+# The script proves the classification rather than assuming it: it reports,
+# per surface, whether the difference was ONLY in AI text or reached the
+# facts. A facts difference is still a FAIL.
+AI_TEXT_KEYS = {"text", "answer_error", "model", "token_usage"}
+
 CRITERIA = ["1", "2", "3", "4", "5", "6", "7"]
 ASK_MODULES = ["quality_action", "recruitment_agent", "student_journey"]
 
@@ -61,17 +76,58 @@ def check(ok, message, detail=""):
 	return bool(ok)
 
 
-def strip_volatile(value):
-	"""A comparable copy: volatile keys removed at every depth."""
+def strip_volatile(value, drop_ai=False, _in_answer=False):
+	"""A comparable copy. `drop_ai` additionally removes model-written text."""
 	if isinstance(value, dict):
-		return {k: strip_volatile(v) for k, v in sorted(value.items()) if k not in VOLATILE_KEYS}
+		out = {}
+		for key, item in sorted(value.items()):
+			if key in VOLATILE_KEYS:
+				continue
+			if drop_ai and key == "answer":
+				# Keep the SHAPE (was there an answer at all?) without the words.
+				out[key] = "<ai-answer-present>" if item else item
+				continue
+			if drop_ai and _in_answer and key in AI_TEXT_KEYS:
+				continue
+			out[key] = strip_volatile(item, drop_ai, _in_answer=(key == "answer"))
+		return out
 	if isinstance(value, list):
-		return [strip_volatile(v) for v in value]
+		return [strip_volatile(v, drop_ai, _in_answer) for v in value]
 	return value
 
 
-def comparable(value):
-	return json.dumps(strip_volatile(value), sort_keys=True, default=str)
+def comparable(value, drop_ai=False):
+	return json.dumps(strip_volatile(value, drop_ai), sort_keys=True, default=str)
+
+
+def first_difference(left, right, path=""):
+	"""WHERE two responses differ, as a dotted path. This is what turns
+	'these differ' into a diagnosis: a difference under `answer` is the model
+	writing different words; a difference under `facts` or `sources` means
+	something still reached a Server Script."""
+	if type(left) is not type(right):
+		return path or "(root)", "%s vs %s" % (type(left).__name__, type(right).__name__)
+	if isinstance(left, dict):
+		for key in sorted(set(left) | set(right)):
+			if key in VOLATILE_KEYS:
+				continue
+			if key not in left or key not in right:
+				return "%s.%s" % (path, key), "present in only one run"
+			found = first_difference(left[key], right[key], "%s.%s" % (path, key))
+			if found:
+				return found
+		return None
+	if isinstance(left, list):
+		if len(left) != len(right):
+			return path, "%d vs %d items" % (len(left), len(right))
+		for index, (a, b) in enumerate(zip(left, right)):
+			found = first_difference(a, b, "%s[%d]" % (path, index))
+			if found:
+				return found
+		return None
+	if left != right:
+		return path or "(root)", "%r vs %r" % (str(left)[:60], str(right)[:60])
+	return None
 
 
 # ---------------------------------------------------------------------------
@@ -222,9 +278,40 @@ def run():
 			if any(isinstance(v, dict) and ("__skipped__" in v or "__exception__" in v)
 					for v in (baseline[key], without[key])):
 				continue
-			same = comparable(baseline[key]) == comparable(without[key])
-			check(same, "%s returns IDENTICAL output with and without Server Scripts" % key,
-				"output differs -- something still reaches a Server Script")
+
+			if comparable(baseline[key]) == comparable(without[key]):
+				check(True, "%s returns IDENTICAL output with and without Server Scripts" % key)
+				continue
+
+			# It differed. WHERE it differed is the whole question.
+			where, what = first_difference(baseline[key], without[key]) or ("(unknown)", "")
+			ai_only = comparable(baseline[key], drop_ai=True) == comparable(without[key], drop_ai=True)
+
+			if ai_only:
+				# The facts, sources, structure and ai_status are byte-identical;
+				# only model-written wording moved. A Server Script cannot cause
+				# that, and cannot hide behind it either -- everything it could
+				# have affected was just compared and matched.
+				check(True, "%s: facts/sources/structure IDENTICAL; only AI wording differs (%s)" % (key, where))
+				print("       (expected: a language model writes different words each call)")
+			else:
+				check(False, "%s returns IDENTICAL output with and without Server Scripts" % key,
+					"differs at %s (%s) -- NOT explained by AI wording, something still reaches a Server Script" % (where, what))
+
+		# Which Ask modules actually exercised the AI path, so a module that
+		# "passed" only because it never called a model is not mistaken for
+		# evidence.
+		print("\n--- Ask UCC ai_status per module (context for the comparisons above) ---")
+		for module_key in ASK_MODULES:
+			response = without.get("ask_%s" % module_key) or {}
+			status = response.get("ai_status") if isinstance(response, dict) else None
+			note = {
+				"available": "AI ran -- wording differs by nature",
+				"disabled": "AI off -- fully deterministic, so an exact match proves more",
+				"unavailable": "AI enabled but could not run -- deterministic",
+				"not_found": "no readable record -- deterministic, and exercised nothing",
+			}.get(status, "")
+			print("   %-22s ai_status=%-14s %s" % (module_key, status, note))
 
 		# meta.api_method must name the app, not the legacy script: it is what
 		# a diagnostician reads to tell which layer answered.

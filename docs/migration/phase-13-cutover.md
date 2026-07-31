@@ -174,3 +174,88 @@ readiness but cannot promote.
 No deletion date. `verify_cutover.py` proves nothing depends on them.
 
 ## 5. `test_drop_server_message.py` deleted.
+
+---
+
+# Round 3 — bench results acted on
+
+## 1. `bench migrate` aborted at 38% — FIXED
+
+`ModuleNotFoundError: ...ucc_knowledge_chunk.ucc_knowledge_chunk`
+
+Frappe imports `<module>.doctype.<snake>.<snake>` for every DocType it
+installs. **Six** DocTypes had a `.json` and an `__init__.py` but no
+controller module — every one I created in the last two rounds:
+
+`ucc_ai_action_request`, `ucc_knowledge_chunk`, `ucc_knowledge_source`,
+`ucc_monitoring_finding`, `ucc_monitoring_rule`, `ucc_monitoring_run`
+
+All six now have controllers. They are not empty boilerplate — each carries
+the guard that belongs on that DocType:
+
+| DocType | Guard |
+|---|---|
+| Knowledge Source | rejects self-supersession and supersession loops (either would silently make a live policy unquotable) |
+| Monitoring Rule | rejects a `rule_id` with no registry entry — it would look enabled and never fire |
+| Monitoring Finding | requires a reason to suppress — a suppressed finding never reappears |
+| AI Action Request | re-checks the action allowlist, and freezes payload/target once out of Draft so an approval means what it said |
+
+`tools/test_doctype_completeness.py` (91 checks) now verifies **all** of it
+structurally: JSON, `__init__.py`, controller module, a `Document` subclass,
+and a class name matching what Frappe derives. Verified by deleting the
+exact controller that broke migrate — it reproduces the failure.
+
+## 2. verify_cutover 38/40 — CONFIRMED AI wording, and now proven per-run
+
+Your reading was right, but I did not want it accepted on plausibility: if a
+Server Script *were* still reached, "it's just the AI" is exactly what it
+would look like.
+
+The comparison is now **split, not relaxed**:
+
+- **facts, sources, structure, `ai_status`** — compared strictly. A Server
+  Script dependency would show here.
+- **model wording** (`text`, `model`, `token_usage`, `answer_error`, and
+  only inside `answer`) — compared separately and reported.
+
+The script now prints **where** each difference occurred as a dotted path,
+so the bench output says `.answer.text` rather than "these differ". A
+difference reaching `.facts` or `.sources` still FAILS.
+
+It also prints `ai_status` per Ask module, so `ask_recruitment_agent`
+passing is explained rather than assumed — if it returned `not_found` (no
+readable Agent Contract), it exercised nothing and its pass proves little.
+
+`tools/test_verify_cutover_comparison.py` (21 checks) proves the classifier:
+a reworded answer is recognised; a changed fact, dropped source, changed
+`ai_status`, vanished answer or reverted `api_method` all still fail. Tested
+against the lazy version (exclude `answer` wholesale) — it fails.
+
+## 3. Insights 0/30 — root cause found, and it was mine
+
+**The 13 TableNotFound were not a table-sync issue.** `use_live_connection`
+was already set. The cause: Insights addresses the **physical table**, so
+`table_name` must be `"tab" + DocType`. I passed the bare DocType.
+
+Three further shapes were wrong the same way — all from writing
+`build_operations` from memory instead of copying
+`build_admission_intelligence_embed.build_simple_series()`, which had
+already been proven on your bench:
+
+| | Wrong | Correct |
+|---|---|---|
+| table | `"Quality Action"` | `"tabQuality Action"` |
+| measures | `{"type": "measure", …}` | `{"measure_name","column_name","data_type","aggregation"}` |
+| dimensions | `{"type": "dimension", …}` | `{"dimension_name","column_name","data_type"}` |
+| filter | `{"column": {"type": "column", …}}` | `{"column": {"column_name": …}}` |
+| — | `is_builder_query` unset | `is_builder_query = 1` |
+
+**The 17 schema mismatches** are fixed by candidate lists rather than better
+guesses. `q()` now takes a list, averaging 5.4 candidates per chart,
+resolved against the live schema — the same `resolve_field_live` discipline
+the working pilot uses. The builder reports which candidate won and where it
+fell back, and for a chart where none match it lists the real status-ish
+fields on that DocType.
+
+The builder also **repairs** queries created by the first run rather than
+leaving permanently-failing records that look built.

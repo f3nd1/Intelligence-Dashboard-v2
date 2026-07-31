@@ -185,11 +185,27 @@ for chart_id, spec in chart_registry.CHARTS.items():
 	if spec["status"] != "authored":
 		continue
 	detail = spec.get("spec") or {}
-	if not (detail.get("doctype") and detail.get("dimension")):
+	if not (detail.get("doctype") and detail.get("dimension_candidates")):
 		report(False, "authored chart %r carries a complete spec" % chart_id, str(detail))
 		break
 else:
-	report(True, "every AUTHORED chart carries a doctype + dimension the builder can execute")
+	report(True, "every AUTHORED chart carries a doctype + dimension candidates the builder can resolve")
+
+# The first bench run rejected 17 of 30 specs on a single guessed field name.
+# Candidate lists are the fix; one candidate is the old failure mode.
+single_guess = [c for c, s in chart_registry.CHARTS.items()
+	if s["status"] == "authored" and len(s["spec"]["dimension_candidates"]) < 2]
+report(not single_guess,
+	"every authored chart offers MULTIPLE dimension candidates, resolved against the live schema",
+	"single-guess charts: %s" % single_guess[:5])
+
+builder = (ROOT / "docs" / "migration" / "scripts" / "build_insights_charts_from_specs.py").read_text(encoding="utf-8")
+report('"tab" + spec["doctype"]' in builder,
+	"the builder addresses tab<DocType> -- the bare DocType name caused 13 TableNotFound errors")
+report('"measure_name": "count"' in builder and '"dimension_name": dimension_field' in builder,
+	"the builder uses the measure/dimension shape already proven on the bench")
+report("is_builder_query" in builder and "use_live_connection" in builder,
+	"the builder sets is_builder_query and use_live_connection, as the proven pilot does")
 
 # A composite chart must say WHY, so an empty card is explained rather than
 # looking like an oversight.
@@ -352,8 +368,25 @@ report((ROOT / "docs" / "migration" / "scripts" / "load_sample_knowledge.py").ex
 	"a bench script loads the samples and retrieves them back")
 
 
+
 # ===========================================================================
-section("8. Bench scripts exist for what cannot be proved offline")
+section("8. Installability -- every DocType can actually migrate")
+# ===========================================================================
+# bench migrate aborted at 38% on a missing controller module. Checked here
+# structurally so the next omission fails in a second, not half way through
+# a migration. test_doctype_completeness.py holds the detail; this is the
+# headline.
+doctype_dirs = sorted(d for d in (APP / "sophia" / "doctype").iterdir()
+	if d.is_dir() and d.name != "__pycache__")
+incomplete = [d.name for d in doctype_dirs
+	if not (d / ("%s.py" % d.name)).exists() or not (d / "__init__.py").exists()
+	or not (d / ("%s.json" % d.name)).exists()]
+report(not incomplete, "every DocType has json + __init__.py + controller (%d DocTypes)" % len(doctype_dirs),
+	"incomplete: %s -- bench migrate will abort on these" % incomplete)
+
+
+# ===========================================================================
+section("9. Bench scripts exist for what cannot be proved offline")
 # ===========================================================================
 for name, purpose in [
 	("verify_cutover.py", "Server Scripts disabled, every surface re-exercised"),
