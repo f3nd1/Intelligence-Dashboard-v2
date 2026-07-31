@@ -1,0 +1,27 @@
+{
+	"doctype": "DocType",
+	"name": "UCC Monitoring Run",
+	"module": "Sophia",
+	"custom": 0,
+	"istable": 0,
+	"issingle": 0,
+	"track_changes": 0,
+	"engine": "InnoDB",
+	"autoname": "hash",
+	"fields": [
+		{"fieldname": "rule", "fieldtype": "Link", "options": "UCC Monitoring Rule", "label": "Rule", "reqd": 1},
+		{"fieldname": "started_at", "fieldtype": "Datetime", "label": "Started At"},
+		{"fieldname": "finished_at", "fieldtype": "Datetime", "label": "Finished At"},
+		{"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Running\nCompleted\nFailed", "default": "Running"},
+		{"fieldname": "column_break_1", "fieldtype": "Column Break"},
+		{"fieldname": "records_evaluated", "fieldtype": "Int", "label": "Records Evaluated"},
+		{"fieldname": "findings_opened", "fieldtype": "Int", "label": "Findings Opened"},
+		{"fieldname": "findings_reopened", "fieldtype": "Int", "label": "Findings Reopened"},
+		{"fieldname": "findings_resolved", "fieldtype": "Int", "label": "Findings Resolved"},
+		{"fieldname": "rule_version", "fieldtype": "Data", "label": "Rule Version"},
+		{"fieldname": "error_message", "fieldtype": "Small Text", "label": "Error Message"}
+	],
+	"permissions": [
+		{"role": "System Manager", "read": 1, "write": 0, "create": 0, "delete": 0}
+	]
+}

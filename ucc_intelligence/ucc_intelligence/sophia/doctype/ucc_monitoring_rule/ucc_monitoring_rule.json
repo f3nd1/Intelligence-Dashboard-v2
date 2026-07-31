@@ -1,0 +1,30 @@
+{
+	"doctype": "DocType",
+	"name": "UCC Monitoring Rule",
+	"module": "Sophia",
+	"custom": 0,
+	"istable": 0,
+	"issingle": 0,
+	"track_changes": 1,
+	"engine": "InnoDB",
+	"autoname": "field:rule_id",
+	"fields": [
+		{"fieldname": "rule_id", "fieldtype": "Data", "label": "Rule ID", "reqd": 1, "unique": 1,
+		 "description": "Stable identifier matching a rule in monitoring/rule_registry.py. The evaluation logic lives in version-controlled Python, never in this record -- CLAUDE.md §11 requires deterministic, reviewable pass/fail."},
+		{"fieldname": "title", "fieldtype": "Data", "label": "Title", "reqd": 1},
+		{"fieldname": "purpose", "fieldtype": "Small Text", "label": "Purpose"},
+		{"fieldname": "target_doctype", "fieldtype": "Data", "label": "Target DocType"},
+		{"fieldname": "severity", "fieldtype": "Select", "label": "Severity", "options": "Low\nMedium\nHigh", "default": "Medium"},
+		{"fieldname": "responsible_role", "fieldtype": "Link", "options": "Role", "label": "Responsible Role"},
+		{"fieldname": "column_break_1", "fieldtype": "Column Break"},
+		{"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "1"},
+		{"fieldname": "rule_version", "fieldtype": "Data", "label": "Rule Version",
+		 "description": "Set from the registry on each run, so a finding can be traced to the logic version that produced it."},
+		{"fieldname": "effective_date", "fieldtype": "Date", "label": "Effective Date",
+		 "description": "Records created before this date are not evaluated -- a new rule must not retroactively fault historic records."},
+		{"fieldname": "remediation", "fieldtype": "Small Text", "label": "Remediation Guidance"}
+	],
+	"permissions": [
+		{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
+	]
+}

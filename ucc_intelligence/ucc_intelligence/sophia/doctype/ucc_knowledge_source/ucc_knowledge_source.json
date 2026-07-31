@@ -1,0 +1,40 @@
+{
+	"doctype": "DocType",
+	"name": "UCC Knowledge Source",
+	"module": "Sophia",
+	"custom": 0,
+	"istable": 0,
+	"issingle": 0,
+	"track_changes": 1,
+	"engine": "InnoDB",
+	"autoname": "hash",
+	"fields": [
+		{"fieldname": "title", "fieldtype": "Data", "label": "Title", "reqd": 1},
+		{"fieldname": "source_type", "fieldtype": "Select", "label": "Source Type",
+		 "options": "Policy\nProcedure\nCourse Document\nCompliance Requirement\nMeeting Decision\nOther", "reqd": 1},
+		{"fieldname": "attached_file", "fieldtype": "Link", "options": "File", "label": "Attached File",
+		 "description": "The document itself, stored in Frappe. An external repository (Drive) is deliberately NOT wired up -- CLAUDE.md §19 lists the document repository of record as an open decision."},
+		{"fieldname": "owner_department", "fieldtype": "Data", "label": "Owning Department"},
+		{"fieldname": "classification", "fieldtype": "Select", "label": "Classification",
+		 "options": "Public\nInternal\nRestricted", "default": "Internal"},
+		{"fieldname": "permission_role", "fieldtype": "Link", "options": "Role", "label": "Restricted To Role",
+		 "description": "When set, only holders of this role may retrieve this document's content. Empty means any authenticated user who can read this DocType."},
+		{"fieldname": "column_break_1", "fieldtype": "Column Break"},
+		{"fieldname": "document_version", "fieldtype": "Data", "label": "Version"},
+		{"fieldname": "effective_date", "fieldtype": "Date", "label": "Effective Date"},
+		{"fieldname": "review_date", "fieldtype": "Date", "label": "Review Date"},
+		{"fieldname": "is_active", "fieldtype": "Check", "label": "Active", "default": "1"},
+		{"fieldname": "superseded_by", "fieldtype": "Link", "options": "UCC Knowledge Source", "label": "Superseded By",
+		 "description": "Set when a newer version replaces this one. A superseded document is never returned as current -- CLAUDE.md §9 source priority."},
+		{"fieldname": "content_checksum", "fieldtype": "Data", "label": "Content Checksum",
+		 "description": "Of the indexed text. A mismatch against the stored chunks means the index is stale."},
+		{"fieldname": "sync_status", "fieldtype": "Select", "label": "Sync Status",
+		 "options": "Not Indexed\nIndexed\nStale\nFailed", "default": "Not Indexed"},
+		{"fieldname": "last_indexed_at", "fieldtype": "Datetime", "label": "Last Indexed At"},
+		{"fieldname": "chunk_count", "fieldtype": "Int", "label": "Sections Indexed"}
+	],
+	"permissions": [
+		{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+		{"role": "All", "read": 1, "write": 0, "create": 0, "delete": 0}
+	]
+}

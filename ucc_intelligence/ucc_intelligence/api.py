@@ -8,6 +8,9 @@ from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
 from ucc_intelligence.ask_ucc import conversations as _ask_ucc_conversations
 from ucc_intelligence.ask_ucc import guided_questions as _ask_ucc_guided
+from ucc_intelligence.knowledge import retrieval as _knowledge_retrieval
+from ucc_intelligence.monitoring import engine as _monitoring_engine
+from ucc_intelligence.monitoring import rule_registry as _monitoring_rules
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 from ucc_intelligence.settings import status as _settings_status
 
@@ -90,6 +93,78 @@ def fetch_ai_models():
 	"""
 	frappe.only_for("System Manager")
 	return _ai_client.list_models()
+
+
+@frappe.whitelist()
+def run_monitoring(rule=None):
+	"""Run one monitoring rule, or every enabled rule.
+
+	System Manager only. A run reads every record in the target DocType
+	(monitoring/engine.py explains why), so triggering one is an
+	administrative act, not something an ordinary user should be able to
+	fire on demand. The FINDINGS it produces are permission-gated normally.
+
+	`rule` is validated against the fixed registry before use -- an unknown
+	value is rejected, never used to reach code by name.
+	"""
+	frappe.only_for("System Manager")
+	if rule:
+		rule = frappe.utils.cstr(rule).strip()
+		if rule not in _monitoring_rules.RULES:
+			frappe.throw(frappe._("Unknown monitoring rule."))
+		return {"ok": True, "runs": [_monitoring_engine.run_rule(rule)]}
+	return {"ok": True, "runs": _monitoring_engine.run_all_rules()}
+
+
+@frappe.whitelist()
+def search_knowledge(question, limit=5):
+	"""Permission-aware document search over registered knowledge sources.
+
+	No only_for: retrieval filters per-user itself (knowledge/retrieval.py's
+	current_source_names applies the source's restricted-to-role, and
+	frappe.get_list applies ordinary DocType permissions on top), so this is
+	safe for any authenticated user -- they get exactly the documents their
+	roles allow.
+
+	Gated on the document-knowledge toggle so an unfinished index is not
+	quietly queryable.
+	"""
+	question = frappe.utils.cstr(question).strip()
+	if not question:
+		frappe.throw(frappe._("Please enter a question."))
+	try:
+		enabled = bool(frappe.get_single("UCC Intelligence Settings").enable_document_knowledge)
+	except Exception:
+		enabled = False
+	if not enabled:
+		return {"ok": True, "results": [], "note": "Document knowledge is not enabled."}
+	return _knowledge_retrieval.search(question, limit=limit)
+
+
+@frappe.whitelist()
+def get_monitoring_findings(status="Open", limit=100):
+	"""Open findings, newest first.
+
+	No ignore_permissions and no only_for: frappe.get_list applies the
+	Finding DocType's own permissions, so a user sees exactly the findings
+	their roles allow. Page size is clamped rather than caller-controlled
+	(CLAUDE.md §11.4).
+	"""
+	status = frappe.utils.cstr(status).strip() or "Open"
+	if status not in ("Open", "Resolved", "Suppressed"):
+		frappe.throw(frappe._("Unknown finding status."))
+	limit = max(1, min(500, frappe.utils.cint(limit) or 100))
+	return {
+		"ok": True,
+		"findings": frappe.get_list(
+			"UCC Monitoring Finding",
+			filters={"status": status},
+			fields=["name", "rule", "target_doctype", "target_record", "detail",
+				"severity", "occurrence_count", "modified"],
+			order_by="modified desc",
+			limit_page_length=limit,
+		),
+	}
 
 
 @frappe.whitelist()
