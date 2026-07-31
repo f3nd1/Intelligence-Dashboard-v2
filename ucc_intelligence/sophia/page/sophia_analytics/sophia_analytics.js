@@ -580,6 +580,16 @@ function injectInsightsBadgeStyles() {
 .ucc-insights-badge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle}
 .ucc-insights-badge.is-real{background:#eefaf1;color:#1e7a45;border:1px solid #b7e3c6}
 .ucc-insights-badge.is-placeholder{background:#fff6e5;color:#8a5a00;border:1px solid #f0d8a8}
+.ucc-chart-placeholder{display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:center;min-height:120px;padding:16px;border:1px dashed var(--border-color,#d1d8dd);border-radius:8px;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,.02) 8px,rgba(0,0,0,.02) 16px)}
+.ucc-chart-placeholder strong{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8a5a00}
+.ucc-chart-placeholder p{margin:0;font-size:12px;opacity:.75;line-height:1.5}
+.ucc-chart-placeholder code{font-size:11px;opacity:.6;word-break:break-all}
+.ucc-insights-series{display:flex;flex-direction:column;gap:6px;padding:8px 0}
+.ucc-insights-bar{display:grid;grid-template-columns:minmax(90px,32%) 1fr auto;gap:8px;align-items:center;font-size:12px}
+.ucc-insights-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ucc-insights-bar-track{background:var(--bg-light-gray,#f4f5f6);border-radius:3px;height:14px;overflow:hidden}
+.ucc-insights-bar-fill{display:block;height:100%;background:#2c5aa0;border-radius:3px}
+.ucc-insights-bar-value{font-variant-numeric:tabular-nums;font-weight:600}
 `;
     document.head.appendChild(style);
 }
@@ -614,15 +624,100 @@ function renderLiveChartCard(dashboard, chart, index, result) {
 
     card.dataset.liveCardRendered = "";
 }
+// DOCUMENTED DIVERGENCE FROM THE PORT -- Frappe Insights is now the single
+// source for chart content.
+//
+// The legacy renderLiveChartCardNow() derived chart rows from the criterion
+// API response (metricRows()) and drew them with the hand-written SVG
+// renderers (chartForLive() and its per-type variants). That was the second
+// rendering path. It is gone from the runtime: nothing below calls
+// metricRows() or chartForLive(), and tools/test_end_to_end.py asserts they
+// are unreachable.
+//
+// A chart now shows exactly one of two things:
+//   - real Insights data, executed server-side and permission-checked; or
+//   - a clearly-labelled empty placeholder, because no Insights query has
+//     been authored for it yet.
+// There is no third case and no fallback. An empty chart means the
+// definition is outstanding -- it never means "we quietly used the old path".
 function renderLiveChartCardNow(card){
 if(!card||!card._liveCardPending||card.dataset.liveCardRendered==="1")return;
-const{chart,index,result}=card._liveCardPending;
-const rows=metricRows(result,index,chart),chartNode=card.querySelector("[data-demo-chart]"),tableBody=card.querySelector("[data-demo-chart-table-body]");
-if(chartNode){chartNode.dataset.demoChartTitle=chart.title;chartNode.dataset.demoChartType=chart.type||"bar";chartNode._liveResult=result;chartForLive(chartNode,chart,rows);}
-if(tableBody){
-tableBody.innerHTML=rows.length?rows.map(row=>{const metric=row[2],synthetic=row[3]===true,value=synthetic?Number(row[1]||0).toLocaleString():metric?metricValue(metric):Number(row[1]||0).toLocaleString(),status=metric?.status||"available";return`<tr><td>${esc(row[0])}</td><td>${esc(value)}</td><td>${statusBadge(status)}</td></tr>`;}).join(""):(blockedSourceNames(result).length?'<tr><td colspan="3">'+UCCShared.permissionNoticeHtml({view:(chart&&chart.title)||"This visual",source:blockedSourceNames(result).join(", "),compact:true})+'</td></tr>':'<tr><td colspan="3">No available metric for this visual.</td></tr>');
-}
+const{chart,result}=card._liveCardPending;
+const chartNode=card.querySelector("[data-demo-chart]");
+const tableBody=card.querySelector("[data-demo-chart-table-body]");
 card.dataset.liveCardRendered="1";
+if(chartNode){chartNode.dataset.demoChartTitle=chart.title;chartNode.dataset.demoChartType=chart.type||"bar";chartNode._liveResult=result;}
+renderInsightsChartInto(chartNode,tableBody,chart);
+}
+
+// Renders one card from Insights. Never falls back to the criterion API for
+// chart content -- a failure is shown as a failure.
+function renderInsightsChartInto(chartNode,tableBody,chart){
+const definition=chartDefinitions.byId[chart.id];
+if(definition&&definition.definition_status!=="real"){
+paintChartPlaceholder(chartNode,tableBody,chart,definition);
+return;
+}
+if(!(window.frappe&&frappe.call)){paintChartMessage(chartNode,tableBody,chart,"Frappe API client unavailable.");return;}
+paintChartMessage(chartNode,tableBody,chart,"Loading from Insights…");
+frappe.call({
+method:"ucc_intelligence.api.get_chart_data",
+args:{chart_id:chart.id},
+callback(response){
+const data=(response&&response.message)||{};
+if(data.status==="available"&&(data.series||[]).length){paintChartSeries(chartNode,tableBody,chart,data.series);return;}
+if(data.status==="placeholder"){paintChartPlaceholder(chartNode,tableBody,chart,data);return;}
+if(data.status==="permission_denied"){
+if(chartNode)chartNode.innerHTML="";
+if(tableBody)tableBody.innerHTML='<tr><td colspan="3">'+window.UCCShared.permissionNoticeHtml({view:chart.title||"This visual",source:data.insights_query_title||"this chart",detail:data.message,compact:true})+"</td></tr>";
+return;
+}
+paintChartMessage(chartNode,tableBody,chart,data.message||"No data returned by the Insights query.");
+},
+error(){paintChartMessage(chartNode,tableBody,chart,"The Insights query could not be reached.");},
+});
+}
+
+function paintChartPlaceholder(chartNode,tableBody,chart,definition){
+const title=(definition&&definition.insights_query_title)||"";
+if(chartNode){
+chartNode.innerHTML=
+'<div class="ucc-chart-placeholder">'
++'<strong>Insights definition pending</strong>'
++"<p>No Frappe Insights query has been authored for this chart yet, so there is nothing to display. "
++"This is a placeholder, not an empty result &mdash; the data has not been queried.</p>"
++(title?'<code>'+esc(title)+"</code>":"")
++"</div>";
+}
+if(tableBody)tableBody.innerHTML='<tr><td colspan="3">Insights definition pending &mdash; no query authored for this chart yet.</td></tr>';
+}
+
+function paintChartMessage(chartNode,tableBody,chart,message){
+if(chartNode)chartNode.innerHTML='<div class="ucc-chart-placeholder"><p>'+esc(message)+"</p></div>";
+if(tableBody)tableBody.innerHTML='<tr><td colspan="3">'+esc(message)+"</td></tr>";
+}
+
+// One renderer for every Insights series: a horizontal bar list. Deliberately
+// ONE shape rather than reproducing the ten hand-rolled chart types -- an
+// Insights query returns label/value rows, and inventing a radar or a funnel
+// from two columns would be decoration, not information. When a chart genuinely
+// needs a different shape, that belongs in its Insights chart definition.
+function paintChartSeries(chartNode,tableBody,chart,series){
+const max=Math.max.apply(null,series.map(row=>Number(row.value)||0).concat([1]));
+if(chartNode){
+chartNode.innerHTML='<div class="ucc-insights-series">'+series.map(row=>{
+const value=Number(row.value)||0;
+const width=Math.max(1,Math.round((value/max)*100));
+return'<div class="ucc-insights-bar"><span class="ucc-insights-bar-label">'+esc(row.label)+"</span>"
++'<span class="ucc-insights-bar-track"><span class="ucc-insights-bar-fill" style="width:'+width+'%"></span></span>'
++'<span class="ucc-insights-bar-value">'+esc(value.toLocaleString())+"</span></div>";
+}).join("")+"</div>";
+}
+if(tableBody){
+tableBody.innerHTML=series.map(row=>
+"<tr><td>"+esc(row.label)+"</td><td>"+esc((Number(row.value)||0).toLocaleString())+"</td><td>"+statusBadge("available")+"</td></tr>"
+).join("");
+}
 }
 function renderKpis(dashboard,config,result){const mount=dashboard.querySelector("[data-demo-kpis]");if(!mount)return;
 if(dashboard.dataset.demoDashboard==="criterion_4"&&result?.meta?.subcriterion==="4.1.1"&&Array.isArray(result?.admission_intelligence?.kpis)){

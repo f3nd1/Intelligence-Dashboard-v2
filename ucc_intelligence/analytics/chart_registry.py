@@ -809,8 +809,41 @@ PLACEHOLDER_CHARTS = {
 		"status": "placeholder",
 	},}
 
+# The ONLY charts allowed to be "real" are ones a human has seen return
+# correct data on a real site. "real" makes the runtime execute the query, so
+# a chart promoted on optimism produces an error card, not a chart.
+#
+# Promotion is a deliberate edit HERE -- add the chart id after checking its
+# output. build_insights_charts_from_specs.py tells you which are ready; it
+# cannot promote them itself, by design.
+BENCH_VERIFIED_CHARTS = set(REAL_ADMISSION_CHARTS)
+
 CHARTS = dict(PLACEHOLDER_CHARTS)
 CHARTS.update(REAL_ADMISSION_CHARTS)
+
+# Fold in the authored Insights specs (chart_definitions.py). A chart with a
+# spec becomes "authored": the query is designed and the bench script can
+# build it, but it is NOT "real" until it exists on a site and has been
+# verified there. Nothing is promoted to "real" from this file -- that would
+# make the runtime try to execute a query that may not exist.
+#
+# A composite chart keeps status "placeholder" and gains the reason it cannot
+# be a single Insights query, so the UI can say WHY rather than just showing
+# an empty card.
+from ucc_intelligence.analytics import chart_definitions as _definitions  # noqa: E402
+
+for _chart_id, _spec in CHARTS.items():
+	if _spec["status"] == "real":
+		continue
+	_authored = _definitions.spec_for(_chart_id, _spec.get("title", ""), _spec.get("type", ""))
+	if not _authored:
+		continue
+	if _authored.get("composite"):
+		_spec["composite_reason"] = _authored["reason"]
+	else:
+		_spec["status"] = "authored"
+		_spec["spec"] = _authored
+		_spec["insights_query_title"] = "UCC AUTHORED - " + _authored["label"]
 
 
 def get(chart_id):
@@ -826,8 +859,30 @@ def counts():
 	Settings status page so the migration's real progress is visible rather
 	than asserted."""
 	real = sum(1 for spec in CHARTS.values() if spec["status"] == "real")
+	authored = sum(1 for spec in CHARTS.values() if spec["status"] == "authored")
+	composite = sum(1 for spec in CHARTS.values() if spec.get("composite_reason"))
 	return {
 		"total": len(CHARTS),
 		"real": real,
-		"placeholder": len(CHARTS) - real,
+		"authored": authored,
+		"placeholder": len(CHARTS) - real - authored,
+		"composite": composite,
 	}
+
+
+def per_criterion():
+	"""Progress per criterion, so "how far through are we" is answerable
+	without counting by hand."""
+	out = {}
+	for spec in CHARTS.values():
+		row = out.setdefault(spec["criterion"], {"total": 0, "real": 0, "authored": 0, "composite": 0, "unspecified": 0})
+		row["total"] += 1
+		if spec["status"] == "real":
+			row["real"] += 1
+		elif spec["status"] == "authored":
+			row["authored"] += 1
+		elif spec.get("composite_reason"):
+			row["composite"] += 1
+		else:
+			row["unspecified"] += 1
+	return dict(sorted(out.items()))
