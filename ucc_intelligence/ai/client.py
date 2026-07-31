@@ -28,6 +28,7 @@ import frappe
 
 AI_API_KEY_SITE_CONFIG_KEY = "ucc_intelligence_ai_api_key"
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 
 DEFAULT_MAX_OUTPUT_TOKENS = 500
 DEFAULT_TIMEOUT_SECONDS = 30
@@ -121,6 +122,63 @@ def complete(system_prompt, user_prompt):
 		"latency_ms": latency_ms,
 		"token_usage": frappe.utils.cint(usage.get("total_tokens")),
 	}
+
+
+def list_models():
+	"""The provider's own model list, so the AI Model field can be a chosen
+	value rather than typed text. Same key source and the same never-raise
+	contract as complete(): a bad or missing key comes back as a message the
+	form can display inline, not an exception that breaks the form.
+
+	Deliberately server-side. The key never reaches the browser -- the client
+	gets model ids and nothing else.
+	"""
+	settings = get_settings()
+	provider = frappe.utils.cstr(settings.ai_provider).strip().lower() if settings else ""
+	if provider and provider != "openai":
+		return unavailable("unavailable", "AI provider %r has no implementation yet -- only OpenAI is wired up." % settings.ai_provider)
+
+	api_key = frappe.conf.get(AI_API_KEY_SITE_CONFIG_KEY)
+	if not api_key:
+		return unavailable("unavailable", "No API key configured (site_config.json: %s)." % AI_API_KEY_SITE_CONFIG_KEY)
+
+	timeout_seconds = DEFAULT_TIMEOUT_SECONDS
+	if settings:
+		timeout_seconds = frappe.utils.cint(settings.ai_request_timeout_seconds) or DEFAULT_TIMEOUT_SECONDS
+
+	try:
+		response = frappe.make_get_request(
+			OPENAI_MODELS_URL,
+			headers={"Authorization": "Bearer " + api_key},
+			timeout=timeout_seconds,
+		)
+	except Exception as error:
+		return unavailable("error", classify_error(error))
+
+	rows = (response or {}).get("data")
+	if not isinstance(rows, list):
+		return unavailable("error", "Provider response did not contain the expected shape.")
+
+	# Chat-completions models only. The endpoint also returns embeddings,
+	# audio, image and moderation models, none of which complete() can use --
+	# offering them would just produce a confusing 400 later.
+	models = sorted(
+		row["id"] for row in rows
+		if isinstance(row, dict) and isinstance(row.get("id"), str) and is_chat_model(row["id"])
+	)
+	if not models:
+		return unavailable("unavailable", "The provider returned no chat-capable models.")
+	return {"ok": True, "models": models}
+
+
+NON_CHAT_MODEL_MARKERS = ("embedding", "whisper", "tts", "dall-e", "moderation", "audio", "image", "realtime", "transcribe")
+
+
+def is_chat_model(model_id):
+	lowered = model_id.lower()
+	if any(marker in lowered for marker in NON_CHAT_MODEL_MARKERS):
+		return False
+	return lowered.startswith("gpt-") or lowered.startswith("o1") or lowered.startswith("o3") or lowered.startswith("chatgpt")
 
 
 def classify_error(error):

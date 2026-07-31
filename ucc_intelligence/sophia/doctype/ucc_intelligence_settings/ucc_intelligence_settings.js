@@ -6,6 +6,12 @@ frappe.ui.form.on("UCC Intelligence Settings", {
 		frm.add_custom_button(__("Manage Role Access"), () => {
 			frappe.set_route("List", "UCC Dashboard Access");
 		});
+		frm.add_custom_button(__("Fetch Available Models"), () => fetch_models(frm));
+		// AI Model is a Select with no stored options: the list comes from the
+		// provider, not from this repo, so it can't be hardcoded here without
+		// going stale. Seed it with whatever is already saved so the current
+		// value still displays before anyone clicks Fetch.
+		seed_model_options(frm);
 		render_ai_field_indicator(frm);
 		render_live_status(frm);
 	},
@@ -16,6 +22,45 @@ frappe.ui.form.on("UCC Intelligence Settings", {
 		render_ai_field_indicator(frm);
 	},
 });
+
+function seed_model_options(frm) {
+	const current = frm.doc.ai_model;
+	frm.set_df_property("ai_model", "options", current ? ["", current] : [""]);
+}
+
+// The API key never reaches this code. The button calls a System Manager-only
+// server method which reads the key from site_config.json and returns model
+// ids only -- there is no browser-side key entry anywhere in this form, by
+// design (CLAUDE.md Phase 8).
+function fetch_models(frm) {
+	frm.dashboard.clear_comment();
+	frm.dashboard.set_headline_alert(__("Fetching models from the provider…"), "blue");
+	frappe.call({
+		method: "ucc_intelligence.api.fetch_ai_models",
+		callback(response) {
+			const result = (response && response.message) || {};
+			if (!result.ok) {
+				// A bad or missing key is an expected outcome, not a crash:
+				// say what went wrong and leave the form usable.
+				frm.dashboard.set_headline_alert(
+					__("Could not fetch models: {0}", [result.message || __("unknown error")]),
+					"red"
+				);
+				return;
+			}
+			const models = result.models || [];
+			frm.set_df_property("ai_model", "options", [""].concat(models));
+			frm.refresh_field("ai_model");
+			frm.dashboard.set_headline_alert(
+				__("{0} models available. Pick one in AI Model, then save.", [models.length]),
+				"green"
+			);
+		},
+		error() {
+			frm.dashboard.set_headline_alert(__("Could not reach the server to fetch models."), "red");
+		},
+	});
+}
 
 // No server round-trip needed -- this only reads the form's own
 // already-loaded fields, not anything that requires a status check.

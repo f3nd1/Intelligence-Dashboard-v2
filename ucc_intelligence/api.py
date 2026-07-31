@@ -1,5 +1,6 @@
 import frappe
 
+from ucc_intelligence.ai import client as _ai_client
 from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_5, criterion_6, criterion_7
 from ucc_intelligence.analytics.contracts import is_permission_error as _is_permission_error
@@ -76,6 +77,19 @@ def get_settings_status():
 	access, not just their own), so the gate belongs here explicitly."""
 	frappe.only_for("System Manager")
 	return _settings_status.get_status_summary()
+
+
+@frappe.whitelist()
+def fetch_ai_models():
+	"""The provider's model list, for the AI Model field's dropdown.
+
+	System Manager only -- this spends a real API call against UCC's provider
+	account, so it is not something any logged-in user should be able to
+	trigger. The API key stays server-side: this returns model ids and a
+	status, never the key or the raw provider response.
+	"""
+	frappe.only_for("System Manager")
+	return _ai_client.list_models()
 
 
 @frappe.whitelist()
