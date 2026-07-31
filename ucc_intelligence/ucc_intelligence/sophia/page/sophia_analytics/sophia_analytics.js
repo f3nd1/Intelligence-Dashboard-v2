@@ -18,7 +18,7 @@
 // custom-html-block/CSS.css (sophia_analytics.css, same folder) loaded
 // page-scoped, not site-wide -- see the plan doc for why.
 
-const SHELL_HTML = "<div class=\"ucc-platform ucc-embed-safe\" data-build-id=\"SOPHIA-ANALYTICS-PAGE\" data-platform-version=\"phase-3\" id=\"uccIntelligencePlatform\"><header class=\"ucc-platform-shell\"><div class=\"ucc-platform-brand\"><div aria-hidden=\"true\" class=\"ucc-platform-mark\">UCC</div><div class=\"ucc-platform-brand-copy\"><div class=\"ucc-platform-brand-title\"><strong>UCC Intelligence Platform</strong></div><small>Analytics, evidence and guided answers</small></div></div><nav aria-label=\"Platform workspaces\" class=\"ucc-platform-workspaces\"><button aria-pressed=\"true\" class=\"is-active\" data-ucc-workspace=\"analytics\" type=\"button\">Analytics</button><button aria-pressed=\"false\" data-ucc-workspace=\"explore\" type=\"button\">Explore</button><button aria-pressed=\"false\" data-ucc-workspace=\"ask\" type=\"button\">Ask UCC</button></nav><div class=\"ucc-platform-dashboard-control\" data-ucc-dashboard-control=\"\"><label for=\"uccDashboardSelect\">Dashboard</label><select id=\"uccDashboardSelect\"><option value=\"criterion_1\">Criterion 1 \u00b7 Leadership and Strategic Planning</option><option value=\"criterion_2\">Criterion 2 \u00b7 Corporate Administration</option><option value=\"criterion_3\">Criterion 3 \u00b7 External Recruitment Agents</option><option value=\"criterion_4\">Criterion 4 \u00b7 Student Protection and Support Services</option><option selected=\"\" value=\"criterion_5\">Criterion 5 \u00b7 Academic Systems and Processes</option><option value=\"criterion_6\">Criterion 6 \u00b7 Quality Assurance, Innovation and Continual Improvement</option><option value=\"criterion_7\">Criterion 7 \u00b7 Performance Outcomes</option></select></div><button aria-label=\"UCC Intelligence Settings\" class=\"ucc-shell-collapse-toggle\" data-ucc-settings-link=\"\" hidden=\"\" title=\"UCC Intelligence Settings\" type=\"button\"><span aria-hidden=\"true\">&#9881;</span><span class=\"ucc-visually-hidden\">UCC Intelligence Settings</span></button><button aria-expanded=\"true\" aria-label=\"Minimise UCC navigation\" class=\"ucc-shell-collapse-toggle\" data-shell-toggle=\"\" title=\"Minimise navigation\" type=\"button\"><span aria-hidden=\"true\" class=\"ucc-shell-toggle-icon\" data-shell-toggle-icon=\"\">\u2039</span><span class=\"ucc-visually-hidden\" data-shell-toggle-label=\"\">Minimise navigation</span></button></header><main class=\"ucc-platform-main\"><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"analytics\"><div class=\"ucc-criterion-dashboard\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_5\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_5\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_4\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_4\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_1\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_1\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_2\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_2\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_3\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_3\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_6\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_6\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_7\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_7\" data-live-api=\"1\"></div></section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"explore\" hidden=\"\">\n<div class=\"ucc-explore-hub\" data-ucc-explore=\"\">\n<header class=\"ucc-explore-hero\">\n<div>\n<span class=\"ucc-explore-kicker\">DIAGRAM EXPLORER</span>\n<h1>Find live diagrams without opening another dashboard page</h1>\n<p>Search all Criterion 1\u20137 visual catalogues. Criteria 1, 2, 3, 6 and 7 use permission-aware live API foundations; Criteria 4 and 5 retain their established live implementations.</p>\n</div>\n<div class=\"ucc-explore-summary\">\n<article><span>Criterion 4</span><strong data-ucc-explore-count=\"criterion_4\">0</strong><small>live visuals</small></article>\n<article><span>Criterion 5</span><strong data-ucc-explore-count=\"criterion_5\">0</strong><small>live visuals</small></article>\n<article><span>Live foundations</span><strong>5</strong><small>permission-aware APIs</small></article>\n</div>\n</header>\n<div class=\"ucc-explore-controls\">\n<label><span>Search</span><input autocomplete=\"off\" data-ucc-explore-search=\"\" placeholder=\"Search diagram, section, type or source\" role=\"searchbox\" spellcheck=\"false\" type=\"text\"/></label>\n<label><span>Section</span><select data-ucc-explore-section=\"\"><option value=\"\">All sections</option></select></label>\n<label><span>Visual type</span><select data-ucc-explore-type=\"\"><option value=\"\">All visual types</option></select></label>\n<button data-ucc-explore-clear=\"\" type=\"button\">Clear</button>\n</div>\n<div class=\"ucc-explore-layout\">\n<aside class=\"ucc-explore-catalogue\">\n<div class=\"ucc-explore-catalogue-head\">\n<div><strong>Available diagrams</strong><small data-ucc-explore-result-count=\"\">Scanning platform\u2026</small></div>\n<span class=\"ucc-explore-live-pill\">Live</span>\n</div>\n<div class=\"ucc-explore-list\" data-ucc-explore-list=\"\"></div>\n</aside>\n<section class=\"ucc-explore-guide\">\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">1</span>\n<div><strong>Choose the dashboard</strong><p>Use the existing Criterion selector in the top bar.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">2</span>\n<div><strong>Search or filter</strong><p>The catalogue is generated from the real chart elements, so future diagrams appear automatically.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">3</span>\n<div><strong>Open the live card</strong><p>One click takes you to the original analytics card. No duplicate rendering logic or copied data.</p></div>\n</div>\n<div class=\"ucc-explore-note\">\n<strong>Why this approach scales</strong>\n<p>Explore is a fast index over the existing dashboards\u2014not a second dashboard system. Criterion-specific calculations, D3 renderers, tables, exports and record links remain in their original tested components.</p>\n</div>\n</section>\n</div>\n</div>\n</section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"ask\" hidden=\"\"><div class=\"ucc-ask\" data-ucc-ask=\"\"><section class=\"panel ucc-shared-panel ucc-ask-controls\"><div class=\"panel-head ucc-card-header\"><div class=\"ucc-card-heading-copy\"><h2>Ask UCC</h2><p class=\"ucc-card-description\">Answers are built from live records you already have permission to see. Facts come from ERPNext; any AI text is labelled separately.</p></div></div><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field\"><span>Module</span><select data-ask-module=\"\"></select></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Record</span><input autocomplete=\"off\" data-ask-record=\"\" placeholder=\"Search for a record...\" type=\"text\"/><div class=\"ucc-ask-suggestions\" data-ask-suggestions=\"\" hidden=\"\"></div></label></div><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Question</span><textarea data-ask-question=\"\" placeholder=\"e.g. Is this ready to close?\" rows=\"2\"></textarea></label><button class=\"btn btn-primary ucc-ask-submit\" data-ask-submit=\"\" type=\"button\">Ask</button></div><div class=\"ucc-ask-status\" data-ask-status=\"\" hidden=\"\"></div></section><section class=\"panel ucc-shared-panel ucc-ask-guided\" data-ask-guided=\"\" hidden=\"\"><div class=\"panel-head ucc-card-header\"><div class=\"ucc-card-heading-copy\"><h2>Guided questions</h2><p class=\"ucc-card-description\">Pick a category, then a question. You can also type your own above.</p></div></div><div class=\"ucc-ask-categories\" data-ask-categories=\"\"></div><div class=\"ucc-ask-questions\" data-ask-questions=\"\"></div></section><section class=\"ucc-ask-thread\" data-ask-thread=\"\"></section></div></section></main></div>";
+const SHELL_HTML = "<div class=\"ucc-platform ucc-embed-safe\" data-build-id=\"SOPHIA-ANALYTICS-PAGE\" data-platform-version=\"phase-3\" id=\"uccIntelligencePlatform\"><header class=\"ucc-platform-shell\"><div class=\"ucc-platform-brand\"><div aria-hidden=\"true\" class=\"ucc-platform-mark\">UCC</div><div class=\"ucc-platform-brand-copy\"><div class=\"ucc-platform-brand-title\"><strong>UCC Intelligence Platform</strong></div><small>Analytics, evidence and guided answers</small></div></div><nav aria-label=\"Platform workspaces\" class=\"ucc-platform-workspaces\"><button aria-pressed=\"true\" class=\"is-active\" data-ucc-workspace=\"analytics\" type=\"button\">Analytics</button><button aria-pressed=\"false\" data-ucc-workspace=\"explore\" type=\"button\">Explore</button><button aria-pressed=\"false\" data-ucc-workspace=\"ask\" type=\"button\">Ask UCC</button><button aria-label=\"UCC Intelligence Settings\" class=\"ucc-shell-settings-link\" data-ucc-settings-link=\"\" hidden=\"\" title=\"UCC Intelligence Settings\" type=\"button\"><span aria-hidden=\"true\">&#9881;</span><span class=\"ucc-visually-hidden\">UCC Intelligence Settings</span></button></nav><div class=\"ucc-platform-dashboard-control\" data-ucc-dashboard-control=\"\"><label for=\"uccDashboardSelect\">Dashboard</label><select id=\"uccDashboardSelect\"><option value=\"criterion_1\">Criterion 1 \u00b7 Leadership and Strategic Planning</option><option value=\"criterion_2\">Criterion 2 \u00b7 Corporate Administration</option><option value=\"criterion_3\">Criterion 3 \u00b7 External Recruitment Agents</option><option value=\"criterion_4\">Criterion 4 \u00b7 Student Protection and Support Services</option><option selected=\"\" value=\"criterion_5\">Criterion 5 \u00b7 Academic Systems and Processes</option><option value=\"criterion_6\">Criterion 6 \u00b7 Quality Assurance, Innovation and Continual Improvement</option><option value=\"criterion_7\">Criterion 7 \u00b7 Performance Outcomes</option></select></div><button aria-expanded=\"true\" aria-label=\"Minimise UCC navigation\" class=\"ucc-shell-collapse-toggle\" data-shell-toggle=\"\" title=\"Minimise navigation\" type=\"button\"><span aria-hidden=\"true\" class=\"ucc-shell-toggle-icon\" data-shell-toggle-icon=\"\">\u2039</span><span class=\"ucc-visually-hidden\" data-shell-toggle-label=\"\">Minimise navigation</span></button></header><main class=\"ucc-platform-main\"><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"analytics\"><div class=\"ucc-criterion-dashboard\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_5\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_5\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_4\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_4\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_1\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_1\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_2\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_2\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_3\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_3\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_6\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_6\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_7\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_7\" data-live-api=\"1\"></div></section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"explore\" hidden=\"\">\n<div class=\"ucc-explore-hub\" data-ucc-explore=\"\">\n<header class=\"ucc-explore-hero\">\n<div>\n<span class=\"ucc-explore-kicker\">DIAGRAM EXPLORER</span>\n<h1>Find live diagrams without opening another dashboard page</h1>\n<p>Search all Criterion 1\u20137 visual catalogues. Criteria 1, 2, 3, 6 and 7 use permission-aware live API foundations; Criteria 4 and 5 retain their established live implementations.</p>\n</div>\n<div class=\"ucc-explore-summary\">\n<article><span>Criterion 4</span><strong data-ucc-explore-count=\"criterion_4\">0</strong><small>live visuals</small></article>\n<article><span>Criterion 5</span><strong data-ucc-explore-count=\"criterion_5\">0</strong><small>live visuals</small></article>\n<article><span>Live foundations</span><strong>5</strong><small>permission-aware APIs</small></article>\n</div>\n</header>\n<div class=\"ucc-explore-controls\">\n<label><span>Search</span><input autocomplete=\"off\" data-ucc-explore-search=\"\" placeholder=\"Search diagram, section, type or source\" role=\"searchbox\" spellcheck=\"false\" type=\"text\"/></label>\n<label><span>Section</span><select data-ucc-explore-section=\"\"><option value=\"\">All sections</option></select></label>\n<label><span>Visual type</span><select data-ucc-explore-type=\"\"><option value=\"\">All visual types</option></select></label>\n<button data-ucc-explore-clear=\"\" type=\"button\">Clear</button>\n</div>\n<div class=\"ucc-explore-layout\">\n<aside class=\"ucc-explore-catalogue\">\n<div class=\"ucc-explore-catalogue-head\">\n<div><strong>Available diagrams</strong><small data-ucc-explore-result-count=\"\">Scanning platform\u2026</small></div>\n<span class=\"ucc-explore-live-pill\">Live</span>\n</div>\n<div class=\"ucc-explore-list\" data-ucc-explore-list=\"\"></div>\n</aside>\n<section class=\"ucc-explore-guide\">\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">1</span>\n<div><strong>Choose the dashboard</strong><p>Use the existing Criterion selector in the top bar.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">2</span>\n<div><strong>Search or filter</strong><p>The catalogue is generated from the real chart elements, so future diagrams appear automatically.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">3</span>\n<div><strong>Open the live card</strong><p>One click takes you to the original analytics card. No duplicate rendering logic or copied data.</p></div>\n</div>\n<div class=\"ucc-explore-note\">\n<strong>Why this approach scales</strong>\n<p>Explore is a fast index over the existing dashboards\u2014not a second dashboard system. Criterion-specific calculations, D3 renderers, tables, exports and record links remain in their original tested components.</p>\n</div>\n</section>\n</div>\n</div>\n</section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"ask\" hidden=\"\"><div class=\"ucc-ask\" data-ucc-ask=\"\"><section class=\"panel ucc-shared-panel ucc-ask-controls\"><div class=\"ucc-ask-head\"><h2>Ask UCC</h2><p>Built from live records you already have permission to see. Any AI text is labelled separately.</p></div><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field\"><span>Module</span><select data-ask-module=\"\"></select></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Record</span><input autocomplete=\"off\" data-ask-record=\"\" placeholder=\"Search by name or ID\u2026\" type=\"text\"/><div class=\"ucc-ask-suggestions\" data-ask-suggestions=\"\" hidden=\"\"></div></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Question</span><input autocomplete=\"off\" data-ask-question=\"\" placeholder=\"e.g. Is this ready to close?\" type=\"text\"/></label><button class=\"btn btn-primary ucc-ask-submit\" data-ask-submit=\"\" type=\"button\">Ask</button><button class=\"btn ucc-ask-clear\" data-ask-clear=\"\" hidden=\"\" type=\"button\">Clear chat</button></div><div class=\"ucc-ask-guided\" data-ask-guided=\"\" hidden=\"\"><div class=\"ucc-ask-categories\" data-ask-categories=\"\"></div><div class=\"ucc-ask-questions\" data-ask-questions=\"\"></div></div><div class=\"ucc-ask-status\" data-ask-status=\"\" hidden=\"\"></div></section><section class=\"ucc-ask-thread\" data-ask-thread=\"\"></section></div></section></main></div>";
 
 function initPlatformShell(root) {
 "use strict";
@@ -1140,17 +1140,28 @@ function initDiagramExplorer(platformRoot) {
 // ---------------------------------------------------------------------------
 const ASK_STYLE_ID = "ucc-ask-style";
 const ASK_STYLE_TEXT = `
-.ucc-ask{display:flex;flex-direction:column;gap:16px;padding:16px}
-.ucc-ask-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding:0 16px 16px}
-.ucc-ask-field{display:flex;flex-direction:column;gap:4px;position:relative;min-width:200px}
+.ucc-ask{display:flex;flex-direction:column;gap:12px;padding:12px}
+.ucc-ask-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:10px 16px 8px}
+.ucc-ask-head h2{margin:0;font-size:15px}
+.ucc-ask-head p{margin:0;font-size:12px;opacity:.7}
+.ucc-ask-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:0 16px 10px}
+.ucc-ask-field{display:flex;flex-direction:column;gap:3px;position:relative;min-width:180px}
 .ucc-ask-field-grow{flex:1}
-.ucc-ask-field>span{font-size:12px;font-weight:600;opacity:.75}
-.ucc-ask-field select,.ucc-ask-field input,.ucc-ask-field textarea{padding:8px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;font:inherit;width:100%}
+.ucc-ask-field>span{font-size:11px;font-weight:600;opacity:.75}
+.ucc-ask-field select,.ucc-ask-field input,.ucc-ask-field textarea{padding:6px 8px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;font:inherit;width:100%}
 .ucc-ask-submit{white-space:nowrap}
 .ucc-ask-suggestions{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card-bg,#fff);border:1px solid var(--border-color,#d1d8dd);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)}
-.ucc-ask-suggestion{padding:8px 10px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:2px}\n.ucc-ask-suggestion-id{font-size:11px;opacity:.65}\n.ucc-ask-guided{padding-bottom:8px}\n.ucc-ask-categories{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 10px}\n.ucc-ask-category{padding:5px 12px;border:1px solid var(--border-color,#d1d8dd);border-radius:999px;background:transparent;font-size:12px;cursor:pointer}\n.ucc-ask-category.is-active{background:var(--bg-light-gray,#f4f5f6);font-weight:600}\n.ucc-ask-questions{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 16px}\n.ucc-ask-question{padding:6px 12px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;background:var(--card-bg,#fff);font-size:13px;cursor:pointer;text-align:left}\n.ucc-ask-question:hover{background:var(--bg-light-gray,#f4f5f6)}
+.ucc-ask-suggestion{padding:6px 10px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:1px}
+.ucc-ask-suggestion-id{font-size:11px;opacity:.65}
+.ucc-ask-categories{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 8px}
+.ucc-ask-category{padding:3px 10px;border:1px solid var(--border-color,#d1d8dd);border-radius:999px;background:transparent;font-size:11px;cursor:pointer}
+.ucc-ask-category.is-active{background:var(--bg-light-gray,#f4f5f6);font-weight:600}
+.ucc-ask-questions{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 12px}
+.ucc-ask-question{padding:4px 10px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;background:var(--card-bg,#fff);font-size:12px;cursor:pointer;text-align:left}
+.ucc-ask-question:hover{background:var(--bg-light-gray,#f4f5f6)}
+.ucc-shell-settings-link{font-size:15px;line-height:1}
 .ucc-ask-suggestion:hover,.ucc-ask-suggestion.is-active{background:var(--bg-light-gray,#f4f5f6)}
-.ucc-ask-status{padding:0 16px 16px;font-size:13px}
+.ucc-ask-status{padding:0 16px 10px;font-size:13px}
 .ucc-ask-status[data-tone="error"]{color:var(--red-600,#c0392b)}
 .ucc-ask-thread{display:flex;flex-direction:column;gap:16px}
 .ucc-ask-turn{display:flex;flex-direction:column;gap:12px}
@@ -1194,6 +1205,7 @@ function initAskUcc(platformRoot) {
 	const suggestionBox = root.querySelector("[data-ask-suggestions]");
 	const questionInput = root.querySelector("[data-ask-question]");
 	const submitButton = root.querySelector("[data-ask-submit]");
+	const clearButton = root.querySelector("[data-ask-clear]");
 	const statusNode = root.querySelector("[data-ask-status]");
 	const thread = root.querySelector("[data-ask-thread]");
 	const guidedPanel = root.querySelector("[data-ask-guided]");
@@ -1394,6 +1406,7 @@ function initAskUcc(platformRoot) {
 				if (message) {
 					thread.insertAdjacentHTML("afterbegin", renderTurn(question, message, module));
 					questionInput.value = "";
+					clearButton.hidden = false;
 					setStatus("");
 				} else {
 					setStatus("The server returned no answer.", "error");
@@ -1411,7 +1424,18 @@ function initAskUcc(platformRoot) {
 
 	submitButton.addEventListener("click", ask);
 	questionInput.addEventListener("keydown", (event) => {
-		if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) ask();
+		if (event.key === "Enter") ask();
+	});
+
+	// Clear chat wipes the on-screen thread only. Stored conversations (the
+	// UCC AI Conversation / Message records, when persistence is enabled) are
+	// deliberately untouched -- this is a "the screen is too long to read"
+	// control, not a delete-my-audit-trail control.
+	clearButton.addEventListener("click", () => {
+		thread.innerHTML = "";
+		clearButton.hidden = true;
+		setStatus("");
+		questionInput.focus();
 	});
 }
 
@@ -1456,10 +1480,29 @@ function renderAnswerZone(message, module) {
 		);
 	}
 
-	// Everything else -- AI disabled, unconfigured, errored, or its output
-	// rejected by the citation guardrail -- says so plainly and leaves the
-	// facts below standing on their own. That is the progressive-enhancement
-	// contract, not a degraded failure state.
+	// "AI interpretation is turned off" on a plain data lookup ("what is this
+	// student's nationality?") implies interpretation was ever expected, and
+	// on every answer it is just noise. So the notice is only shown when
+	// something was actually lost:
+	//
+	//   disabled / unavailable -> AI never ran; it is a configuration state,
+	//       not an event. If the facts rendered, the question is answered and
+	//       there is nothing to report. Only worth saying when the facts zone
+	//       will be empty too, so the user isn't left with a blank answer.
+	//   error / guardrail_blocked -> AI DID run and its output was lost or
+	//       withheld. Always shown; silently dropping a withheld answer would
+	//       hide a guardrail firing.
+	//   not_found -> a record-level failure, always shown.
+	//
+	// ponytail: keyed off "did any facts render", not off classifying the
+	// question as lookup-vs-analytical. Classifying would mean hand-tagging
+	// ~60 ported legacy questions with metadata the legacy UI never had. If
+	// an analytical question with AI off later needs its own "this needed
+	// interpretation" hint, that tagging is where it goes.
+	const hasFacts = Object.keys(message.facts || {})
+		.some((k) => message.facts[k] && message.facts[k].status === "available");
+	if (hasFacts && (status === "disabled" || status === "unavailable")) return "";
+
 	const reasons = {
 		disabled: "AI interpretation is turned off. The facts below come straight from live records.",
 		unavailable: "AI interpretation is not configured. The facts below come straight from live records.",
@@ -1543,16 +1586,25 @@ function renderSourcesZone(message) {
 // ---------------------------------------------------------------------------
 // SETTINGS LINK -- the UCC Intelligence Settings Single doctype had no entry
 // point anywhere in the UI; it could only be reached by typing the URL. This
-// puts a gear in the platform header next to the collapse toggle, reusing that
-// button's existing class so it matches the shell rather than introducing a
-// new control style.
+// puts a gear at the end of the workspace tab row, so it inherits the nav's
+// own button styling and sits where the tabs are rather than hiding among the
+// header controls.
 //
 // Shown only to users who can actually open it. The Settings form is System
 // Manager-only (its own DocType permissions, plus get_settings_status()'s
 // frappe.only_for), so showing the gear to everyone would just be an
-// invitation to a permission error. This checks first and leaves it hidden
-// otherwise -- hiding a link is not a security control, the DocType's own
-// permissions remain the real gate.
+// invitation to a permission error. Hiding a link is not a security control --
+// the DocType's own permissions remain the real gate.
+//
+// The visibility check MUST NOT be frappe.client.get_count. UCC Intelligence
+// Settings is a Single (issingle: 1), and Singles have no `tab<DocType>` table
+// at all -- their values live in `tabSingles`. get_count issues a real
+// SELECT ... FROM `tabUCC Intelligence Settings`, so it threw
+// "Table 'ucc_sms_v2.tabUCC Intelligence Settings' doesn't exist" on every
+// page load regardless of permissions or migration state -- which also left
+// the gear permanently hidden, since only the success path revealed it.
+// frappe.model.can_read reads the permissions already in frappe.boot: correct
+// for Singles and no server round-trip.
 // ---------------------------------------------------------------------------
 function initSettingsLink(platformRoot) {
 	const button = platformRoot.querySelector("[data-ucc-settings-link]");
@@ -1563,18 +1615,12 @@ function initSettingsLink(platformRoot) {
 		frappe.set_route("Form", "UCC Intelligence Settings");
 	});
 
-	if (!(window.frappe && frappe.call)) return;
-	frappe.call({
-		method: "frappe.client.get_count",
-		args: { doctype: "UCC Intelligence Settings" },
-		callback() {
-			button.hidden = false;
-		},
-		error() {
-			// No read access -> leave the gear hidden rather than offering a
-			// link that would only produce a permission error.
-		},
-	});
+	// Only hide on a positive "no". If the perm API isn't there to ask, show
+	// the gear and let the form's own permission check answer -- a control
+	// that is merely styled away is not a gate either way.
+	const canRead = !(window.frappe && frappe.model && frappe.model.can_read)
+		|| frappe.model.can_read("UCC Intelligence Settings");
+	button.hidden = !canRead;
 }
 
 frappe.pages['sophia-analytics'].on_page_load = function (wrapper) {

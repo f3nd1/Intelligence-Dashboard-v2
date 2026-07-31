@@ -154,13 +154,62 @@ report("ucc-shell-collapse-toggle" in shell_html,
 report('frappe.set_route("Form", "UCC Intelligence Settings")' in page_js,
 	"the settings control navigates to the real UCC Intelligence Settings doctype form")
 report("initSettingsLink(root)" in page_js, "the settings link is wired into boot()")
-report("frappe.client.get_count" in page_js and "button.hidden = false" in page_js,
-	"the gear stays hidden unless the user can actually read the Settings doctype")
+report("frappe.model.can_read" in page_js,
+	"gear visibility is decided from frappe.boot's permissions, not a table query")
 settings_dir = ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "doctype" / "ucc_intelligence_settings"
 report(settings_dir.exists(), "the UCC Intelligence Settings doctype the link points at really exists")
 settings_json = json.loads((settings_dir / "ucc_intelligence_settings.json").read_text(encoding="utf-8"))
 report(settings_json.get("name") == "UCC Intelligence Settings",
 	"the doctype name in the route matches the doctype's actual name")
+# The bug: get_count on a Single queries tab<DocType>, which Singles do not
+# have -- it threw on every page load and left the gear hidden. Any probe
+# that reads/counts rows of this doctype is wrong for the same reason.
+report(settings_json.get("issingle") == 1,
+	"UCC Intelligence Settings really is a Single -- which is why no table probe may be used")
+report('method: "frappe.client.get_count"' not in page_js,
+	"the page does NOT call get_count on the Settings Single (it has no table to count)")
+report("frappe.client.get_list" not in page_js and "frappe.db.count" not in page_js,
+	"no row-reading probe of any kind is used against the Settings Single")
+
+# --- gear placement: with the tabs, where it is findable (UX FIX 4) ---
+report("ucc-shell-settings-link" in shell_html,
+	"the gear has its own class rather than masquerading as the collapse toggle")
+nav = shell_html[shell_html.index("ucc-platform-workspaces"):shell_html.index("</nav>")]
+report("data-ucc-settings-link" in nav,
+	"the gear sits INSIDE the workspace tab row, next to Analytics/Explore/Ask UCC")
+report(nav.index('data-ucc-workspace=\\"ask\\"') < nav.index("data-ucc-settings-link"),
+	"the gear comes after the Ask UCC tab, at the end of the row")
+
+# --- compact layout (UX FIX 1) ---
+# The controls were three stacked panels each with its own heading block,
+# which pushed the guided questions below the fold. Module, record, question
+# and the guided buttons must now sit in one panel.
+ask_panel = shell_html[shell_html.index('data-ucc-workspace-panel=\\"ask\\"'):]
+report(ask_panel.count("panel-head") == 0,
+	"the Ask surface no longer stacks full panel-head blocks -- that was the vertical space")
+report(ask_panel.count("ucc-shared-panel") == 1,
+	"module, record, question and guided questions share ONE panel, not three")
+controls = ask_panel[:ask_panel.index("ucc-ask-thread")]
+for anchor in ("data-ask-module", "data-ask-record", "data-ask-question", "data-ask-guided"):
+	report(anchor in controls,
+		"%s is inside the single controls panel, so it is visible without scrolling" % anchor)
+report("<textarea" not in ask_panel,
+	"the question box is a single-line input -- the 2-row textarea was part of the height problem")
+
+# --- clear chat (UX FIX 3) ---
+report("data-ask-clear" in page_js, "there is a Clear chat control")
+report(">Clear chat</button>" in shell_html, "the control is labelled Clear chat")
+report('thread.innerHTML = "";' in page_js, "Clear chat empties the on-screen thread")
+report("clearButton.hidden = false" in page_js and "clearButton.hidden = true" in page_js,
+	"Clear chat appears once there is something to clear and hides again afterwards")
+report("delete_conversation" not in page_js and "frappe.client.delete" not in page_js,
+	"Clear chat does NOT delete stored conversation records -- it is a display control only")
+
+# --- the AI notice is no longer shown on plain data lookups (UX FIX 2) ---
+report('if (hasFacts && (status === "disabled" || status === "unavailable")) return "";' in page_js,
+	"a config-level AI-off state is not announced when the facts already answered the question")
+report('reasons = {' in page_js and "guardrail_blocked" in page_js,
+	"states where AI ran and its output was lost are still explained")
 
 passed = all(checks)
 print()
