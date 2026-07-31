@@ -8,12 +8,13 @@ same pipeline, differing only in which tool functions they may call and
 which record identifiers the guardrail should accept. That's a real,
 three-caller generalisation, not a speculative one.
 
-Each module deterministically calls ALL of its own tools rather than
-having the model select from an allowlist via function-calling. With 2-4
-cheap DB-backed tools per module there's nothing to gain from model-driven
-selection and one less moving part to get wrong. Revisit if a module ever
-grows enough tools that calling all of them stops being the practical
-choice.
+Tool selection is deterministic, never model-driven. A guided question
+routes to the specific tool(s) and field(s) it needs
+(ask_ucc/guided_questions.QUESTION_ROUTES), mirroring the legacy
+assistant's detect_intent -> one focused handler design; a free-typed
+question, whose intent we can't infer, falls back to calling every tool.
+With 2-4 cheap DB-backed tools per module there's nothing to gain from
+model-driven selection and one less moving part to get wrong.
 
 Permission gating is the caller's job (api.py), not this module's -- by
 the time a tool runs it has already applied ordinary Frappe permissions
@@ -24,6 +25,7 @@ import json
 
 from ucc_intelligence.ai import client as ai_client
 from ucc_intelligence.ai import guardrails
+from ucc_intelligence.ask_ucc import guided_questions
 from ucc_intelligence.ask_ucc import quality_action as quality_action_tools
 from ucc_intelligence.ask_ucc import recruitment_agent as recruitment_agent_tools
 from ucc_intelligence.ask_ucc import student_journey as student_journey_tools
@@ -91,6 +93,21 @@ def known_names_from(primary_result, record_name):
 	return names
 
 
+def narrow(result, fields):
+	"""One tool's output reduced to the fields a question actually asked for.
+	`status` is always kept (the renderer and the contract both key off it),
+	and so is `note` -- a tool's note is its own caveat about what the numbers
+	do and don't prove, so dropping it would strip a caveat from a fact that
+	still carries it. A falsy `fields`, or a non-available result, is returned
+	untouched."""
+	if not fields or result.get("status") != "available":
+		return result
+	keep = set(fields) | {"status"}
+	if "note" in result:
+		keep.add("note")
+	return {k: v for k, v in result.items() if k in keep}
+
+
 def ask(module_key, question, record_name):
 	"""Returns {ai_status, answer, answer_error, facts, tools_called,
 	known_record_names}. ai_status is one of: "available" (answer populated
@@ -103,6 +120,10 @@ def ask(module_key, question, record_name):
 	tools = module["tools"]
 	primary_tool_name = module["primary_tool"]
 
+	# The primary tool always runs, whatever the route asks for: it is what
+	# proves the record exists and that this user may read it, and it supplies
+	# the source link and the guardrail's allowed names. Whether it is SHOWN
+	# is a separate decision, made by the route below.
 	primary_result = tools[primary_tool_name](record_name)
 	tools_called = [primary_tool_name]
 
@@ -112,15 +133,24 @@ def ask(module_key, question, record_name):
 			"answer": None,
 			"answer_error": primary_result.get("message"),
 			"facts": {primary_tool_name: primary_result},
+			"primary": primary_result,
 			"tools_called": tools_called,
 			"known_record_names": [],
 		}
 
-	facts = {primary_tool_name: primary_result}
+	# A guided question asks for a specific thing; answering it with the whole
+	# record is a worse answer, not a more thorough one.
+	route = guided_questions.route_for(module_key, question)
+	wanted = list(route) if route else list(tools)
+
+	facts = {}
+	if primary_tool_name in wanted:
+		facts[primary_tool_name] = narrow(primary_result, route and route.get(primary_tool_name))
 	for tool_name, tool_function in tools.items():
-		if tool_name == primary_tool_name:
+		if tool_name == primary_tool_name or tool_name not in wanted:
 			continue
-		facts[tool_name] = tool_function(record_name)
+		result = tool_function(record_name)
+		facts[tool_name] = narrow(result, route and route.get(tool_name))
 		tools_called.append(tool_name)
 
 	known_record_names = known_names_from(primary_result, record_name)
@@ -131,6 +161,7 @@ def ask(module_key, question, record_name):
 			"answer": None,
 			"answer_error": None,
 			"facts": facts,
+			"primary": primary_result,
 			"tools_called": tools_called,
 			"known_record_names": known_record_names,
 		}
@@ -144,6 +175,7 @@ def ask(module_key, question, record_name):
 			"answer": None,
 			"answer_error": completion.get("message"),
 			"facts": facts,
+			"primary": primary_result,
 			"tools_called": tools_called,
 			"known_record_names": known_record_names,
 		}
@@ -155,6 +187,7 @@ def ask(module_key, question, record_name):
 			"answer": None,
 			"answer_error": reason,
 			"facts": facts,
+			"primary": primary_result,
 			"tools_called": tools_called,
 			"known_record_names": known_record_names,
 		}
@@ -169,6 +202,7 @@ def ask(module_key, question, record_name):
 		},
 		"answer_error": None,
 		"facts": facts,
+		"primary": primary_result,
 		"tools_called": tools_called,
 		"known_record_names": known_record_names,
 	}

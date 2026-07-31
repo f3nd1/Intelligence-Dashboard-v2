@@ -228,6 +228,179 @@ UNSUPPORTED_QUESTIONS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Per-question routing -- which tool(s), and which fields of them, a question
+# actually needs.
+#
+# The legacy assistant did NOT answer a question by dumping the record. It ran
+# detect_intent() (server-scripts/UCC Ask - Student Journey.py:1314) to pick one
+# intent, then one focused handler: handle_nationality() returned a single
+# sentence about nationality, handle_course() a single sentence about the
+# programme. Clicking "Nationality" and getting profile + academic record +
+# attendance + graduation readiness is a regression against that, not a port of
+# it.
+#
+# This restores the behaviour in the ported architecture's own terms. Rather
+# than reintroducing detect_intent's ~190 lines of keyword rules, the guided
+# questions are a fixed known set, so they route by exact text:
+#
+#     question -> {tool_name: (field, ...) or None}
+#
+# None means "the whole tool output" (the deliberately broad questions -- "Show
+# this student's profile", "Show this student's journey"). A field tuple
+# narrows within the tool, which is what makes a single-fact question render a
+# single fact.
+#
+# The record-resolving primary tool always runs regardless of the route (it is
+# what proves the record exists and the user may read it), but it only appears
+# in the displayed facts when the route asks for it. See ai/orchestration.py.
+#
+# ponytail: exact-text routing, not keyword matching. A free-typed question
+# still gets every tool, which is the right default when intent is unknown --
+# and with AI on, more context is what the model wants. If free text later
+# needs narrowing too, detect_intent's keyword lists are the thing to port,
+# and they'd feed this same table.
+_ALL = None
+
+QUESTION_ROUTES = {
+	"student_journey": {
+		# --- profile: all from the one identity tool, one field each --------
+		"Show this student's profile": {"get_student_profile": _ALL},
+		"What course is this student in?": {
+			"get_student_profile": ("student_name", "programme", "study_type"),
+		},
+		"What is this student's nationality?": {
+			"get_student_profile": ("student_name", "nationality"),
+		},
+		"When did this student start?": {
+			"get_student_profile": ("student_name", "commencement_date"),
+		},
+		"When is this student completing the course?": {
+			"get_student_profile": ("student_name", "completion_date"),
+		},
+		# --- journey --------------------------------------------------------
+		# The one question that genuinely means "everything": legacy
+		# handle_lifecycle assembled the whole timeline.
+		"Show this student's journey": {
+			"get_student_profile": _ALL,
+			"get_student_academic_record": _ALL,
+			"get_student_attendance_and_leave": _ALL,
+		},
+		"Which module is this student in right now?": {
+			"get_student_profile": ("student_name", "current_modules"),
+		},
+		"Show this student's class and student group": {
+			"get_student_profile": ("student_name", "current_modules", "module_count"),
+		},
+		"Is this student on leave now?": {
+			"get_student_attendance_and_leave": ("currently_on_leave", "leaves"),
+		},
+		# --- academic -------------------------------------------------------
+		"Show all this student's results and grades": {"get_student_academic_record": _ALL},
+		"Has this student finished all modules?": {
+			"get_student_academic_record": (
+				"total_modules", "submitted_count", "passed_count",
+				"failed_count", "completion_percentage",
+			),
+		},
+		"Has this student graduated?": {
+			"get_student_profile": ("student_name", "academic_status", "graduated", "completion_date"),
+		},
+		# --- attendance -----------------------------------------------------
+		"Show this student's attendance": {
+			"get_student_attendance_and_leave": (
+				"present", "late", "absent", "other", "total_records",
+				"attendance_rate", "below_threshold", "monthly_trend",
+			),
+		},
+		"Show this student's leave records": {
+			"get_student_attendance_and_leave": ("leaves", "currently_on_leave"),
+		},
+		# --- graduation and risk --------------------------------------------
+		"Is this student ready to graduate?": {
+			"assess_student_graduation_readiness": ("ready_for_graduation", "blockers"),
+		},
+		"Show this student's risk summary": {
+			"assess_student_graduation_readiness": ("risk_level", "risks", "recommended_actions"),
+		},
+		"What follow-up actions are needed for this student?": {
+			"assess_student_graduation_readiness": ("recommended_actions", "risks"),
+		},
+	},
+	"recruitment_agent": {
+		"Show this agent's profile": {"get_agent_contract_summary": _ALL},
+		"Is this agent's contract active?": {
+			"get_agent_contract_summary": ("agent_name", "contract_status"),
+		},
+		"Show this agent's contract dates": {
+			"get_agent_contract_summary": ("agent_name", "commencement_date", "expiry_date"),
+		},
+		"Show this agent's complete journey": {
+			"get_agent_contract_summary": _ALL,
+			"get_agent_ratings": _ALL,
+			"assess_agent_contract_renewal": _ALL,
+		},
+		"Show this agent's latest contract": {"get_agent_contract_summary": _ALL},
+		"When does this agent's contract expire?": {
+			"get_agent_contract_summary": ("agent_name", "expiry_date", "contract_status"),
+		},
+		"What is this agent's latest rating?": {
+			"get_agent_ratings": ("agent_name", "latest"),
+		},
+		"Does this agent meet the minimum rating?": {
+			"get_agent_ratings": ("agent_name", "latest", "minimum_rating_likert", "meets_minimum_rating"),
+		},
+		"Should this agent's contract be renewed?": {
+			"assess_agent_contract_renewal": ("recommendation", "issues"),
+		},
+		"Show this agent's compliance issues": {
+			"assess_agent_contract_renewal": ("issues", "warnings"),
+		},
+		"Show this agent's risk summary": {
+			"assess_agent_contract_renewal": ("issues", "warnings", "recommendation"),
+		},
+	},
+	"quality_action": {
+		"Show this Quality Action": {"get_quality_action_summary": _ALL},
+		# problem / resolution / action taken / owner / due date all live
+		# inside the resolution rows, so these share a route. Narrowing
+		# further would mean restructuring the tool's output, which is a
+		# bigger change than the reported problem warrants.
+		"What is the problem?": {"get_quality_action_summary": ("title", "resolution_rows")},
+		"Show the root cause and resolution": {"get_quality_action_summary": ("title", "resolution_rows")},
+		"What action has been taken?": {"get_quality_action_summary": ("title", "resolution_rows")},
+		"Who is assigned?": {"get_quality_action_summary": ("title", "resolution_rows")},
+		"When is it due?": {"get_quality_action_summary": ("title", "resolution_rows")},
+		"What is the current status?": {
+			"get_quality_action_summary": ("title", "open_count", "completed_count", "overdue_count"),
+		},
+		"Is it overdue?": {
+			"get_quality_action_summary": ("title", "overdue_count", "resolution_rows"),
+		},
+		"Is this Quality Action ready for closure?": {"assess_quality_action_closure": _ALL},
+		"Run a quality review of the root cause and action taken": {"assess_quality_action_closure": _ALL},
+		"Assess the root cause and resolution": {"assess_quality_action_closure": _ALL},
+	},
+}
+
+
+def _normalise(question):
+	return " ".join(str(question or "").split()).strip().lower()
+
+
+_ROUTES_BY_NORMALISED = {
+	module_key: {_normalise(q): route for q, route in routes.items()}
+	for module_key, routes in QUESTION_ROUTES.items()
+}
+
+
+def route_for(module_key, question):
+	"""The tool/field subset a question needs, or None for "no known route --
+	run everything", which is the correct default for a free-typed question
+	whose intent we cannot infer."""
+	return _ROUTES_BY_NORMALISED.get(module_key, {}).get(_normalise(question))
+
+
 def supported_questions(module_key):
 	"""The legacy categories and questions for a module, minus the ones
 	whose backing capability isn't built. Categories that end up empty are

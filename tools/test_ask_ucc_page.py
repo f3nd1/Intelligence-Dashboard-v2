@@ -173,12 +173,16 @@ report("frappe.client.get_list" not in page_js and "frappe.db.count" not in page
 
 # --- gear placement: with the tabs, where it is findable (UX FIX 4) ---
 report("ucc-shell-settings-link" in shell_html,
-	"the gear has its own class rather than masquerading as the collapse toggle")
+	"the gear has its own class rather than masquerading as another shell control")
 nav = shell_html[shell_html.index("ucc-platform-workspaces"):shell_html.index("</nav>")]
-report("data-ucc-settings-link" in nav,
-	"the gear sits INSIDE the workspace tab row, next to Analytics/Explore/Ask UCC")
-report(nav.index('data-ucc-workspace=\\"ask\\"') < nav.index("data-ucc-settings-link"),
-	"the gear comes after the Ask UCC tab, at the end of the row")
+report("data-ucc-settings-link" not in nav,
+	"the gear is NOT inside the tab row -- it is a separate control, not a fourth tab")
+report(shell_html.index("</nav>") < shell_html.index("data-ucc-settings-link"),
+	"the gear comes immediately after the tab row closes, where it is findable")
+report(re.search(r"\.ucc-shell-settings-link\{[^}]*margin-left:\s*\d+px", page_js) is not None,
+	"the gear is visually separated from the tabs by its own margin, not butted against them")
+report(re.search(r"\.ucc-shell-settings-link\{[^}]*font-size:\s*1[6-9]px", page_js) is not None,
+	"the gear is rendered large enough to find (>=16px)")
 
 # --- compact layout (UX FIX 1) ---
 # The controls were three stacked panels each with its own heading block,

@@ -143,26 +143,27 @@ if m:
 	explore_panel = "\n".join(html_lines[7:56])
 	# One documented addition to the legacy header: a gear that opens the
 	# UCC Intelligence Settings doctype, which previously had no entry point
-	# anywhere in the UI. It sits at the END of the workspace nav, after the
-	# Ask UCC tab, so it inherits the nav's own button styling and is where
-	# the tabs are; an earlier version buried it among the header controls
-	# and was invisible in practice. Rebuilt here from the legacy line the
-	# same way the engine's Option B addition is, so an *undocumented* edit
-	# to the shell still fails this check.
+	# anywhere in the UI. It sits immediately AFTER the workspace nav closes
+	# -- outside the tab group, with its own spacing and box, so it reads as
+	# a separate control rather than a fourth tab. Two earlier placements
+	# were wrong: buried among the header controls (invisible), then inside
+	# the nav (too small, squeezed against "Ask UCC"). Rebuilt here from the
+	# legacy line the same way the engine's Option B addition is, so an
+	# *undocumented* edit to the shell still fails this check.
 	SETTINGS_GEAR = (
 		'<button aria-label="UCC Intelligence Settings" class="ucc-shell-settings-link"'
 		' data-ucc-settings-link="" hidden="" title="UCC Intelligence Settings" type="button">'
 		'<span aria-hidden="true">&#9881;</span>'
 		'<span class="ucc-visually-hidden">UCC Intelligence Settings</span></button>'
 	)
-	ask_tab_line = html_lines[3]
-	checks.append(report(ask_tab_line.endswith('>Ask UCC</button>'),
-		"the legacy nav's last tab is Ask UCC -- the anchor the gear is appended after"))
+	checks.append(report(html_lines[3].endswith('>Ask UCC</button>'),
+		"the legacy nav's last tab is Ask UCC -- the gear must come after it, not among it"))
 	checks.append(report(dashboard_line.startswith("</nav>"),
-		"the legacy nav closes at the start of the next line, so the gear lands inside it"))
+		"the legacy nav closes at the start of the next line -- where the gear is inserted"))
+	dashboard_line_with_gear = dashboard_line.replace("</nav>", "</nav>" + SETTINGS_GEAR, 1)
 	expected_shell_prefix = (
-		header_no_changelog + nav_line + html_lines[2] + ask_tab_line + SETTINGS_GEAR
-		+ dashboard_line + criteria_line + "</section>" + explore_panel
+		header_no_changelog + nav_line + html_lines[2] + html_lines[3]
+		+ dashboard_line_with_gear + criteria_line + "</section>" + explore_panel
 	)
 	shell_match = re.search(r'const SHELL_HTML = (".*?");\n', ported, re.S)
 	checks.append(report(bool(shell_match), "SHELL_HTML constant found in the ported page"))

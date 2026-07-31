@@ -817,6 +817,136 @@ for module_key, expected in [
 frappe_stub.get_list = _prev_get_list
 frappe_stub.get_meta = _prev_get_meta
 
+
+# ============================================================
+# PER-QUESTION ROUTING -- a guided question must return only what it asked
+# for. The legacy assistant ran detect_intent() then ONE focused handler
+# (server-scripts/UCC Ask - Student Journey.py:1314); clicking "Nationality"
+# and getting profile + academic record + attendance + graduation readiness
+# is a regression against that, which is what these check.
+# ============================================================
+import ucc_intelligence.ask_ucc.guided_questions as gq  # noqa: E402
+import ucc_intelligence.ask_ucc.contracts as ask_contracts  # noqa: E402
+
+# AI off, so `facts` IS the answer and nothing is hidden behind a summary.
+State.settings = FakeDoc({"enable_ai": 0})
+State.conf = {}
+
+
+def fact_fields(result, tool_name):
+	"""The fields a tool group would actually render (the UI drops status)."""
+	group = result["facts"].get(tool_name) or {}
+	return set(group) - {"status"}
+
+
+# --- the two the user named, checked field-exactly --------------------------
+NARROW_CASES = [
+	("What is this student's nationality?", {"student_name", "nationality"}),
+	("What course is this student in?", {"student_name", "programme", "study_type"}),
+]
+for question, expected_fields in NARROW_CASES:
+	result = orchestration.ask("student_journey", question, "SA-0001")
+	report(set(result["facts"]) == {"get_student_profile"},
+		"ROUTE: %r calls ONE tool, not the 4-tool bundle (got %s)"
+		% (question, sorted(result["facts"])))
+	report(fact_fields(result, "get_student_profile") == expected_fields,
+		"ROUTE: %r renders exactly %s -- not the whole profile"
+		% (question, sorted(expected_fields)))
+	# the actual reported symptom, stated as a count
+	rendered = sum(len(fact_fields(result, t)) for t in result["facts"])
+	report(rendered <= 3, "ROUTE: %r renders %d field(s), not a record dump" % (question, rendered))
+
+# nationality must genuinely carry the ANSWER, not just be small
+nationality = orchestration.ask("student_journey", "What is this student's nationality?", "SA-0001")
+report(nationality["facts"]["get_student_profile"]["nationality"] == "Singaporean",
+	"ROUTE: the narrowed nationality answer still contains the nationality")
+course = orchestration.ask("student_journey", "What course is this student in?", "SA-0001")
+report(course["facts"]["get_student_profile"]["programme"] == "Diploma in Business",
+	"ROUTE: the narrowed course answer still contains the programme")
+
+# --- contrast: the un-narrowed paths must NOT have been broken --------------
+free_text = orchestration.ask("student_journey", "tell me everything about this person", "SA-0001")
+report(len(free_text["facts"]) == 4,
+	"ROUTE: a FREE-TYPED question still calls every tool -- unknown intent means full context")
+journey = orchestration.ask("student_journey", "Show this student's journey", "SA-0001")
+report(len(journey["facts"]) == 3,
+	"ROUTE: 'Show this student's journey' is deliberately broad (legacy handle_lifecycle)")
+whole_profile = orchestration.ask("student_journey", "Show this student's profile", "SA-0001")
+report(len(fact_fields(whole_profile, "get_student_profile")) > 5,
+	"ROUTE: 'Show this student's profile' is NOT narrowed -- it asked for the profile")
+
+# --- a route that skips the primary tool entirely ---------------------------
+leave = orchestration.ask("student_journey", "Is this student on leave now?", "SA-0001")
+report(set(leave["facts"]) == {"get_student_attendance_and_leave"},
+	"ROUTE: a leave question shows the attendance tool only, not the profile")
+report("get_student_profile" in leave["tools_called"],
+	"ROUTE: the primary tool still RAN (it resolves the record), it is just not displayed")
+source = ask_contracts.build_response("student_journey", None, leave)["sources"][0]
+report(source["status"] == "available" and source["record"] == "SA-0001",
+	"ROUTE: the source link survives a route that does not display the primary tool")
+
+# --- the other two modules ---------------------------------------------------
+rating = orchestration.ask("recruitment_agent", "What is this agent's latest rating?", "AC-0001")
+report(set(rating["facts"]) == {"get_agent_ratings"},
+	"ROUTE/RA: a rating question does not also dump contract + compliance")
+dates = orchestration.ask("recruitment_agent", "Show this agent's contract dates", "AC-0001")
+report(fact_fields(dates, "get_agent_contract_summary") == {"agent_name", "commencement_date", "expiry_date"},
+	"ROUTE/RA: a contract-dates question renders three fields, not the whole contract")
+closure = orchestration.ask("quality_action", "Is this Quality Action ready for closure?", "QA-0001")
+report(set(closure["facts"]) == {"assess_quality_action_closure"},
+	"ROUTE/QA: a closure question does not also dump the full summary")
+
+# --- case/whitespace tolerance ----------------------------------------------
+retyped = orchestration.ask("student_journey", "  what is this student's NATIONALITY?  ", "SA-0001")
+report(set(retyped["facts"]) == {"get_student_profile"},
+	"ROUTE: a retyped question routes the same way regardless of case and spacing")
+
+# --- a tool's own caveat survives narrowing ---------------------------------
+# assess_* tools carry a `note` saying what the rule-based check does and does
+# not prove. Narrowing must never quietly strip that from a fact that still
+# carries it -- routes do not list it, narrow() keeps it.
+ready = orchestration.ask("student_journey", "Is this student ready to graduate?", "SA-0001")
+report("note" in ready["facts"]["assess_student_graduation_readiness"],
+	"ROUTE: narrowing keeps the readiness tool's own caveat, which no route lists")
+report("blockers" in ready["facts"]["assess_student_graduation_readiness"]
+	and "risks" not in ready["facts"]["assess_student_graduation_readiness"],
+	"ROUTE: ...while still dropping the fields that question did not ask for")
+renewal = orchestration.ask("recruitment_agent", "Show this agent's compliance issues", "AC-0001")
+report("note" in renewal["facts"]["assess_agent_contract_renewal"],
+	"ROUTE/RA: the renewal tool's caveat survives narrowing too")
+
+# --- drift guards: routes and buttons must stay in step ---------------------
+for module_key in ("student_journey", "recruitment_agent", "quality_action"):
+	shown = {q["question"] for cat in gq.supported_questions(module_key) for q in cat["questions"]}
+	routed = set(gq.QUESTION_ROUTES[module_key])
+	report(shown - routed == set(),
+		"ROUTE/%s: every button that ships has a route (unrouted: %s)"
+		% (module_key, sorted(shown - routed)))
+	report(routed - shown == set(),
+		"ROUTE/%s: no route points at a question that is not shown (orphans: %s)"
+		% (module_key, sorted(routed - shown)))
+
+# --- every routed tool and FIELD must genuinely exist -----------------------
+# This is what catches a typo'd field name, which would silently render an
+# empty group rather than erroring.
+LIVE_RECORDS = {"student_journey": "SA-0001", "recruitment_agent": "AC-0001", "quality_action": "QA-0001"}
+for module_key, record_name in LIVE_RECORDS.items():
+	tools = orchestration.MODULES[module_key]["tools"]
+	real_output = {name: fn(record_name) for name, fn in tools.items()}
+	for question, route in gq.QUESTION_ROUTES[module_key].items():
+		for tool_name, fields in route.items():
+			if not report(tool_name in tools,
+					"ROUTE/%s: %r names a real tool (%s)" % (module_key, question, tool_name)):
+				continue
+			if not fields:
+				continue
+			missing = [f for f in fields if f not in real_output[tool_name]]
+			report(not missing,
+				"ROUTE/%s: %r asks only for fields %s really returns (missing: %s)"
+				% (module_key, question, tool_name, missing))
+
+State.settings = None
+
 passed = all(checks)
 print()
 print(("PASS" if passed else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
