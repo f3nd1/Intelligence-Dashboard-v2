@@ -41,6 +41,13 @@ SYSTEM_PROMPT = (
 # remaining tools are skipped, since they'd all fail the same way.
 # `record_key` is the field each module's primary tool echoes the record
 # name back under -- it differs per module, so it's declared, not guessed.
+#
+# `search_fields`/`label_field(s)` drive the record picker. Taken from the
+# legacy loaders' own field lists (uniqueStudentsFromRoll and the three
+# loadX functions in custom-html-block/JAVASCRIPT.js), because the legacy
+# picker matched the HUMAN NAME as well as the record id -- typing "Mei"
+# had to find EDU-APP-2025-00001. Declared here rather than accepted from
+# the caller so a request can never search or return an arbitrary field.
 MODULES = {
 	"quality_action": {
 		"label": "Quality Action",
@@ -48,6 +55,8 @@ MODULES = {
 		"tools": quality_action_tools.TOOLS,
 		"primary_tool": "get_quality_action_summary",
 		"record_key": "quality_action",
+		"search_fields": ["name", "custom_subject"],
+		"label_field": "custom_subject",
 	},
 	"recruitment_agent": {
 		"label": "Recruitment Agent",
@@ -55,6 +64,8 @@ MODULES = {
 		"tools": recruitment_agent_tools.TOOLS,
 		"primary_tool": "get_agent_contract_summary",
 		"record_key": "agent_contract",
+		"search_fields": ["name", "party_name", "personal_id"],
+		"label_field": "party_name",
 	},
 	"student_journey": {
 		"label": "Student Journey",
@@ -62,6 +73,8 @@ MODULES = {
 		"tools": student_journey_tools.TOOLS,
 		"primary_tool": "get_student_profile",
 		"record_key": "student_applicant",
+		"search_fields": ["name", "first_name", "middle_name", "last_name"],
+		"label_fields": ["first_name", "middle_name", "last_name"],
 	},
 }
 
