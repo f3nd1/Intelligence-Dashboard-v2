@@ -80,6 +80,28 @@ def get_db_reachable():
 		return False
 
 
+
+def get_ai_prompt_status():
+	"""Whether the AI is running on reviewed wording. A placeholder prompt is
+	safe (the factual constraints are not the part awaiting review) but staff
+	are reading engineering-authored tone, and that should be visible in the
+	product rather than only in ai/prompts.py's docstring."""
+	try:
+		from ucc_intelligence.ai import prompts
+		return prompts.get_prompt_status()
+	except Exception:
+		return {"placeholder_count": None, "all_reviewed": None, "note": "Prompt status unavailable."}
+
+
+def get_chart_layer_status():
+	"""How much of the chart layer is genuinely on Insights. Reported as a
+	count rather than a claim, so migration progress is readable."""
+	try:
+		from ucc_intelligence.analytics import chart_registry
+		return chart_registry.counts()
+	except Exception:
+		return {"total": None, "real": None, "placeholder": None}
+
 def get_status_summary():
 	return {
 		"ok": True,
@@ -88,5 +110,7 @@ def get_status_summary():
 		"insights_charts": get_insights_chart_status(),
 		"insights_permission_setting": get_insights_permission_setting(),
 		"ai_provider_configured": get_ai_provider_configured(),
+		"ai_prompts": get_ai_prompt_status(),
+		"chart_layer": get_chart_layer_status(),
 		"db_reachable": get_db_reachable(),
 	}

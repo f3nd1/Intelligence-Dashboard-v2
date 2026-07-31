@@ -85,6 +85,49 @@ checks.append(report(engine_transformed.count('method:"ucc_dashboard_access"') =
 engine_transformed = engine_transformed.replace(
 	'method:"ucc_dashboard_access"', 'method:"ucc_intelligence.api.get_dashboard_access"', 1
 )
+
+# --- PHASE 13 CUTOVER -------------------------------------------------------
+# The legacy engine called the Server Scripts by name. Felix disabled them on
+# the bench and the system stopped, which is what proved the cutover had never
+# been performed. Each criterion now calls the app's own whitelisted method.
+# Applied here as a mechanical transform so this test still catches drift
+# everywhere else, and so the cutover itself is asserted rather than assumed.
+for _criterion_number in range(1, 8):
+	_legacy_method = '"apiMethod":"ucc_analytics_criterion_%d"' % _criterion_number
+	_app_method = '"apiMethod":"ucc_intelligence.api.get_criterion_%d"' % _criterion_number
+	checks.append(report(_legacy_method in engine_transformed,
+		"legacy engine really did call the Criterion %d Server Script (baseline for the cutover)" % _criterion_number))
+	engine_transformed = engine_transformed.replace(_legacy_method, _app_method, 1)
+
+# --- INSIGHTS CHART LAYER ---------------------------------------------------
+# Two documented additions: the badge call inside renderLiveChartCard, and the
+# manifest load inside bootstrapDashboards.
+_insights_block = re.search(
+	r"// -+\n// INSIGHTS CHART LAYER\n[\s\S]*?\n(?=function renderLiveChartCard\()", ported)
+checks.append(report(bool(_insights_block), "the Insights chart-layer block is present in the ported page"))
+if _insights_block:
+	engine_transformed = engine_transformed.replace(
+		"function renderLiveChartCard(dashboard, chart, index, result) {",
+		_insights_block.group(0) + "function renderLiveChartCard(dashboard, chart, index, result) {", 1)
+engine_transformed = engine_transformed.replace(
+	'        heading.textContent = chart.title || "Live visual";\n',
+	'        heading.textContent = chart.title || "Live visual";\n        applyInsightsBadge(heading, chart.id);\n', 1
+)
+engine_transformed = engine_transformed.replace(
+	"function bootstrapDashboards(){\nmountUnifiedDashboards();",
+	"function bootstrapDashboards(){\nmountUnifiedDashboards();\n"
+	"// Load the Insights chart manifest once, then repaint the headings so the\n"
+	"// badges appear. Deliberately non-blocking: if the manifest never arrives\n"
+	"// the dashboard still renders, just without the migration badges.\n"
+	"injectInsightsBadgeStyles();\n"
+	"loadChartDefinitions(function(){\n"
+	'platform.querySelectorAll("[data-demo-chart]").forEach(function(node){\n'
+	'const card=node.closest("[data-demo-card]");\n'
+	'const heading=card&&card.querySelector("h2");\n'
+	"if(heading)applyInsightsBadge(heading,node.dataset.demoChart);\n"
+	"});\n"
+	"});", 1
+)
 engine_transformed = engine_transformed.rstrip()[: -len("})();")] + "}"
 
 # One documented, deliberate divergence from a straight mechanical transform:
@@ -112,7 +155,16 @@ if embed_call_match and load_live_match:
 	# embed_call_match already ends in "\n}\n" (its own trailing newline), so no
 	# extra separator is added here -- confirmed against the real file's byte layout.
 	engine_transformed = engine_transformed.replace(_LOAD_LIVE_ORIGINAL, embed_call_match.group(0) + load_live_match.group(0), 1)
-checks.append(report(engine_transformed in ported, "transformed engine body (plus the one documented Option B addition) is present in the ported page verbatim"))
+checks.append(report(engine_transformed in ported, "transformed engine body (plus the documented Option B, Phase 13 cutover and Insights-badge additions) is present in the ported page verbatim"))
+
+# --- the cutover itself, asserted directly ---------------------------------
+for _n in range(1, 8):
+	checks.append(report("ucc_analytics_criterion_%d" % _n not in ported.replace("// ucc_analytics_criterion_4 untouched", ""),
+		"CUTOVER: the page no longer calls the Criterion %d Server Script" % _n))
+	checks.append(report("ucc_intelligence.api.get_criterion_%d" % _n in ported,
+		"CUTOVER: the page calls the app's own Criterion %d method" % _n))
+checks.append(report("ucc_ask_" not in ported, "CUTOVER: no legacy Ask UCC Server Script method is called"))
+
 checks.append(report('"ucc_dashboard_access"' not in ported, "legacy Server Script method name does not appear in the ported page"))
 checks.append(report(ported.count("ucc_intelligence.api.get_dashboard_access") >= 1, "the app's own access endpoint is called"))
 
