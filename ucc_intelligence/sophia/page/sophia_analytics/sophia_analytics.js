@@ -560,13 +560,21 @@ function applyInsightsBadge(heading, chartId) {
         badge.classList.add("is-real");
         badge.textContent = "Insights";
         badge.title = "Answered by Frappe Insights query: " + definition.insights_query_title;
+    } else if (definition.definition_status === "computed") {
+        // Decision A: this chart is NOT an Insights chart and never will be.
+        // It measures the criterion engine's own metric catalogue, which no
+        // single query can express. Labelled so it is never mistaken for one.
+        badge.classList.add("is-computed");
+        badge.textContent = "Computed live";
+        badge.title =
+            "Computed by the criterion API, not Frappe Insights. "
+            + (definition.composite_reason || "");
     } else {
         badge.classList.add("is-placeholder");
         badge.textContent = "Insights definition pending";
         badge.title =
-            "PLACEHOLDER: no Insights query has been authored for this chart yet ("
-            + definition.insights_query_title
-            + "). The figures shown are real and permission-checked, from the criterion API.";
+            "An Insights query is authored for this chart but has not been built and "
+            + "verified on this site yet (" + definition.insights_query_title + ").";
     }
     heading.appendChild(badge);
 }
@@ -580,6 +588,7 @@ function injectInsightsBadgeStyles() {
 .ucc-insights-badge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle}
 .ucc-insights-badge.is-real{background:#eefaf1;color:#1e7a45;border:1px solid #b7e3c6}
 .ucc-insights-badge.is-placeholder{background:#fff6e5;color:#8a5a00;border:1px solid #f0d8a8}
+.ucc-insights-badge.is-computed{background:#eef4ff;color:#2c5aa0;border:1px solid #c2d4f0}
 .ucc-chart-placeholder{display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:center;min-height:120px;padding:16px;border:1px dashed var(--border-color,#d1d8dd);border-radius:8px;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,.02) 8px,rgba(0,0,0,.02) 16px)}
 .ucc-chart-placeholder strong{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8a5a00}
 .ucc-chart-placeholder p{margin:0;font-size:12px;opacity:.75;line-height:1.5}
@@ -647,13 +656,22 @@ const chartNode=card.querySelector("[data-demo-chart]");
 const tableBody=card.querySelector("[data-demo-chart-table-body]");
 card.dataset.liveCardRendered="1";
 if(chartNode){chartNode.dataset.demoChartTitle=chart.title;chartNode.dataset.demoChartType=chart.type||"bar";chartNode._liveResult=result;}
-renderInsightsChartInto(chartNode,tableBody,chart);
+renderInsightsChartInto(chartNode,tableBody,chart,result);
 }
 
 // Renders one card from Insights. Never falls back to the criterion API for
 // chart content -- a failure is shown as a failure.
-function renderInsightsChartInto(chartNode,tableBody,chart){
+function renderInsightsChartInto(chartNode,tableBody,chart,result){
 const definition=chartDefinitions.byId[chart.id];
+// Decision A: a COMPUTED chart is answered by the criterion API. This is not
+// a fallback and never fires for an Insights chart -- it is a different class
+// of chart with a different engine, labelled as such. The "no third case"
+// rule still holds where it applies: a chart with a real Insights definition
+// is answered by Insights or it shows the failure, never by this path.
+if(definition&&definition.definition_status==="computed"){
+paintComputedChart(chartNode,tableBody,chart,result);
+return;
+}
 if(definition&&definition.definition_status!=="real"){
 paintChartPlaceholder(chartNode,tableBody,chart,definition);
 return;
@@ -692,6 +710,34 @@ chartNode.innerHTML=
 if(tableBody)tableBody.innerHTML='<tr><td colspan="3">Insights definition pending &mdash; no query authored for this chart yet.</td></tr>';
 }
 
+// Computed charts use metricRows() -- the criterion API's own row extractor --
+// and then the SAME single renderer every other chart uses. The hand-rolled
+// per-type SVG renderers (chartForLive and friends) stay unreachable per
+// Decision B: one renderer, two data engines.
+function paintComputedChart(chartNode,tableBody,chart,result){
+const rows=metricRows(result,0,chart)||[];
+if(!rows.length){
+const blocked=blockedSourceNames(result);
+if(chartNode)chartNode.innerHTML="";
+if(tableBody){
+tableBody.innerHTML=blocked.length
+?'<tr><td colspan="3">'+window.UCCShared.permissionNoticeHtml({view:(chart&&chart.title)||"This visual",source:blocked.join(", "),compact:true})+"</td></tr>"
+:'<tr><td colspan="3">No available metric for this visual.</td></tr>';
+}
+return;
+}
+paintChartSeries(chartNode,tableBody,chart,rows.map(function(row){
+const metric=row[2];
+const synthetic=row[3]===true;
+return{
+label:row[0],
+value:Number(row[1]||0),
+display:synthetic?null:(metric?metricValue(metric):null),
+status:(metric&&metric.status)||"available",
+};
+}));
+}
+
 function paintChartMessage(chartNode,tableBody,chart,message){
 if(chartNode)chartNode.innerHTML='<div class="ucc-chart-placeholder"><p>'+esc(message)+"</p></div>";
 if(tableBody)tableBody.innerHTML='<tr><td colspan="3">'+esc(message)+"</td></tr>";
@@ -714,9 +760,10 @@ return'<div class="ucc-insights-bar"><span class="ucc-insights-bar-label">'+esc(
 }).join("")+"</div>";
 }
 if(tableBody){
-tableBody.innerHTML=series.map(row=>
-"<tr><td>"+esc(row.label)+"</td><td>"+esc((Number(row.value)||0).toLocaleString())+"</td><td>"+statusBadge("available")+"</td></tr>"
-).join("");
+tableBody.innerHTML=series.map(row=>{
+const shown=row.display!=null&&row.display!==""?row.display:(Number(row.value)||0).toLocaleString();
+return"<tr><td>"+esc(row.label)+"</td><td>"+esc(shown)+"</td><td>"+statusBadge(row.status||"available")+"</td></tr>";
+}).join("");
 }
 }
 function renderKpis(dashboard,config,result){const mount=dashboard.querySelector("[data-demo-kpis]");if(!mount)return;

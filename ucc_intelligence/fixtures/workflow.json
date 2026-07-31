@@ -1,0 +1,35 @@
+[
+ {
+  "doctype": "Workflow",
+  "name": "UCC AI Action Approval",
+  "workflow_name": "UCC AI Action Approval",
+  "document_type": "UCC AI Action Request",
+  "workflow_state_field": "workflow_state",
+  "is_active": 1,
+  "send_email_alert": 0,
+  "states": [
+   {"state": "Draft", "doc_status": "0", "allow_edit": "System Manager",
+    "message": "Proposed but not submitted for approval. Nothing has happened."},
+   {"state": "Pending Approval", "doc_status": "0", "allow_edit": "System Manager",
+    "message": "Waiting for a human decision. Still nothing has happened."},
+   {"state": "Approved", "doc_status": "0", "allow_edit": "System Manager",
+    "message": "A human approved it. Execution is now permitted but has NOT run."},
+   {"state": "Rejected", "doc_status": "0", "allow_edit": "System Manager",
+    "message": "Declined. Terminal."},
+   {"state": "Executed", "doc_status": "0", "allow_edit": "System Manager",
+    "message": "Carried out. Terminal."}
+  ],
+  "transitions": [
+   {"state": "Draft", "action": "Submit for Approval", "next_state": "Pending Approval",
+    "allowed": "System Manager", "allow_self_approval": 1},
+   {"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
+    "allowed": "System Manager", "allow_self_approval": 0},
+   {"state": "Pending Approval", "action": "Reject", "next_state": "Rejected",
+    "allowed": "System Manager", "allow_self_approval": 1},
+   {"state": "Approved", "action": "Execute", "next_state": "Executed",
+    "allowed": "System Manager", "allow_self_approval": 1},
+   {"state": "Approved", "action": "Reject", "next_state": "Rejected",
+    "allowed": "System Manager", "allow_self_approval": 1}
+  ]
+ }
+]

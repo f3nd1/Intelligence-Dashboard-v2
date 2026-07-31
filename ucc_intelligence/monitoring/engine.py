@@ -117,6 +117,10 @@ def run_rule(rule_id):
 		return summarise(run)
 
 	try:
+		# Date-sensitive rules compare against today. Injected here rather than
+		# read inside a rule, so rules stay pure functions and stay testable
+		# without freezing the clock.
+		rule_registry.set_today(frappe.utils.today())
 		rows = load_target_rows(definition, rule_doc.effective_date)
 		existing = open_findings_for(rule_id)
 		evaluate = definition["evaluate"]
@@ -217,6 +221,58 @@ def run_all_rules():
 	failing must not stop the rest, which is why run_rule swallows its own
 	exceptions into a Failed run rather than propagating."""
 	return [run_rule(rule_id) for rule_id in rule_registry.RULES]
+
+
+# How often each rule is worth running. Scanning every DocType daily is
+# wasteful for rules whose findings change slowly, and the QA calendar is a
+# quarterly instrument -- running it daily would produce the same finding 90
+# times. Anything unlisted defaults to daily.
+RULE_CADENCE = {
+	"student_log_background_required": "daily",
+	"student_log_dummy_text": "daily",
+	"quality_action_closure_evidence": "daily",
+	"expiring_contract": "daily",
+	"department_housekeeping": "weekly",
+	"course_review_evidence": "weekly",
+	"qa_calendar_record": "quarterly",
+}
+
+
+def rules_due(cadence):
+	return [rule_id for rule_id in rule_registry.RULES
+		if RULE_CADENCE.get(rule_id, "daily") == cadence]
+
+
+def run_cadence(cadence):
+	"""Scheduler entry point for one cadence. Gated on the settings toggle for
+	the same reason scheduled_run is: enabling monitoring must be a deliberate
+	act, not something that starts scanning on install."""
+	if not monitoring_enabled():
+		return {"skipped": "Monitoring is disabled in UCC Intelligence Settings."}
+	due = rules_due(cadence)
+	if not due:
+		return {"cadence": cadence, "runs": []}
+	return {"cadence": cadence, "runs": [run_rule(rule_id) for rule_id in due]}
+
+
+def run_daily():
+	return run_cadence("daily")
+
+
+def run_weekly():
+	return run_cadence("weekly")
+
+
+def run_quarterly():
+	"""Frappe has no quarterly cron, so this is registered monthly and
+	self-limits: it runs only in the first month of a quarter. Cheaper than a
+	custom scheduler and visible in one place."""
+	if not monitoring_enabled():
+		return {"skipped": "Monitoring is disabled in UCC Intelligence Settings."}
+	month = int(frappe.utils.today().split("-")[1])
+	if month not in (1, 4, 7, 10):
+		return {"skipped": "Not the first month of a quarter (month %d)." % month}
+	return run_cadence("quarterly")
 
 
 def monitoring_enabled():

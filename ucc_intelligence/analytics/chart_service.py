@@ -49,11 +49,17 @@ def get_chart(chart_id):
 		"insights_query_title": spec["insights_query_title"],
 	}
 
+	if spec["status"] == "computed":
+		# Decision A: not an Insights chart. The frontend answers it from the
+		# criterion API response it already holds, so this endpoint returns the
+		# classification and no data -- fetching it here would be a second
+		# round trip for numbers the page already has.
+		return dict(base, status="computed", series=[], message=spec.get("composite_reason") or "")
+
 	if spec["status"] != "real":
 		return dict(base, status="placeholder", series=[], message=(
-			"PLACEHOLDER: no Insights query has been authored for this chart yet. "
-			"The figures shown come from the criterion API's own permission-checked "
-			"query, not from Insights."
+			"An Insights query is authored for this chart but has not been built "
+			"and verified on this site yet."
 		))
 
 	result = run_chart_query(spec["insights_query_title"])
@@ -79,6 +85,7 @@ def get_definitions(criterion=None):
 				"title": spec["title"],
 				"definition_status": spec["status"],
 				"insights_query_title": spec["insights_query_title"],
+				"composite_reason": spec.get("composite_reason", ""),
 			}
 			for chart_id, spec in sorted(charts.items())
 		],
