@@ -199,7 +199,35 @@ report(not single_guess,
 	"every authored chart offers MULTIPLE dimension candidates, resolved against the live schema",
 	"single-guess charts: %s" % single_guess[:5])
 
+# --- docstatus must be UNREACHABLE as a dimension ------------------------
+# The second bench run promoted nothing by accident, but ten charts had
+# resolved to `docstatus` -- Frappe's internal draft/submitted flag -- and
+# rendered a single bar labelled "0". A chart that looks like analysis and
+# isn't is the exact failure class this project keeps guarding against.
+docstatus_specs = [c for c, spec in chart_registry.CHARTS.items()
+	if spec.get("spec") and "docstatus" in spec["spec"]["dimension_candidates"]]
+report(not docstatus_specs, "NO chart offers docstatus as a dimension candidate",
+	"still offering it: %s" % docstatus_specs[:5])
+
 builder = (ROOT / "docs" / "migration" / "scripts" / "build_insights_charts_from_specs.py").read_text(encoding="utf-8")
+report("BANNED_DIMENSIONS" in builder and '"docstatus"' in builder.split("BANNED_DIMENSIONS")[1][:200],
+	"the builder BANS docstatus outright, so a stray spec cannot reintroduce it")
+report('ALWAYS_PRESENT = {"name", "creation", "modified"}' in builder,
+	"docstatus is no longer in the always-present list -- that bypass is what let it win")
+report("single_bar" in builder,
+	"the builder flags single-category results, which is what a wrong dimension looks like")
+report("rows_to_chart_series(rows)" in builder,
+	"the builder previews through the SAME normaliser the dashboard uses, so blanks read as 'Not specified'")
+
+# Promotion must stay a deliberate, reviewed act.
+verified = chart_registry.BENCH_VERIFIED_CHARTS
+report(len(verified) == 16, "16 charts are bench-verified: 6 admission + 10 reviewed on 2026-08-01 (%d)" % len(verified))
+authored_left = [c for c, s in chart_registry.CHARTS.items() if s["status"] == "authored"]
+report(len(authored_left) == 20,
+	"the 20 charts whose dimension was NOT confirmed stay unpromoted (%d)" % len(authored_left))
+report(all(chart_registry.CHARTS[c]["status"] == "real" for c in verified),
+	"every verified chart is actually marked real")
+
 report('"tab" + spec["doctype"]' in builder,
 	"the builder addresses tab<DocType> -- the bare DocType name caused 13 TableNotFound errors")
 report('"measure_name": "count"' in builder and '"dimension_name": dimension_field' in builder,
