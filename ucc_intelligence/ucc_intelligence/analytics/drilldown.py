@@ -30,6 +30,25 @@ So this module READS that structure and never writes one. The table name, the
 data source and the dimension column are lifted from the stored query; the 13
 TableNotFound errors came from composing those from memory instead.
 
+DOES INSIGHTS ALREADY DO THIS? NO -- SETTLED LIVE, 2026-08-02
+Insights ships a DrillDown component, so it was checked rather than assumed
+(docs/migration/scripts/probe_insights_native_drilldown.py, run on the bench):
+
+  - it calls exactly two endpoints, `insights.api.alerts.get_alerts` and
+    `...ibis.utils.validate_expression`. One fetches alert configuration; the
+    other validates an expression string and touches no records at all.
+  - there is NO drill-shaped Python anywhere in the Insights app. The feature
+    is client-side: it re-runs the same execute() with an extra filter.
+
+So Insights' drill-down NARROWS THE AGGREGATE. It never lists the source
+records, which is the thing this module exists to do. It solves a different
+problem, and nothing here defers to it.
+
+The same run re-confirmed the baseline below on the installed version rather
+than carrying it over from an earlier round: `execute()` builds an ibis query
+and runs it through `execute_ibis_query` with no Frappe permission layer
+anywhere -- "PERMISSION-BLIND -- raw_sql, and no permission-applying call".
+
 WHY THE RECORDS COME FROM frappe.get_list AND NOT FROM INSIGHTS
 This is the security decision, and it is the reason the module is shaped this
 way at all.
