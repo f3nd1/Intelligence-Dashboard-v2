@@ -99,105 +99,143 @@ for _criterion_number in range(1, 8):
 		"legacy engine really did call the Criterion %d Server Script (baseline for the cutover)" % _criterion_number))
 	engine_transformed = engine_transformed.replace(_legacy_method, _app_method, 1)
 
-# --- INSIGHTS CHART LAYER ---------------------------------------------------
-# Two documented additions: the badge call inside renderLiveChartCard, and the
-# manifest load inside bootstrapDashboards.
-_insights_block = re.search(
-	r"// -+\n// INSIGHTS CHART LAYER\n[\s\S]*?\n(?=function renderLiveChartCard\()", ported)
-checks.append(report(bool(_insights_block), "the Insights chart-layer block is present in the ported page"))
-if _insights_block:
-	engine_transformed = engine_transformed.replace(
-		"function renderLiveChartCard(dashboard, chart, index, result) {",
-		_insights_block.group(0) + "function renderLiveChartCard(dashboard, chart, index, result) {", 1)
+# --- THE CHART BOXES ARE GONE ----------------------------------------------
+# Felix, 2026-08-01: remove the whole chart-box system across all seven
+# criteria and replace it with one "+ Add chart" button per tab, embedding real
+# Frappe Insights charts the person picks.
+#
+# What that removed from the legacy engine: the 209-entry LIVE_VISUAL_EXPANSION
+# table, the loop that overwrote every section's CONFIG charts with it, the
+# chart-card markup and grid mounting, the fifteen hand-rolled SVG renderers
+# and their plugin registry, metricRows()/chartForLive(), and both card
+# renderers. 222 boxes, of which 16 ever had a real Insights query behind them.
+#
+# Each removal and each replacement is declared below and applied to the legacy
+# text, so the final substring check still catches UNINTENDED drift everywhere
+# that was not touched. A region is quoted by its start and resume markers
+# rather than in full: the regions run to hundreds of lines, and a marker that
+# stops matching fails this test just as loudly as a body that changed.
+def region(text, start_marker, resume_marker, label):
+	"""Legacy text from start_marker up to (not including) resume_marker."""
+	checks.append(report(text.count(start_marker) == 1 and text.count(resume_marker) >= 1,
+		"legacy engine has exactly one %s to remove" % label))
+	first = text.index(start_marker)
+	return text[first:text.index(resume_marker, first)]
+
+
+def line(text, prefix, label):
+	"""One whole legacy line, including its newline."""
+	checks.append(report(text.count(prefix) == 1, "legacy engine has exactly one %s" % label))
+	first = text.index(prefix)
+	return text[first:text.index("\n", first) + 1]
+
+
+AREA_BLOCK = "# " * 0 + (
+	"// ---------------------------------------------------------------------------\n"
+	"// PER-TAB INSIGHTS CHARTS -- the area")
+EMBED_BLOCK = (
+	"// ---------------------------------------------------------------------------\n"
+	"// PER-TAB INSIGHTS CHARTS -- loading")
+
+# 1. The box table itself, its global, and the loop that applied it.
 engine_transformed = engine_transformed.replace(
-	'        heading.textContent = chart.title || "Live visual";\n',
-	'        heading.textContent = chart.title || "Live visual";\n        applyInsightsBadge(heading, chart.id);\n', 1
-)
+	region(engine_transformed, "const LIVE_VISUAL_EXPANSION=", "function esc(value){",
+		"LIVE_VISUAL_EXPANSION table + seeding loop"), "", 1)
 
-# --- SINGLE RENDERING PATH --------------------------------------------------
-# Felix's decision: everything through Insights, no dual path, no fallback to
-# the hand-rolled SVG renderers. The legacy renderLiveChartCardNow() derived
-# rows from the criterion API and drew them with chartForLive(); it is
-# replaced wholesale. Applied here as an explicit swap so this test still
-# catches drift in the rest of the engine, and so the replacement itself is
-# asserted rather than assumed.
-_LEGACY_RENDER_NOW = re.search(
-	r"function renderLiveChartCardNow\(card\)\{[\s\S]*?\ncard\.dataset\.liveCardRendered=\"1\";\n\}",
-	engine_transformed)
-checks.append(report(bool(_LEGACY_RENDER_NOW),
-	"legacy renderLiveChartCardNow() found in the transformed engine (baseline for the swap)"))
-if _LEGACY_RENDER_NOW:
-	checks.append(report("metricRows(" in _LEGACY_RENDER_NOW.group(0),
-		"the legacy renderer really did derive rows from the criterion API"))
-	checks.append(report("chartForLive(" in _LEGACY_RENDER_NOW.group(0),
-		"the legacy renderer really did call the hand-rolled SVG renderer"))
-	_new_render = re.search(
-		r"// DOCUMENTED DIVERGENCE FROM THE PORT[\s\S]*?\n\}(?=\nfunction renderKpis\()", ported)
-	checks.append(report(bool(_new_render), "the Insights-only chart renderer is present in the ported page"))
-	if _new_render:
-		engine_transformed = engine_transformed.replace(
-			_LEGACY_RENDER_NOW.group(0), _new_render.group(0), 1)
-# --- VERIFIED CHARTS REACH A TAB -------------------------------------------
-# LIVE_VISUAL_EXPANSION overwrites a section's CONFIG charts, so 9 of the 16
-# bench-verified Insights charts had no box on any visible tab. Four sites
-# change: the seeding loop keeps the pre-expansion list, and the three readers
-# go through one chartsForTab() helper. Applied as explicit swaps, same as
-# every other documented divergence, so drift elsewhere still fails.
-_CHART_TAB_SWAPS = [
-	(
-		"config.sections[section]=config.sections[section]||{title:section,charts:[]};"
-		"config.sections[section].charts=LIVE_VISUAL_EXPANSION[criterion][section];",
-		"config.sections[section]=config.sections[section]||{title:section,charts:[]};"
-		"config.sections[section].configCharts=config.sections[section].charts;"
-		"config.sections[section].charts=LIVE_VISUAL_EXPANSION[criterion][section];",
-	),
-	(
-		'grid.innerHTML=(definitions[sectionKey]||[]).filter(function(chart){return chart.enabled!==false;})'
-		'.map(liveChartCardMarkup).join("");\ngrid.dataset.liveCardsMounted="1";',
-		'grid.innerHTML=chartsForTab(dashboard.dataset.demoDashboard,config,sectionKey)'
-		'.filter(function(chart){return chart.enabled!==false;}).map(liveChartCardMarkup).join("");\n'
-		"// Cards mount synchronously; the chart manifest arrives over the wire. Stay\n"
-		"// unmounted until it lands, or the verified charts chartsForTab() appends\n"
-		"// would be missing from this grid for the rest of the session.\n"
-		'if(chartDefinitions.loaded)grid.dataset.liveCardsMounted="1";',
-	),
-	(
-		"const section=sectionDefinition(config,tab),liveDefinitions="
-		"(LIVE_VISUAL_EXPANSION[dashboard.dataset.demoDashboard]?.[tab]||section?.charts||[]);",
-		"const liveDefinitions=chartsForTab(dashboard.dataset.demoDashboard,config,tab);",
-	),
-	(
-		"tab=activeSection(dashboard),section=sectionDefinition(config,tab),definitions="
-		"(LIVE_VISUAL_EXPANSION[dashboard.dataset.demoDashboard]?.[tab]||section?.charts||[])",
-		"tab=activeSection(dashboard),definitions=chartsForTab(dashboard.dataset.demoDashboard,config,tab)",
-	),
-]
-for _old, _new in _CHART_TAB_SWAPS:
-	checks.append(report(engine_transformed.count(_old) == 1,
-		"legacy chart-placement site found exactly once: %r" % _old[:48]))
-	engine_transformed = engine_transformed.replace(_old, _new, 1)
+# 2. Card markup, grid mounting, and every hand-rolled SVG renderer -> the
+#    per-tab chart area.
+_area = region(ported, AREA_BLOCK, "const RESPONSE_ADAPTERS=new Map();", "per-tab chart area (ported)")
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "function liveChartCardMarkup(chart){", "const RESPONSE_ADAPTERS=new Map();",
+		"chart-card markup + grid mounting + SVG renderers"), _area, 1)
 
-_charts_for_tab = re.search(r"// The chart boxes for one tab[\s\S]*?\n\}(?=\nfunction ensureLiveSectionCards\()", ported)
-checks.append(report(bool(_charts_for_tab), "chartsForTab() is present in the ported page"))
-if _charts_for_tab:
+# 3. metricRows/blockedSourceNames/chartForLive and both card renderers -> the
+#    embed, picker and remove control.
+_embed = region(ported, EMBED_BLOCK, "function renderKpis(dashboard,config,result){", "chart embed + picker (ported)")
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "function metricRows(result,chartIndex,chart){",
+		"function renderKpis(dashboard,config,result){",
+		"criterion-API row extractor + hand-rolled renderers"), _embed, 1)
+
+# 4. The old cards' drill-down, and its trigger.
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "async function openRecords(config,chartId,dashboard){",
+		"function openReadiness(config,dashboard){", "chart drill-down helper"), "", 1)
+for _prefix, _label in [
+	('const drill=event.target.closest("[data-demo-drill]");', "chart drill-down handler"),
+	('const viewButton=event.target.closest("[data-demo-view]");', "chart diagram/table toggle handler"),
+]:
+	_first = line(engine_transformed, _prefix, _label)
+	_rest = engine_transformed[engine_transformed.index(_first) + len(_first):]
 	engine_transformed = engine_transformed.replace(
-		"function ensureLiveSectionCards(dashboard,config,sectionKey){",
-		_charts_for_tab.group(0) + "\nfunction ensureLiveSectionCards(dashboard,config,sectionKey){", 1)
+		_first + _rest[:_rest.index("\n") + 1], "", 1)
+
+# 5. sectionDefinition resolved a section's chart list. Nothing has one now.
+engine_transformed = engine_transformed.replace(
+	line(engine_transformed, "function sectionDefinition(config,tab){", "sectionDefinition helper"), "", 1)
+
+# 6. Every section's declared boxes, emptied in place. Emptied rather than
+#    re-serialised: a json.dumps round-trip re-encodes non-ASCII (the "x" in
+#    "3 x 100" became \u00d7 once already, and this test caught it).
+def empty_chart_arrays(text):
+	out, index, count = [], 0, 0
+	while True:
+		found = text.find('"charts":[', index)
+		if found == -1:
+			out.append(text[index:])
+			return "".join(out), count
+		out.append(text[index:found])
+		cursor, depth = found + len('"charts":['), 1
+		while depth:
+			depth += {"[": 1, "]": -1}.get(text[cursor], 0)
+			cursor += 1
+		out.append('"charts":[]')
+		count += 1
+		index = cursor
+
+
+engine_transformed, _emptied = empty_chart_arrays(engine_transformed)
+checks.append(report(_emptied == 60, "all 60 declared chart lists are emptied (%d)" % _emptied))
+checks.append(report('"charts":[{' not in ported, "no chart box is declared in the ported CONFIG"))
+
+# 7. The readers: render the tab's chosen charts, mount and show its area.
+for _old, _new, _label in [
+	("const section=sectionDefinition(config,tab),liveDefinitions="
+		"(LIVE_VISUAL_EXPANSION[dashboard.dataset.demoDashboard]?.[tab]||section?.charts||[]);"
+		"renderKpis(dashboard,config,result);"
+		"liveDefinitions.forEach((chart,index)=>renderLiveChartCard(dashboard,chart,chart.i??index,result));"
+		'dashboard.querySelectorAll(`[data-live-section="${CSS.escape(tab)}"] [data-demo-card]`)'
+		".forEach(renderLiveChartCardNow);",
+		"renderKpis(dashboard,config,result);renderTabCharts(dashboard,config,tab);",
+		"renderDashboard's chart pass"),
+	("ensureLiveSectionCards(dashboard,config,tab);syncLiveSectionVisibility(dashboard,tab);",
+		"ensureTabChartArea(dashboard,config,tab);syncTabChartVisibility(dashboard,tab);",
+		"showTab's chart mount"),
+	('ensureLiveVisualCards(dashboard,config);syncLiveSectionVisibility(dashboard,"overview");',
+		'ensureTabChartArea(dashboard,config,"overview");syncTabChartVisibility(dashboard,"overview");',
+		"bootstrap's chart mount"),
+	("config:CONFIG,registerResponseAdapter:registerResponseAdapter,registerChartPlugin:registerChartPlugin,refresh:",
+		"config:CONFIG,registerResponseAdapter:registerResponseAdapter,refresh:",
+		"the public registerChartPlugin hook"),
+	('const actionButton=event.target.closest("[data-demo-action]");',
+		'const addChart=event.target.closest("[data-add-chart]");\n'
+		"if(addChart){event.preventDefault();event.stopPropagation();"
+		"openChartPicker(dashboard,config,addChart.dataset.addChart);return;}\n"
+		'const removeChart=event.target.closest("[data-remove-chart]");\n'
+		"if(removeChart){event.preventDefault();event.stopPropagation();"
+		"removeTabChart(dashboard,config,activeSection(dashboard),removeChart.dataset.removeChart);return;}\n"
+		'const actionButton=event.target.closest("[data-demo-action]");',
+		"the add/remove chart handlers"),
+]:
+	checks.append(report(engine_transformed.count(_old) == 1, "legacy site found exactly once: %s" % _label))
+	engine_transformed = engine_transformed.replace(_old, _new, 1)
 
 engine_transformed = engine_transformed.replace(
 	"function bootstrapDashboards(){\nmountUnifiedDashboards();",
 	"function bootstrapDashboards(){\nmountUnifiedDashboards();\n"
-	"// Load the Insights chart manifest once, then repaint the headings so the\n"
-	"// badges appear. Deliberately non-blocking: if the manifest never arrives\n"
-	"// the dashboard still renders, just without the migration badges.\n"
-	"injectInsightsBadgeStyles();\n"
-	"loadChartDefinitions(function(){\n"
-	'platform.querySelectorAll("[data-demo-chart]").forEach(function(node){\n'
-	'const card=node.closest("[data-demo-card]");\n'
-	'const heading=card&&card.querySelector("h2");\n'
-	"if(heading)applyInsightsBadge(heading,node.dataset.demoChart);\n"
-	"});\n"
-	"});", 1
+	"// No chart manifest to load: charts are not declared by this app any more,\n"
+	"// they are picked per tab from Insights and fetched when the tab renders.\n"
+	"injectTabChartStyles();\n", 1
 )
 engine_transformed = engine_transformed.rstrip()[: -len("})();")] + "}"
 
@@ -226,7 +264,7 @@ if embed_call_match and load_live_match:
 	# embed_call_match already ends in "\n}\n" (its own trailing newline), so no
 	# extra separator is added here -- confirmed against the real file's byte layout.
 	engine_transformed = engine_transformed.replace(_LOAD_LIVE_ORIGINAL, embed_call_match.group(0) + load_live_match.group(0), 1)
-checks.append(report(engine_transformed in ported, "transformed engine body (plus the documented Option B, Phase 13 cutover and Insights-badge additions) is present in the ported page verbatim"))
+checks.append(report(engine_transformed in ported, "transformed engine body (plus the documented Option B, Phase 13 cutover and per-tab chart additions) is present in the ported page verbatim"))
 
 # --- the cutover itself, asserted directly ---------------------------------
 for _n in range(1, 8):

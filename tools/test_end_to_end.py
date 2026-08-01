@@ -155,232 +155,117 @@ for legacy_dir in ("server-scripts/", "custom-html-block/"):
 
 
 # ===========================================================================
-section("3. Chart layer runs through Insights")
+section("3. Chart layer: Insights charts, picked per tab")
 # ===========================================================================
+# The 222 fixed chart boxes are gone -- the table that declared them, the
+# 113-entry registry behind them, the fifteen hand-rolled SVG renderers, and
+# the two card renderers. A tab now starts empty with a "+ Add chart" button.
+#
+# These checks are about the two things that could go quietly wrong: dead code
+# left behind pretending to be deleted, and a picker that hands someone a chart
+# they were never allowed to read.
 sys.path.insert(0, str(ROOT / "ucc_intelligence"))
 import types  # noqa: E402
 sys.modules.setdefault("frappe", types.ModuleType("frappe"))
-from ucc_intelligence.analytics import chart_registry  # noqa: E402
 
-counts = chart_registry.counts()
-report(counts["total"] >= 107, "every chart in the platform is registered (%d)" % counts["total"])
-report(counts["real"] >= 6, "at least the 6 bench-verified admission charts are REAL (%d)" % counts["real"])
-print("        real=%(real)d authored=%(authored)d computed=%(computed)d placeholder=%(placeholder)d total=%(total)d" % counts)
+TAB_CHARTS = APP / "analytics" / "tab_charts.py"
+tab_charts_source = TAB_CHARTS.read_text(encoding="utf-8")
+api_source = (APP / "api.py").read_text(encoding="utf-8")
 
-per = chart_registry.per_criterion()
-print("\n        %-14s %6s %5s %9s %10s %12s" % ("criterion", "total", "real", "authored", "computed", "unspecified"))
-for key, row in per.items():
-	print("        %-14s %6d %5d %9d %10d %12d" % (
-		key, row["total"], row["real"], row["authored"], row["computed"], row["unspecified"]))
-	report(row["unspecified"] == 0,
-		"%s: every chart is classified (real / authored / computed), none left unexamined" % key,
-		"%d unclassified" % row["unspecified"])
+# --- DELETED, not merely unreached -----------------------------------------
+for gone in ("chart_registry.py", "chart_definitions.py", "chart_service.py"):
+	report(not (APP / "analytics" / gone).exists(), "%s is deleted from the app" % gone)
+for gone in ("build_insights_charts_from_specs.py", "build_placeholder_insights_charts.py"):
+	report(not (ROOT / "docs" / "migration" / "scripts" / gone).exists(),
+		"%s is deleted -- it existed only to author registry charts" % gone)
 
-report(counts["placeholder"] == 0,
-	"no chart is left as a bare placeholder -- every one is real, authored or computed")
-
-# An authored chart must carry a runnable spec, not just a promise.
-for chart_id, spec in chart_registry.CHARTS.items():
-	if spec["status"] != "authored":
-		continue
-	detail = spec.get("spec") or {}
-	if not (detail.get("doctype") and detail.get("dimension_candidates")):
-		report(False, "authored chart %r carries a complete spec" % chart_id, str(detail))
-		break
-else:
-	report(True, "every AUTHORED chart carries a doctype + dimension candidates the builder can resolve")
-
-# The first bench run rejected 17 of 30 specs on a single guessed field name.
-# Candidate lists are the fix; one candidate is the old failure mode.
-single_guess = [c for c, s in chart_registry.CHARTS.items()
-	if s["status"] == "authored" and len(s["spec"]["dimension_candidates"]) < 2]
-report(not single_guess,
-	"every authored chart offers MULTIPLE dimension candidates, resolved against the live schema",
-	"single-guess charts: %s" % single_guess[:5])
-
-# --- docstatus must be UNREACHABLE as a dimension ------------------------
-# The second bench run promoted nothing by accident, but ten charts had
-# resolved to `docstatus` -- Frappe's internal draft/submitted flag -- and
-# rendered a single bar labelled "0". A chart that looks like analysis and
-# isn't is the exact failure class this project keeps guarding against.
-docstatus_specs = [c for c, spec in chart_registry.CHARTS.items()
-	if spec.get("spec") and "docstatus" in spec["spec"]["dimension_candidates"]]
-report(not docstatus_specs, "NO chart offers docstatus as a dimension candidate",
-	"still offering it: %s" % docstatus_specs[:5])
-
-builder = (ROOT / "docs" / "migration" / "scripts" / "build_insights_charts_from_specs.py").read_text(encoding="utf-8")
-report("BANNED_DIMENSIONS" in builder and '"docstatus"' in builder.split("BANNED_DIMENSIONS")[1][:200],
-	"the builder BANS docstatus outright, so a stray spec cannot reintroduce it")
-report('ALWAYS_PRESENT = {"name", "creation", "modified"}' in builder,
-	"docstatus is no longer in the always-present list -- that bypass is what let it win")
-report("single_bar" in builder,
-	"the builder flags single-category results, which is what a wrong dimension looks like")
-report("rows_to_chart_series(rows)" in builder,
-	"the builder previews through the SAME normaliser the dashboard uses, so blanks read as 'Not specified'")
-
-# Promotion must stay a deliberate, reviewed act.
-verified = chart_registry.BENCH_VERIFIED_CHARTS
-report(len(verified) == 16, "16 charts are bench-verified: 6 admission + 10 reviewed on 2026-08-01 (%d)" % len(verified))
-authored_left = [c for c, s in chart_registry.CHARTS.items() if s["status"] == "authored"]
-report(len(authored_left) == 20,
-	"the 20 charts whose dimension was NOT confirmed stay unpromoted (%d)" % len(authored_left))
-report(all(chart_registry.CHARTS[c]["status"] == "real" for c in verified),
-	"every verified chart is actually marked real")
-
-report('"tab" + spec["doctype"]' in builder,
-	"the builder addresses tab<DocType> -- the bare DocType name caused 13 TableNotFound errors")
-report('"measure_name": "count"' in builder and '"dimension_name": dimension_field' in builder,
-	"the builder uses the measure/dimension shape already proven on the bench")
-report("is_builder_query" in builder and "use_live_connection" in builder,
-	"the builder sets is_builder_query and use_live_connection, as the proven pilot does")
-
-# A composite chart still records WHY it cannot be a single query -- that is
-# the migration record. It just no longer RENDERS anything (see below).
-computed_charts = [c for c, s in chart_registry.CHARTS.items() if s["status"] == "computed"]
-report(all(chart_registry.CHARTS[c].get("composite_reason", "").startswith("COMPOSITE:") for c in computed_charts),
-	"every computed chart records why it is not an Insights chart (%d)" % len(computed_charts))
-report(all(not chart_registry.CHARTS[c]["insights_query_title"] for c in computed_charts),
-	"a computed chart claims NO Insights query -- it must not look like one that failed")
-
-# "real" means the runtime WILL execute the query. A chart promoted without
-# anyone seeing it return data produces an error card on a live dashboard.
-actually_real = {c for c, s in chart_registry.CHARTS.items() if s["status"] == "real"}
-report(actually_real == chart_registry.BENCH_VERIFIED_CHARTS,
-	"only bench-VERIFIED charts are marked real (%d)" % len(actually_real),
-	"unverified charts claiming real: %s" % sorted(actually_real - chart_registry.BENCH_VERIFIED_CHARTS)[:5])
-
-real_titles = [s["insights_query_title"] for s in chart_registry.CHARTS.values() if s["status"] == "real"]
-report(all("PLACEHOLDER" not in t.upper() for t in real_titles),
-	"no REAL chart is mislabelled as a placeholder")
-
-chart_service_source = (APP / "analytics" / "chart_service.py").read_text(encoding="utf-8")
-report("is_public" not in chart_service_source,
-	"the chart runtime never touches Insights' public-dashboard mechanism")
-report("run_chart_query" in chart_service_source,
-	"real charts execute through the bench-proved permission-checked path")
-
-# --- INSIGHTS OR BLANK -----------------------------------------------------
-# The rule, in the one place a chart's data is decided. Everything that is not
-# a verified Insights query collapses to a single wordless empty status: an
-# unknown id, an authored-but-unverified query, and a composite alike.
-service_body = chart_service_source[chart_service_source.index("def get_chart("):]
-service_body = service_body[:service_body.index("def get_definitions(")]
-report('status="computed"' not in service_body and '"unknown_chart"' not in service_body,
-	"the chart endpoint has no computed and no unknown-chart status left")
-report("No chart is registered" not in chart_service_source,
-	"the 'No chart is registered under that id' message is gone -- it read as a broken lookup")
-report(service_body.count('status="empty"') + service_body.count('"status": "empty"') == 2,
-	"both non-real paths (unregistered id, unverified definition) return the SAME empty status")
-report('status="placeholder"' not in service_body,
-	"nothing returns a placeholder status the card would have to explain")
-
-# --- THE SINGLE RENDERING PATH ---------------------------------------------
-# The hand-rolled SVG renderers must be unreachable: charts come from
-# Insights or they come up empty, with nothing in between.
-render_block = page_source[page_source.index("function renderLiveChartCardNow("):]
-render_block = render_block[:render_block.index("function renderKpis(")]
-# Decision B: the hand-rolled per-type SVG renderers stay unreachable. One
-# renderer, two data engines -- metricRows() is a DATA extractor and is
-# legitimately used by the computed path; chartForLive() is the renderer and
-# must never run again.
-report("chartForLive(" not in render_block,
-	"the hand-rolled SVG renderer is unreachable (chartForLive never called)")
-report("paintComputedChart" not in page_source,
-	"the computed rendering path is GONE, not merely unreachable")
-report(render_block.count("paintChartSeries(") >= 2,
-	"Insights charts and admission charts share ONE table painter -- paintChartSeries")
-
-# The whole rule lives in this one function, so this is where it is proved.
-# Strip comment lines first: the block explains the removed path in prose, and
-# a mention of metricRows in a comment is documentation, not a call.
-insights_branch = render_block[render_block.index("function renderInsightsChartInto("):]
-insights_branch = insights_branch[:insights_branch.index("function paintChartEmpty(")]
-insights_code = "\n".join(
-	line for line in insights_branch.splitlines() if not line.strip().startswith("//"))
-report("metricRows(" not in insights_code,
-	"NO chart box reads criterion-engine rows -- the second data engine is out of the render path")
-report('definition.definition_status!=="real"' in insights_code
-	and "paintChartEmpty" in insights_code,
-	"anything not marked real renders the empty state, with no other branch")
-report(insights_code.count("paintChartEmpty(") >= 4,
-	"every non-Insights outcome -- no definition, unverified, no data, error -- lands on the empty state")
-# Scoped to renderInsightsChartInto's OWN body: the wider slice also contains
-# paintAdmissionChart's definition, so deleting the CALL and leaving the dead
-# function behind passed an earlier version of this check.
-dispatch = insights_code[:insights_code.index("function paintAdmissionChart(")]
-report("chart.dataKey" in dispatch and "paintAdmissionChart(" in dispatch,
-	"the 6 admission charts keep their Insights source (get_admission_intelligence)")
-report("admission_intelligence" in insights_code,
-	"admission chart data is read from the Insights-backed embed, not recomputed")
-report("ucc_intelligence.api.get_chart_data" in page_source,
-	"charts are fetched from Insights through the app's own endpoint")
-report("renderInsightsChartInto" in page_source, "there is exactly one chart renderer, and it is the Insights one")
-
-# An empty box must be genuinely empty. These strings put words in it -- and
-# they are checked against CODE only, since the comments legitimately name the
-# statuses that were removed in order to explain why.
+# Comments legitimately explain what was removed, so code only.
 page_code = "\n".join(l for l in page_source.splitlines() if not l.strip().startswith("//"))
-report("paintChartPlaceholder" not in page_code,
-	"the labelled 'pending' placeholder is gone from the page")
-report("Insights definition pending" not in page_code,
-	"no box announces a pending Insights definition")
-report('badge.textContent = "Computed live"' not in page_code,
-	"no box is badged 'Computed live' -- that classification no longer reaches the screen")
-report("ucc-chart-empty" in page_source, "the empty state has its own quiet style, not a warning style")
+for symbol, what in [
+	("LIVE_VISUAL_EXPANSION", "the 209-box table"),
+	("liveChartCardMarkup", "the chart-card markup"),
+	("ensureLiveSectionCards", "the card-grid mounting"),
+	("renderLiveChartCardNow", "the card renderer"),
+	("renderInsightsChartInto", "the old per-box Insights fetch"),
+	("paintChartEmpty", "the blank-box state"),
+	("chartForLive", "the hand-rolled SVG dispatcher"),
+	("registerChartPlugin", "the SVG plugin registry"),
+	("metricRows", "the criterion-API row extractor"),
+	("chartDefinitions", "the chart manifest"),
+	("applyInsightsBadge", "the migration badge"),
+	("openRecords", "the card drill-down"),
+]:
+	report(symbol not in page_code, "%s is gone from the page (%s)" % (symbol, what))
+report('"charts":[{' not in page_source, "no chart box is declared anywhere in CONFIG")
+report("get_chart_definitions" not in api_source and "get_chart_data" not in api_source,
+	"the registry's two endpoints are removed from the API")
 
-# --- NO VERIFIED CHART IS ORPHANED -----------------------------------------
-# LIVE_VISUAL_EXPANSION REPLACES a tab's CONFIG charts, and every visible tab
-# has an expansion entry -- so 9 of the 16 bench-verified charts had no box at
-# all. Verifying a chart and then not showing it is silent lost work, and once
-# every other box is blank there is nothing left to notice it by. This walks
-# the tabs the page actually builds (overview + subcriteria) and checks each
-# real chart lands on one.
-def _js_object(name):
-	start = page_source.index("const %s=" % name) + len("const %s=" % name)
-	depth = 0
-	for end in range(start, len(page_source)):
-		if page_source[end] == "{":
-			depth += 1
-		elif page_source[end] == "}":
-			depth -= 1
-			if depth == 0:
-				break
-	return json.loads(page_source[start:end + 1])
+# --- WHAT REPLACED THEM ----------------------------------------------------
+report(TAB_CHARTS.exists(), "analytics/tab_charts.py holds the whole per-tab chart layer")
+for method in ("search_insights_charts", "get_tab_charts", "add_tab_chart",
+		"remove_tab_chart", "get_tab_chart_data"):
+	report("def %s(" % method in api_source and "ucc_intelligence.api.%s" % method in page_source,
+		"%s is whitelisted and called by the page" % method)
+report('data-add-chart' in page_source and "+ Add chart" in page_source,
+	'every tab area carries a "+ Add chart" button')
+report("data-remove-chart" in page_source and "removeTabChart" in page_source,
+	"each embedded chart carries a remove control")
+report("openChartPicker" in page_source and "data-chart-picker-search" in page_source,
+	"the picker is a searchable list, not a free-text chart id")
 
-dash_config, expansion = _js_object("CONFIG"), _js_object("LIVE_VISUAL_EXPANSION")
-real_ids = {c for c, s in chart_registry.CHARTS.items() if s["status"] == "real"}
-placed, box_total, box_real = set(), 0, 0
-for criterion, criterion_config in dash_config.items():
-	for tab in ["overview"] + [row[0] for row in criterion_config.get("subcriteria") or []]:
-		tab_section = criterion_config["sections"].get(tab) or {}
-		expanded = expansion.get(criterion, {}).get(tab)
-		# chartsForTab(): the expansion list, plus this tab's own CONFIG charts
-		# that are verified and not already in it.
-		boxes = list(expanded or tab_section.get("charts") or [])
-		if expanded:
-			shown = {b["id"] for b in expanded}
-			boxes += [b for b in (tab_section.get("charts") or []) if b["id"] not in shown and b["id"] in real_ids]
-		box_total += len(boxes)
-		for box in boxes:
-			if box.get("dataKey") or box["id"] in real_ids:
-				box_real += 1
-				placed.add(box["id"])
+# --- PER TAB, AND PERSISTED ------------------------------------------------
+report('criterion+"::"+tab' in page_source or 'criterionId+"::"+tab' in page_source,
+	"chart state is keyed by criterion AND tab, so tabs do not share charts")
+report('"%s:%s:%s" % (DEFAULTS_PREFIX, criterion, tab)' in tab_charts_source,
+	"the stored key is per criterion and per tab")
+report("frappe.defaults.set_user_default" in tab_charts_source
+	and "frappe.defaults.get_user_default" in tab_charts_source,
+	"the selection persists in frappe.defaults -- Frappe's own per-user store")
+# No new DocType: the point of using frappe.defaults was to avoid one.
+doctype_dirs = {p.name for p in (APP / "sophia" / "doctype").iterdir() if p.is_dir() and p.name != "__pycache__"}
+report(not any("chart" in name for name in doctype_dirs),
+	"no DocType was invented for this -- an existing store was used",
+	"chart-ish doctypes: %s" % sorted(n for n in doctype_dirs if "chart" in n))
 
-# The 6 admission charts are placed by dataKey, under ids of their own.
-orphans = sorted(real_ids - placed - {c for c in real_ids if c.startswith("criterion_4-admission-")})
-report(not orphans, "every bench-verified Insights chart appears on a visible tab",
-	"verified but rendered nowhere: %s" % orphans)
-report("configCharts" in page_source,
-	"the pre-expansion CONFIG charts are preserved, which is what makes that possible")
-print("        %d chart boxes across all 7 criteria: %d Insights, %d blank"
-	% (box_total, box_real, box_total - box_real))
+# --- PERMISSIONS -----------------------------------------------------------
+# Three gates. Each one is a single line in tab_charts.py, so each is asserted.
+report('access.build_response()["criteria"].get(criterion)' in tab_charts_source,
+	"gate 1: the criterion tab must be visible to this user (ucc_dashboard_access)")
+report("frappe.get_list(" in tab_charts_source and "frappe.get_all(" not in tab_charts_source,
+	"gate 2: the picker lists through get_list, which APPLIES permissions (get_all does not)")
+report('doc.check_permission("read")' in tab_charts_source,
+	"gate 3: every execute re-checks read permission at that moment")
+add_body = tab_charts_source[tab_charts_source.index("def add("):tab_charts_source.index("def remove(")]
+report("readable([chart])" in add_body and add_body.index("readable([chart])") < add_body.index("_stored("),
+	"a chart is permission-checked BEFORE it is stored, not after")
+get_body = tab_charts_source[tab_charts_source.index("def get_charts("):tab_charts_source.index("def add(")]
+report("readable(_stored(" in get_body,
+	"stored ids are re-filtered through permissions on every read -- an id is a preference, not a grant")
+report("is_public" not in tab_charts_source,
+	"the public-dashboard mechanism is never used -- it applies no permissions at all")
+report('CHART_DOCTYPE = "Insights Query v3"' in tab_charts_source,
+	"only the record type we can execute AND permission-check is offered")
 
-page_has_badge = "ucc-insights-badge" in page_source
-report(page_has_badge, "the dashboard badges each chart with its Insights status")
-badge_fn = page_source[page_source.index("function applyInsightsBadge("):]
-badge_fn = badge_fn[:badge_fn.index("const INSIGHTS_BADGE_STYLE_ID")]
-report(badge_fn.count("badge.textContent") == 1 and 'badge.textContent = "Insights"' in badge_fn,
-	"exactly ONE badge exists, and it means 'this came from Insights'")
+# Input validation: a tab key becomes part of a defaults key, so it cannot be
+# free text, and a criterion cannot be invented.
+report("access.CRITERION_KEYS" in tab_charts_source, "the criterion is checked against the real list")
+report("TAB_CHARACTERS" in tab_charts_source, "the tab key is character-constrained before it becomes a stored key")
+report("MAX_PER_TAB" in tab_charts_source, "a tab is bounded, so one person cannot grow an unbounded stored value")
+
+# --- WHAT MUST NOT HAVE MOVED ----------------------------------------------
+# Felix's requirement 4: charts only. These are the neighbours.
+for kept, what in [
+	("renderQa", "Management Questions and Data-Based Answers"),
+	("extendedQuestionRows", "the Q&A row builder"),
+	("renderKpis", "the KPI strip"),
+	("admission_intelligence.kpis", "the Criterion 4.1.1 admission KPIs"),
+	("renderSources", "Source Availability"),
+	("renderQuality", "Data Quality Checks"),
+	("renderReadiness", "the readiness strip"),
+]:
+	report(kept in page_source, "untouched: %s" % what)
+report("Management Questions and Data-Based Answers" in page_source,
+	"the Q&A panel markup is unchanged")
 
 
 # ===========================================================================
@@ -506,9 +391,7 @@ section("9. Bench scripts exist for what cannot be proved offline")
 for name, purpose in [
 	("verify_cutover.py", "Server Scripts disabled, every surface re-exercised"),
 	("verify_ai_live.py", "one real OpenAI call, AI on vs off"),
-	("build_placeholder_insights_charts.py", "materialise placeholder Insights definitions"),
 	("build_admission_intelligence_embed.py", "build + permission-test the real Insights charts"),
-	("build_insights_charts_from_specs.py", "build the 30 authored chart queries"),
 	("load_sample_knowledge.py", "load + retrieve the sample documents"),
 ]:
 	path = ROOT / "docs" / "migration" / "scripts" / name
