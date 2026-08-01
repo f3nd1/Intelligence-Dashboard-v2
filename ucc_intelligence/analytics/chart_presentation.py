@@ -226,6 +226,32 @@ def normalise_palette(value):
 	return colours[:MAX_PALETTE]
 
 
+def label_for(query, query_title="", record=None):
+	"""What a human should see for this query. NEVER the id.
+
+	An Insights record's `name` is a hash -- `o80pe2gco2` means nothing to
+	anyone, and four cards showing four hashes is not a dashboard. The order is
+	deliberate:
+
+	    1. the Chart's title    -- what the author named the thing they built
+	    2. the Query's title    -- what the data was called
+	    3. the id               -- only if BOTH are empty, and then labelled as
+	                               an untitled chart rather than dumped raw
+
+	Insights creates a backing query when a chart is built, and those arrive
+	with no title at all. That is exactly how four hashes reached the tabs.
+	"""
+	if record is None:
+		record = chart_record_for(query)
+	chart_title = _text((record or {}).get("title"))
+	if chart_title:
+		return chart_title
+	title = _text(query_title)
+	if title:
+		return title
+	return "Untitled chart (%s)" % _text(query)
+
+
 def chart_record_for(query):
 	"""The Insights Chart v3 record built on this query, if this user may read it.
 
@@ -274,6 +300,11 @@ def presentation_for(query, columns=None, palette=None):
 	if not record:
 		blank["reason"] = "No Insights chart has been built for this query."
 		return blank
+	# Carried on EVERY branch, not just the drawing one. A chart that exists but
+	# has no axes set yet still has a name, and that name is what the card shows
+	# instead of a hash.
+	blank["chart"] = record.get("name")
+	blank["title"] = _text(record.get("title"))
 
 	config = _config(frappe._dict(record))
 	raw_type = _text(record.get("chart_type")) or _text(config.get("chart_type"))
@@ -304,11 +335,14 @@ def presentation_for(query, columns=None, palette=None):
 		value_columns = [column for column in value_columns if column in available]
 		if not label_column:
 			blank["chart_type"] = raw_type
-			blank["reason"] = "The chart has no x-axis set in Insights."
+			blank["reason"] = ("This chart has no X Axis Column set in Insights. "
+				"Open it in Insights, set X Axis Column and Y Axis Series, and it "
+				"will draw here.")
 			return blank
 		if not value_columns:
 			blank["chart_type"] = raw_type
-			blank["reason"] = "The chart has no y-axis column that this query returns."
+			blank["reason"] = ("This chart has no Y Axis Series that this query "
+				"returns. Set Y Axis Series in Insights and it will draw here.")
 			return blank
 
 	legend = _text(config.get("legend_position")).lower()
@@ -353,4 +387,8 @@ def charts_by_query():
 				mapping[query] = {"chart": row.get("name"),
 					"title": _text(row.get("title")),
 					"chart_type": _text(row.get("chart_type"))}
+			# `query` and `data_query` can point at DIFFERENT queries: Insights
+			# creates a backing query when a chart is built. Both are mapped, so
+			# whichever of them reaches a tab still resolves to this chart and
+			# still gets its title rather than a hash.
 	return mapping
