@@ -1,5 +1,36 @@
 # Keeping the bench app in sync
 
+## READ THIS FIRST: never mirror-delete into the bench app directory
+
+On 2026-08-01 this sync command was given, and it broke the app completely:
+
+```bash
+# DO NOT RUN THIS
+rsync -a --delete ~/Intelligence-Dashboard-v2/ucc_intelligence/ \
+                  ~/ucc-sms-v2/apps/ucc_intelligence/
+```
+
+`--delete` removes anything at the destination that is not in the source. The
+bench app directory legitimately contained files this repository did not --
+`hooks.py`, `modules.txt`, `patches.txt`, `pyproject.toml` -- because a
+previous decision (see `hooks-reference.md`) kept the bench-generated scaffold
+out of version control. So the mirror deleted the app's own manifest, and
+`bench migrate` and `bench clear-cache` then failed for EVERY app on the
+bench with:
+
+    ModuleNotFoundError: No module named 'ucc_intelligence.hooks'
+
+Two things changed as a result:
+
+1. **The scaffold is now version-controlled.** `hooks.py`, `modules.txt`,
+   `patches.txt` and `pyproject.toml` are in this repository, so the source
+   and the destination finally describe the same app.
+2. **`tools/test_app_loads.py`** fails if any load-critical file goes missing
+   again. It runs as part of `tools/test_end_to_end.py`.
+
+Even so, prefer the pull below over any mirroring copy. If a copy is
+unavoidable, copy WITHOUT `--delete` and remove stale files by name.
+
 ## The problem this document exists for
 
 `ucc_knowledge_chunk.py` was reported missing from the bench, with the whole
@@ -52,9 +83,41 @@ bench --site ucc-sms-v2.orb.local migrate
 From then on, each round is:
 
 ```bash
-cd ~/frappe-bench/apps/ucc_intelligence && git pull origin app-export
-cd ~/frappe-bench && bench --site ucc-sms-v2.orb.local migrate && bench build --app ucc_intelligence
+cd ~/ucc-sms-v2/apps/ucc_intelligence && git pull origin app-export
+cd ~/ucc-sms-v2 && bench build --app ucc_intelligence \
+  && bench --site ucc-sms-v2.orb.local migrate \
+  && bench --site ucc-sms-v2.orb.local clear-cache
 ```
+
+### If the bench copy still has no remote
+
+Copy, but never mirror. `-a` without `--delete` overwrites what changed and
+leaves everything else alone, which is the safe direction:
+
+```bash
+cd ~/Intelligence-Dashboard-v2 && git pull origin main
+rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude '.git' \
+  ~/Intelligence-Dashboard-v2/ucc_intelligence/ \
+  ~/ucc-sms-v2/apps/ucc_intelligence/
+```
+
+When a round genuinely deletes a module, remove that file by name rather than
+reaching for `--delete`:
+
+```bash
+rm -f ~/ucc-sms-v2/apps/ucc_intelligence/ucc_intelligence/analytics/chart_registry.py
+```
+
+### Confirm the app can still load, before migrate
+
+```bash
+ls ~/ucc-sms-v2/apps/ucc_intelligence/ucc_intelligence/hooks.py \
+   ~/ucc-sms-v2/apps/ucc_intelligence/ucc_intelligence/modules.txt \
+   ~/ucc-sms-v2/apps/ucc_intelligence/pyproject.toml
+```
+
+All three must exist. If one does not, `bench migrate` will abort for every
+app on the bench, not just this one.
 
 ## Why `app-export` and not `main`
 

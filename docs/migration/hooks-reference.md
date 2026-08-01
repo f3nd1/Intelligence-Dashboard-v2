@@ -1,8 +1,24 @@
 # hooks.py entries this app needs
 
-`hooks.py` is bench-generated and deliberately not in this repository
-(CLAUDE.md §7: scaffold files come from the installed Frappe version, not
-hand-authored). These are the entries to add to it on the bench.
+> **Superseded 2026-08-01.** `hooks.py` IS in this repository now, at
+> `ucc_intelligence/ucc_intelligence/hooks.py`, and carries every entry below.
+>
+> Keeping it out was a defensible reading of CLAUDE.md §7 (scaffold files come
+> from the installed Frappe version) with an indefensible consequence: the
+> repository's app directory did not match the bench's, so a mirroring sync
+> deleted the manifest and Frappe could no longer load the app at all. A file
+> that must exist for the app to start, which nothing here declared or checked,
+> was one flag away from deletion at all times.
+>
+> `pyproject.toml` is the one scaffold file that really is version-specific.
+> The committed one targets Frappe v15 (inferred from Insights v3.12.2, which
+> requires v15 -- the version was never recorded in
+> `environment-discovery-template.md`). If `bench setup requirements` objects
+> to it, generate one with `bench new-app` on the real bench and commit that.
+>
+> This page stays as the record of WHY each entry exists.
+
+These are the entries, and they are now live in `hooks.py`.
 
 ## Scheduler — monitoring
 

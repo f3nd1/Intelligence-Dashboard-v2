@@ -399,7 +399,35 @@ report((ROOT / "docs" / "migration" / "scripts" / "load_sample_knowledge.py").ex
 
 
 # ===========================================================================
-section("8. Installability -- every DocType can actually migrate")
+section("8. Installability -- can Frappe load the app at all?")
+# ===========================================================================
+# This section used to start at the DocTypes. It should have started one step
+# earlier: on 2026-08-01 the bench failed on `No module named
+# 'ucc_intelligence.hooks'` -- the app's own manifest had never been in this
+# repository, so a mirroring sync deleted it from the bench and Frappe could
+# not load the app at all. Every suite here checked what the code DOES; none
+# checked that it could be reached. tools/test_app_loads.py is that check and
+# runs in section 1 with the rest; these are the cross-cutting parts.
+for required, why in [
+	("ucc_intelligence/hooks.py", "frappe.get_hooks() imports it before any app code"),
+	("ucc_intelligence/modules.txt", "the module list installs the DocTypes and the Page"),
+	("ucc_intelligence/patches.txt", "bench migrate reads it on every run"),
+	("pyproject.toml", "bench setup requirements and any reinstall need it"),
+]:
+	report((APP.parent / required).exists(),
+		"load-critical file present: %s -- %s" % (required, why),
+		"MISSING -- bench migrate aborts for EVERY app on the bench, not just this one")
+
+# The app-export branch is what the bench actually receives. Anything
+# load-critical must sit at a path that survives `git subtree split
+# --prefix=ucc_intelligence`, i.e. under ucc_intelligence/ in this repo.
+report((ROOT / "ucc_intelligence" / "pyproject.toml").exists(),
+	"pyproject.toml is INSIDE ucc_intelligence/, so it reaches app-export's root",
+	"a copy at the repo root would never reach the bench")
+
+
+# ===========================================================================
+section("8b. Installability -- every DocType can actually migrate")
 # ===========================================================================
 # bench migrate aborted at 38% on a missing controller module. Checked here
 # structurally so the next omission fails in a second, not half way through

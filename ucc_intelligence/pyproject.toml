@@ -1,0 +1,19 @@
+[project]
+name = "ucc_intelligence"
+authors = [
+    { name = "United Ceres College Pte Ltd", email = "felix@unitedceres.edu.sg" },
+]
+description = "Institutional analytics, guided answers and controlled AI workflows for UCC SMS"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # "frappe" is NOT listed: bench installs and manages it, and pinning it
+    # here is the standard way to break a bench upgrade.
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.bench.dev-dependencies]
