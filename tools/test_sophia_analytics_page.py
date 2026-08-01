@@ -221,15 +221,6 @@ for _old, _new, _label in [
 	("config:CONFIG,registerResponseAdapter:registerResponseAdapter,registerChartPlugin:registerChartPlugin,refresh:",
 		"config:CONFIG,registerResponseAdapter:registerResponseAdapter,refresh:",
 		"the public registerChartPlugin hook"),
-	('const actionButton=event.target.closest("[data-demo-action]");',
-		'const addChart=event.target.closest("[data-add-chart]");\n'
-		"if(addChart){event.preventDefault();event.stopPropagation();"
-		"openChartPicker(dashboard,config,addChart.dataset.addChart);return;}\n"
-		'const removeChart=event.target.closest("[data-remove-chart]");\n'
-		"if(removeChart){event.preventDefault();event.stopPropagation();"
-		"removeTabChart(dashboard,config,activeSection(dashboard),removeChart.dataset.removeChart);return;}\n"
-		'const actionButton=event.target.closest("[data-demo-action]");',
-		"the add/remove chart handlers"),
 ]:
 	checks.append(report(engine_transformed.count(_old) == 1, "legacy site found exactly once: %s" % _label))
 	engine_transformed = engine_transformed.replace(_old, _new, 1)
@@ -268,20 +259,19 @@ for _old, _label in [
 # picker's clear control, the intro editor and the question show/hide -- all
 # hang off the SAME delegated listener the add/remove chart handlers use, so
 # they are declared as one insertion at that point.
+# Every control added to the tab surface hangs off the SAME delegated listener,
+# so they are declared as one insertion at that point: the Edit/View toggle,
+# History, Export PDF, add/remove chart, Diagram/Table, drill-down, the intro
+# editor and the question show/hide.
 _card_controls = region(ported,
-	"// --- Diagram/Table toggle and drill-down (#8) --------------------------",
-	'const actionButton=event.target.closest("[data-demo-action]");', "the card and question controls (ported)")
+	'const modeToggle=event.target.closest("[data-toggle-edit]");',
+	'const actionButton=event.target.closest("[data-demo-action]");', "the tab surface controls (ported)")
 engine_transformed = engine_transformed.replace(
 	'const actionButton=event.target.closest("[data-demo-action]");',
 	_card_controls + 'const actionButton=event.target.closest("[data-demo-action]");', 1)
 
-# The size <select> fires `change`, not `click`, so it needs its own listener
-# rather than a branch in the click one.
-_size_listener = region(ported, 'platform.addEventListener("change",function(event){',
-	'platform.addEventListener("click",function(event){\nconst sourceButton=', "the size listener (ported)")
-engine_transformed = engine_transformed.replace(
-	'platform.addEventListener("click",function(event){\nconst sourceButton=',
-	_size_listener + 'platform.addEventListener("click",function(event){\nconst sourceButton=', 1)
+# The Small/Medium/Large/Full dropdown was replaced by a drag handle
+# (2026-08-02 #3), so the `change` listener it needed is gone with it.
 
 _intro = region(ported, "function analyticsPanelMarkup(criterionId,key,title){",
 	"function sourcesQualityPanelMarkup(", "editable tab intro (ported)")

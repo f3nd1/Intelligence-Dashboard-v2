@@ -284,16 +284,47 @@ function activeSection(dashboard){return dashboard.dataset.demoActiveTab||"overv
 // ---------------------------------------------------------------------------
 const tabChartState={};
 
+// #5: View is the default. A tab full of x buttons and drag handles reads as a
+// draft, and these tabs are shown to auditors. The mode is per criterion and
+// deliberately NOT persisted -- it is how you are looking at the tab right
+// now, not how the tab is configured, and leaving someone in Edit mode across
+// sessions is how a stray click becomes a change nobody meant.
+const tabEditModes={};
+function isEditing(dashboard,tab){
+const state=tabConfig(dashboard,tab);
+return !!(state&&state.canEdit&&tabEditModes[dashboard.dataset.demoDashboard]);
+}
+
 function tabChartKey(criterionId,tab){return criterionId+"::"+tab;}
 function tabConfig(dashboard,tab){
 return tabChartState[tabChartKey(dashboard.dataset.demoDashboard,tab)]||null;
 }
 
-function tabChartAreaMarkup(tab,canEdit){
+function tabChartAreaMarkup(tab){
 return`<section class="ucc-tab-charts" data-tab-charts="${esc(tab)}">`
 +`<div class="ucc-tab-charts-head"><h2>Charts</h2>`
-+(canEdit?`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button>`:"")
-+`</div><div class="ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
++`<div class="ucc-tab-charts-actions" data-tab-actions="${esc(tab)}"></div></div>`
++`<div class="ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
+}
+
+// The head is rebuilt whenever the mode or the permission changes, so a
+// control is never left on screen for someone who cannot use it.
+function renderTabActions(dashboard,tab){
+const area=dashboard.querySelector(`.ucc-tab-charts[data-tab-charts="${CSS.escape(tab)}"]`);
+const mount=area&&area.querySelector("[data-tab-actions]");
+if(!mount)return;
+const state=tabConfig(dashboard,tab);
+const canEdit=!!(state&&state.canEdit);
+const editing=isEditing(dashboard,tab);
+mount.innerHTML=
+`<button type="button" class="ucc-tab-action" data-tab-history="${esc(tab)}">History</button>`
++(editing?"":`<button type="button" class="ucc-tab-action" data-export-pdf="${esc(tab)}">Export PDF</button>`)
++(canEdit
+?`<button type="button" class="ucc-tab-action ucc-tab-mode${editing?" is-editing":""}" `
++`data-toggle-edit="${esc(tab)}" aria-pressed="${editing}">${editing?"Done editing":"Edit tab"}</button>`
+:"")
++(editing?`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button>`:"");
+area.classList.toggle("is-editing",editing);
 }
 
 // analyticsPanelMarkup() already emits an empty [data-live-anchor] between the
@@ -304,26 +335,14 @@ const panelKey=(config.panelMap&&config.panelMap[tab])||tab;
 if(panelKey==="quality"||panelKey==="sources")return null;
 const anchor=dashboard.querySelector(`[data-live-anchor="${CSS.escape(panelKey)}"]`);
 if(!anchor)return null;
-const state=tabConfig(dashboard,tab);
-const canEdit=!!(state&&state.canEdit);
 let area=anchor.querySelector(`:scope > .ucc-tab-charts[data-tab-charts="${CSS.escape(tab)}"]`);
 if(!area){
 const holder=document.createElement("div");
-holder.innerHTML=tabChartAreaMarkup(tab,canEdit);
+holder.innerHTML=tabChartAreaMarkup(tab);
 area=holder.firstElementChild;
 anchor.appendChild(area);
 }
-// The area is mounted before the config arrives, so the head is refreshed
-// once it does rather than left showing a control this user cannot use.
-else if(area.dataset.canEdit!==String(canEdit)){
-const head=area.querySelector(".ucc-tab-charts-head");
-const existing=head&&head.querySelector("[data-add-chart]");
-if(canEdit&&!existing&&head){
-head.insertAdjacentHTML("beforeend",
-`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button>`);
-}else if(!canEdit&&existing){existing.remove();}
-}
-area.dataset.canEdit=String(canEdit);
+renderTabActions(dashboard,tab);
 return area;
 }
 
@@ -433,28 +452,34 @@ return'<div class="ucc-tab-charts-notice">'+esc(message)+"</div>";
 
 // ONE execute per chart feeds BOTH views, so the number in the table is by
 // construction the number in the bar. See tab_charts.chart_data().
-function embeddedChartMarkup(chart,sizes,canEdit){
-const options=(sizes||["small","medium","large","full"]).map(function(size){
-return'<option value="'+esc(size)+'"'+(size===chart.size?" selected":"")+">"
-+esc(size.charAt(0).toUpperCase()+size.slice(1))+"</option>";
-}).join("");
-return`<article class="ucc-embedded-chart" data-embedded-chart="${esc(chart.chart)}" `
-+`data-demo-card="${esc(chart.chart)}" style="grid-column:span ${Number(chart.span)||6}">`
+function embeddedChartMarkup(chart,editing){
+const span=Math.max(1,Math.min(Number(chart.span)||6,12));
+return`<article class="ucc-embedded-chart${editing?" is-editable":""}" data-embedded-chart="${esc(chart.chart)}" `
++`data-demo-card="${esc(chart.chart)}" data-span="${span}"${editing?' draggable="true"':""} `
++`style="grid-column:span ${span}">`
 +`<div class="ucc-embedded-chart-head"><h3>${esc(chart.title)}</h3>`
 +`<div class="ucc-embedded-chart-tools">`
 +`<div class="ucc-embedded-views" role="group" aria-label="View">`
 +`<button type="button" data-demo-view="diagram" class="is-active" aria-pressed="true">Diagram</button>`
 +`<button type="button" data-demo-view="table" aria-pressed="false">Table</button></div>`
-+(canEdit
-?`<select class="ucc-embedded-size" data-chart-size="${esc(chart.chart)}" `
-+`aria-label="Size of ${esc(chart.title)}">${options}</select>`
++(editing
+?`<span class="ucc-drag-grip" data-drag-grip title="Drag to reorder" aria-hidden="true">&#8942;&#8942;</span>`
 +`<button type="button" class="ucc-remove-chart" data-remove-chart="${esc(chart.chart)}" `
 +`title="Remove this chart from the tab" aria-label="Remove ${esc(chart.title)} from this tab">&times;</button>`
 :"")
 +`</div></div>`
 +`<div class="ucc-embedded-chart-body" data-demo-chart="${esc(chart.chart)}" data-embedded-chart-body>`
 +tabChartNotice("Loading…")+"</div>"
-+`<div class="ucc-embedded-chart-table hidden" data-embedded-chart-table></div></article>`;
++`<div class="ucc-embedded-chart-table hidden" data-embedded-chart-table></div>`
+// #3: the width is dragged, not chosen from a list. The handle carries the
+// keyboard equivalent too -- a drag that only works with a mouse is not an
+// accessible control (CLAUDE.md §10.5).
++(editing
+?`<button type="button" class="ucc-resize-handle" data-resize-chart="${esc(chart.chart)}" `
++`aria-label="Width of ${esc(chart.title)}: ${span} of 12 columns. Use the arrow keys to change." `
++`role="slider" aria-valuemin="1" aria-valuemax="12" aria-valuenow="${span}"></button>`
+:"")
++`</article>`;
 }
 
 function renderTabCharts(dashboard,config,tab){
@@ -466,13 +491,16 @@ if(!state){grid.innerHTML=tabChartNotice("Loading your charts…");loadTabCharts
 if(state.loading){grid.innerHTML=tabChartNotice("Loading your charts…");return;}
 if(state.error){grid.innerHTML=tabChartNotice(state.error);return;}
 if(!state.charts.length){
-grid.innerHTML=tabChartNotice(state.canEdit
+grid.innerHTML=tabChartNotice(isEditing(dashboard,tab)
 ?"No charts on this tab yet. Use “+ Add chart” to embed one from Frappe Insights."
 :"No charts have been added to this tab yet.");
 return;
 }
-grid.innerHTML=state.charts.map(function(chart){return embeddedChartMarkup(chart,state.sizes,state.canEdit);}).join("");
+const editing=isEditing(dashboard,tab);
+grid.innerHTML=state.charts.map(function(chart){return embeddedChartMarkup(chart,editing);}).join("");
 state.charts.forEach(function(chart){paintEmbeddedChart(grid,chart);});
+initChartDragging(dashboard,config,tab,grid);
+initChartResizing(dashboard,config,tab,grid);
 }
 
 function applyTabConfig(dashboard,config,tab,response){
@@ -487,6 +515,7 @@ sizes:(response&&response.sizes)||["small","medium","large","full"],
 canEdit:!!(response&&response.can_edit),
 loading:false,error:null};
 renderTabCharts(dashboard,config,tab);
+renderTabActions(dashboard,tab);
 renderTabIntro(dashboard,config,tab);
 renderQa(dashboard,dashboardState(dashboard).result,tab);
 syncExploreCatalogue();
@@ -630,30 +659,59 @@ button.setAttribute("aria-pressed",active?"true":"false");
 // Replaces the hard-coded "OVERVIEW / Permission-aware live evidence, visual
 // analysis and management questions" every tab used to carry. Empty by
 // default: a tab with nothing to say says nothing.
+// #4: the intro renders Markdown. It did not before -- headings and numbered
+// lists came out as literal "# Heading" and "1. item" text, which is what
+// "typed markdown and it came out unformatted" meant. Bold, italic, code,
+// links and - bullets already worked; the rest is added here.
+//
+// THE ESCAPING IS NOT WEAKENED TO DO IT, and the two requirements do not
+// conflict. Every rule below runs on text that esc() has ALREADY escaped, so
+// "<script>" is "&lt;script&gt;" before any pattern sees it and can never
+// become a tag. The markdown patterns only ever match characters escaping
+// leaves alone (#, *, `, -, digits, brackets). The XSS assertion in
+// tools/test_tab_surface_render.js is untouched and still passes.
 function renderIntroMarkdown(text){
-// A deliberately small Markdown subset, applied AFTER escaping, so this can
-// never become an HTML injection point however the text was stored. Link
-// hrefs are restricted to http(s) for the same reason.
 let html=esc(text);
+// Inline first, so a heading or list item can contain them.
 html=html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
 '<a href="$2" target="_blank" rel="noopener">$1</a>');
 html=html.replace(/\*\*([^*\n]+)\*\*/g,"<strong>$1</strong>");
 html=html.replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<em>$2</em>");
 html=html.replace(/`([^`\n]+)`/g,"<code>$1</code>");
-const lines=html.split("\n");
+
 const out=[];
-let list=null;
-lines.forEach(function(line){
-const bullet=/^\s*[-*]\s+(.*)$/.exec(line);
-if(bullet){
-if(!list){list=[];}
-list.push("<li>"+bullet[1]+"</li>");
+let list=null;      // the <li> items collected so far
+let listTag="";     // "ul" or "ol" -- switching between them closes the first
+function closeList(){
+if(list){out.push("<"+listTag+">"+list.join("")+"</"+listTag+">");list=null;listTag="";}
+}
+function openItem(tag,content){
+if(listTag&&listTag!==tag)closeList();
+if(!list){list=[];listTag=tag;}
+list.push("<li>"+content+"</li>");
+}
+
+html.split("\n").forEach(function(line){
+const heading=/^\s*(#{1,6})\s+(.*)$/.exec(line);
+if(heading){
+closeList();
+// Capped at h6 by the pattern; rendered as h3-h6 so a tab intro can never
+// out-shout the page's own headings.
+const level=Math.min(6,heading[1].length+2);
+out.push("<h"+level+">"+heading[2]+"</h"+level+">");
 return;
 }
-if(list){out.push("<ul>"+list.join("")+"</ul>");list=null;}
+const bullet=/^\s*[-*]\s+(.*)$/.exec(line);
+if(bullet){openItem("ul",bullet[1]);return;}
+const numbered=/^\s*\d+[.)]\s+(.*)$/.exec(line);
+if(numbered){openItem("ol",numbered[1]);return;}
+const quote=/^\s*&gt;\s?(.*)$/.exec(line);   // ">" is already escaped by now
+if(quote){closeList();out.push("<blockquote>"+quote[1]+"</blockquote>");return;}
+if(/^\s*(-{3,}|\*{3,})\s*$/.test(line)){closeList();out.push("<hr>");return;}
+closeList();
 if(line.trim())out.push("<p>"+line+"</p>");
 });
-if(list)out.push("<ul>"+list.join("")+"</ul>");
+closeList();
 return out.join("");
 }
 
@@ -664,7 +722,7 @@ if(!mount)return;
 const state=tabConfig(dashboard,tab);
 const text=(state&&state.intro)||"";
 if(mount.dataset.editing==="1")return;
-const canEdit=!!(state&&state.canEdit);
+const canEdit=isEditing(dashboard,tab);
 if(!text&&!canEdit){mount.innerHTML="";return;}
 mount.innerHTML=(text
 ?'<div class="ucc-tab-intro-text">'+renderIntroMarkdown(text)+"</div>"
@@ -705,6 +763,234 @@ applyTabConfig(dashboard,config,tab,(response&&response.message)||{});
 },
 error(error){logEvent(dashboard,"ERROR","tab_intro_save_failed",apiErrorMessage(error));},
 });
+}
+
+// --- #2: drag to reorder ---------------------------------------------------
+// HTML5 drag and drop, not a library: the cards are already grid items, the
+// browser supplies the drag image and the drop target, and the stored list IS
+// the order so there is nothing to reconcile afterwards.
+function chartOrderFrom(grid){
+return Array.from(grid.querySelectorAll("[data-embedded-chart]"))
+.map(function(card){return card.dataset.embeddedChart;});
+}
+
+function initChartDragging(dashboard,config,tab,grid){
+if(grid.dataset.dragReady==="1")return;
+grid.dataset.dragReady="1";
+let dragged=null;
+
+grid.addEventListener("dragstart",function(event){
+const card=event.target.closest("[data-embedded-chart]");
+if(!card||!card.draggable)return;
+dragged=card;
+card.classList.add("is-dragging");
+event.dataTransfer.effectAllowed="move";
+// Firefox refuses to start a drag unless data is set.
+event.dataTransfer.setData("text/plain",card.dataset.embeddedChart);
+});
+
+grid.addEventListener("dragover",function(event){
+if(!dragged)return;
+event.preventDefault();
+const over=event.target.closest("[data-embedded-chart]");
+if(!over||over===dragged)return;
+// Before or after, depending on which half was entered, so a card can be
+// dropped at either end of a row rather than only ever landing left.
+const box=over.getBoundingClientRect();
+const after=(event.clientX-box.left)>box.width/2;
+grid.insertBefore(dragged,after?over.nextSibling:over);
+});
+
+grid.addEventListener("dragend",function(){
+if(!dragged)return;
+dragged.classList.remove("is-dragging");
+dragged=null;
+const order=chartOrderFrom(grid);
+const state=tabConfig(dashboard,tab);
+const before=((state&&state.charts)||[]).map(function(chart){return chart.chart;});
+if(order.join(" ")===before.join(" "))return;
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_chart_order",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,order:JSON.stringify(order)},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
+error(error){
+logEvent(dashboard,"ERROR","tab_chart_order_failed",apiErrorMessage(error));
+// The DOM has already moved. Re-render from what the server still holds,
+// so the screen never shows an order that was not saved.
+renderTabCharts(dashboard,config,tab);
+},
+});
+});
+}
+
+// --- #3: drag to resize, snapped to the 12-column grid ----------------------
+// The Small/Medium/Large/Full dropdown is gone. The handle drags in real
+// pixels but only ever commits a whole number of columns, because a card at
+// 37.4% width would break the grid every other card lines up against.
+function columnWidth(grid){
+const style=window.getComputedStyle(grid);
+const gap=parseFloat(style.columnGap||style.gap||"0")||0;
+return (grid.getBoundingClientRect().width-gap*11)/12+gap;
+}
+
+function applySpan(card,span){
+card.dataset.span=String(span);
+card.style.gridColumn="span "+span;
+const handle=card.querySelector("[data-resize-chart]");
+if(handle)handle.setAttribute("aria-valuenow",String(span));
+}
+
+function commitSpan(dashboard,config,tab,chart,span){
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_chart_size",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,chart:chart,span:span},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
+error(error){
+logEvent(dashboard,"ERROR","tab_chart_size_failed",apiErrorMessage(error));
+renderTabCharts(dashboard,config,tab);
+},
+});
+}
+
+function initChartResizing(dashboard,config,tab,grid){
+if(grid.dataset.resizeReady==="1")return;
+grid.dataset.resizeReady="1";
+let active=null;
+
+grid.addEventListener("pointerdown",function(event){
+const handle=event.target.closest("[data-resize-chart]");
+if(!handle)return;
+event.preventDefault();
+const card=handle.closest("[data-embedded-chart]");
+active={card:card,chart:handle.dataset.resizeChart,
+startX:event.clientX,startSpan:Number(card.dataset.span)||6,
+unit:columnWidth(grid)};
+handle.setPointerCapture(event.pointerId);
+grid.classList.add("is-resizing");
+});
+
+grid.addEventListener("pointermove",function(event){
+if(!active)return;
+const moved=Math.round((event.clientX-active.startX)/active.unit);
+const span=Math.max(1,Math.min(active.startSpan+moved,12));
+if(span!==Number(active.card.dataset.span))applySpan(active.card,span);
+});
+
+function finish(){
+if(!active)return;
+const card=active.card;
+const chart=active.chart;
+const span=Number(card.dataset.span)||6;
+const started=active.startSpan;
+active=null;
+grid.classList.remove("is-resizing");
+if(span!==started)commitSpan(dashboard,config,tab,chart,span);
+}
+grid.addEventListener("pointerup",finish);
+grid.addEventListener("pointercancel",finish);
+
+// The handle is a slider, so the arrow keys do what the drag does. A resize
+// that only works with a mouse is not a control everyone can use
+// (CLAUDE.md §10.5). Committed on keyup, so holding an arrow is one save.
+grid.addEventListener("keydown",function(event){
+const handle=event.target.closest("[data-resize-chart]");
+if(!handle)return;
+const step=event.key==="ArrowRight"?1:event.key==="ArrowLeft"?-1:0;
+if(!step)return;
+event.preventDefault();
+const card=handle.closest("[data-embedded-chart]");
+applySpan(card,Math.max(1,Math.min((Number(card.dataset.span)||6)+step,12)));
+handle.dataset.pendingSpan=card.dataset.span;
+});
+grid.addEventListener("keyup",function(event){
+const handle=event.target.closest("[data-resize-chart]");
+if(!handle||!handle.dataset.pendingSpan)return;
+const span=Number(handle.dataset.pendingSpan);
+handle.dataset.pendingSpan="";
+const card=handle.closest("[data-embedded-chart]");
+commitSpan(dashboard,config,tab,card.dataset.embeddedChart,span);
+});
+}
+
+// --- #1: the change history, somewhere readable -----------------------------
+// The records are in Desk as UCC Analytics Tab Change, but "open the list view
+// and filter it" is not an answer for the person who owns the tab. This is the
+// same information, where the tab is.
+function tabTimestamp(value){
+if(!value)return "";
+const parsed=new Date(String(value).replace(" ","T"));
+if(isNaN(parsed.getTime()))return String(value);
+return parsed.toLocaleString(undefined,{day:"numeric",month:"short",year:"numeric",
+hour:"numeric",minute:"2-digit"});
+}
+
+function openTabHistory(dashboard,tab){
+openModal("Tab history",tabChartNotice("Loading…"));
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.get_tab_history",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,limit:100},
+callback(response){
+const changes=((response&&response.message)||{}).changes||[];
+openModal("Tab history",changes.length
+?'<p class="ucc-chart-picker-note">Every change to how this tab is set up. '
++"Configuration only — no figures are recorded here.</p>"
++'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
++"<th>When</th><th>Who</th><th>What changed</th></tr></thead><tbody>"
++changes.map(function(change){
+return"<tr><td>"+esc(tabTimestamp(change.changed_at))+"</td>"
++"<td>"+esc(change.changed_by)+"</td>"
++"<td>"+esc(change.summary||change.action)+"</td></tr>";
+}).join("")+"</tbody></table></div>"
+:tabChartNotice("Nothing has been changed on this tab yet."));
+},
+error(error){openModal("Tab history",tabChartNotice(apiErrorMessage(error)));},
+});
+}
+
+// --- #6: export the tab as a PDF -------------------------------------------
+// window.print() with a print stylesheet, not a PDF library and not a
+// server-side render. The charts are live DOM; the browser already knows how
+// to put exactly what is on screen onto a page, and "Save as PDF" is in every
+// print dialog. A server-side renderer would have to re-execute every query
+// and re-draw every chart to produce a worse copy of what the user is looking
+// at, and would need its own permission story to do it.
+//
+// Forced into View mode first, so no x, grip, handle or Add button can reach
+// the page an auditor is handed.
+function exportTabPdf(dashboard,config,tab){
+tabEditModes[dashboard.dataset.demoDashboard]=false;
+renderTabCharts(dashboard,config,tab);
+renderTabActions(dashboard,tab);
+renderTabIntro(dashboard,config,tab);
+renderQa(dashboard,dashboardState(dashboard).result,tab);
+
+const stamp=document.createElement("div");
+stamp.className="ucc-print-stamp";
+stamp.innerHTML="<strong>"+esc("Criterion "+config.number+" · "+config.title)+"</strong>"
++"<span>"+esc(tab==="overview"?"Overview":tab)+" · as at "
++esc(new Date().toLocaleString(undefined,{day:"numeric",month:"long",year:"numeric",
+hour:"numeric",minute:"2-digit"}))+"</span>";
+
+const platformRoot=dashboard.closest(".ucc-platform")||document.body;
+platformRoot.classList.add("ucc-printing");
+dashboard.classList.add("ucc-print-target");
+dashboard.insertBefore(stamp,dashboard.firstChild);
+
+function cleanup(){
+platformRoot.classList.remove("ucc-printing");
+dashboard.classList.remove("ucc-print-target");
+if(stamp.parentNode)stamp.parentNode.removeChild(stamp);
+window.removeEventListener("afterprint",cleanup);
+}
+window.addEventListener("afterprint",cleanup);
+// A browser that never fires afterprint would leave the page stamped.
+window.setTimeout(cleanup,60000);
+// The renders above are synchronous but the charts they repaint are not; one
+// beat lets the layout settle before the dialog opens.
+window.setTimeout(function(){window.print();},250);
 }
 
 // --- Explore auto-population (#7) -------------------------------------------
@@ -821,7 +1107,33 @@ style.textContent=`
 .ucc-embedded-views{display:inline-flex;border:1px solid #D8E0EC;border-radius:8px;overflow:hidden}
 .ucc-embedded-views>button{border:0;background:#fff;min-height:30px;padding:0 10px;font-size:11px;font-weight:600;color:#64748B;cursor:pointer}
 .ucc-embedded-views>button.is-active{background:#172554;color:#fff}
-.ucc-embedded-size{min-height:30px;border:1px solid #D8E0EC;border-radius:8px;background:#fff;font:inherit;font-size:11px;padding:0 6px;color:#334155}
+.ucc-tab-charts-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ucc-tab-action{border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:36px;padding:0 12px;font-size:12px;cursor:pointer;color:#334155}
+.ucc-tab-action:hover{background:#F1F5F9}
+.ucc-tab-mode.is-editing{background:#172554;border-color:#172554;color:#fff;font-weight:600}
+/* #5: only an editable card advertises that it is editable. In View mode there
+   is no grip, no handle and no x, so a finished tab reads as finished. */
+.ucc-embedded-chart.is-editable{border-color:#C7D9F5;position:relative}
+.ucc-embedded-chart.is-dragging{opacity:.45}
+.ucc-drag-grip{cursor:grab;color:#94A3B8;font-size:13px;letter-spacing:-3px;user-select:none;padding:0 2px}
+.ucc-embedded-chart.is-editable:active .ucc-drag-grip{cursor:grabbing}
+.ucc-resize-handle{position:absolute;top:0;right:-5px;width:10px;height:100%;border:0;padding:0;
+ background:transparent;cursor:col-resize;border-radius:0}
+.ucc-resize-handle::after{content:"";position:absolute;top:50%;right:4px;width:2px;height:28px;
+ margin-top:-14px;border-radius:2px;background:#C7D9F5}
+.ucc-resize-handle:hover::after,.ucc-resize-handle:focus-visible::after{background:#2563EB;height:44px;margin-top:-22px}
+.ucc-resize-handle:focus-visible{outline:2px solid #2563EB;outline-offset:1px}
+.ucc-tab-charts-grid.is-resizing{cursor:col-resize;user-select:none}
+.ucc-history-table{width:100%;border-collapse:collapse;font-size:12px}
+.ucc-history-table th,.ucc-history-table td{border:1px solid #E6EBF3;padding:5px 8px;text-align:left;vertical-align:top}
+.ucc-history-table th{font-weight:600;color:#64748B}
+/* #4: the intro renders Markdown, so it needs the elements Markdown makes. */
+.ucc-tab-intro-text h3{margin:10px 0 6px;font-size:15px;font-weight:600;color:#172554}
+.ucc-tab-intro-text h4,.ucc-tab-intro-text h5,.ucc-tab-intro-text h6{margin:8px 0 4px;font-size:13px;font-weight:600;color:#334155}
+.ucc-tab-intro-text ol{margin:0 0 8px;padding-left:20px}
+.ucc-tab-intro-text blockquote{margin:0 0 8px;padding:2px 0 2px 12px;border-left:3px solid #D8E0EC;color:#64748B}
+.ucc-tab-intro-text hr{border:0;border-top:1px solid #D8E0EC;margin:10px 0}
+.ucc-tab-intro-text a{color:#2563EB}
 .ucc-remove-chart{border:0;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:#64748B;padding:0 4px;min-height:30px}
 .ucc-remove-chart:hover{color:#B91C1C}
 .ucc-embedded-chart-body{padding:6px 0 2px}
@@ -868,6 +1180,37 @@ style.textContent=`
 .ucc-insights-bar-fill{display:block;height:100%;background:#2c5aa0;border-radius:3px}
 .ucc-insights-bar-value{font-variant-numeric:tabular-nums;font-weight:600}
 @media(max-width:1000px){.ucc-embedded-chart{grid-column:span 12!important}}
+
+/* --- #6: what a printed / PDF-exported tab looks like ---------------------
+   Everything except the criterion being exported is hidden, so the output is
+   the tab and nothing else -- no workspace nav, no other criteria, and no
+   edit controls, because exportTabPdf() forces View mode before it prints. */
+@media print{
+ .ucc-printing .ucc-platform-shell,
+ .ucc-printing .sticky-navigation,
+ .ucc-printing .hero-action-card,
+ .ucc-printing .ucc-platform-workspace:not([data-ucc-workspace-panel="analytics"]),
+ .ucc-printing .ucc-criterion-dashboard:not(.ucc-print-target),
+ .ucc-printing .ucc-tab-charts-actions,
+ .ucc-printing .ucc-tab-intro-edit,
+ .ucc-printing .ucc-qa-tools,
+ .ucc-printing .ucc-qa-hide,
+ .ucc-printing .ucc-remove-chart,
+ .ucc-printing .ucc-drag-grip,
+ .ucc-printing .ucc-resize-handle,
+ .ucc-printing .ucc-add-chart,
+ .ucc-printing .ucc-embedded-views,
+ .ucc-printing .loading-overlay{display:none!important}
+ .ucc-printing .ucc-criterion-dashboard.ucc-hidden{display:block!important}
+ .ucc-print-stamp{display:block;margin:0 0 14px;padding:0 0 10px;border-bottom:2px solid #172554}
+ .ucc-print-stamp strong{display:block;font-size:16px;color:#172554}
+ .ucc-print-stamp span{font-size:11px;color:#64748B}
+ /* A chart split across a page break is not evidence of anything. */
+ .ucc-embedded-chart,.ucc-management-panel,.ucc-tab-charts{break-inside:avoid;page-break-inside:avoid}
+ .ucc-embedded-chart{border:1px solid #D8E0EC}
+ .ucc-tab-charts-grid{gap:10px}
+}
+.ucc-print-stamp{display:none}
 `;
 document.head.appendChild(style);
 }
@@ -898,7 +1241,7 @@ const target=dashboard.querySelector(`[data-demo-qa="${CSS.escape(dashboard.data
 if(!target)return;
 const state=tabConfig(dashboard,tab);
 const hidden=(state&&state.hiddenQuestions)||[];
-const canEdit=!!(state&&state.canEdit);
+const canEdit=isEditing(dashboard,tab);
 const all=extendedQuestionRows(result,tab);
 const rows=all.filter(function(row,index){return hidden.indexOf(qaQuestionId(row,index))===-1;});
 target.innerHTML=rows.length?rows.map((row,index)=>{
@@ -1138,6 +1481,28 @@ const metric=metricById(dashboardState(dashboard).result,questionButton.dataset.
 openMetricRecords(config,dashboard,metric,questionButton.dataset.liveQaTitle||metric?.label||"Matching records");
 return;
 }
+const modeToggle=event.target.closest("[data-toggle-edit]");
+if(modeToggle){
+event.preventDefault();event.stopPropagation();
+const key=dashboard.dataset.demoDashboard;
+tabEditModes[key]=!tabEditModes[key];
+const tab=modeToggle.dataset.toggleEdit;
+renderTabCharts(dashboard,config,tab);
+renderTabActions(dashboard,tab);
+renderTabIntro(dashboard,config,tab);
+renderQa(dashboard,dashboardState(dashboard).result,tab);
+return;
+}
+const historyButton=event.target.closest("[data-tab-history]");
+if(historyButton){
+event.preventDefault();event.stopPropagation();
+openTabHistory(dashboard,historyButton.dataset.tabHistory);return;
+}
+const exportButton=event.target.closest("[data-export-pdf]");
+if(exportButton){
+event.preventDefault();event.stopPropagation();
+exportTabPdf(dashboard,config,exportButton.dataset.exportPdf);return;
+}
 const addChart=event.target.closest("[data-add-chart]");
 if(addChart){event.preventDefault();event.stopPropagation();openChartPicker(dashboard,config,addChart.dataset.addChart);return;}
 const removeChart=event.target.closest("[data-remove-chart]");
@@ -1197,21 +1562,6 @@ platform.dataset.uccAccessApplied=outcome.applied;
 if(outcome.hiddenCriteria.length)platform.dataset.uccHiddenCriteria=outcome.hiddenCriteria.join(",");
 if(outcome.hiddenWorkspaces.length)platform.dataset.uccHiddenWorkspaces=outcome.hiddenWorkspaces.join(",");
 bootstrapDashboards();
-});
-
-platform.addEventListener("change",function(event){
-const sizeSelect=event.target.closest("[data-chart-size]");
-if(!sizeSelect)return;
-const dashboard=sizeSelect.closest("[data-demo-dashboard]");
-const config=dashboard&&CONFIG[dashboard.dataset.demoDashboard];
-if(!config||!(window.frappe&&frappe.call))return;
-frappe.call({
-method:"ucc_intelligence.api.set_tab_chart_size",
-args:{criterion:dashboard.dataset.demoDashboard,tab:activeSection(dashboard),
-chart:sizeSelect.dataset.chartSize,size:sizeSelect.value},
-callback(response){applyTabConfig(dashboard,config,activeSection(dashboard),(response&&response.message)||{});},
-error(error){logEvent(dashboard,"ERROR","tab_chart_size_failed",apiErrorMessage(error));},
-});
 });
 
 platform.addEventListener("click",function(event){

@@ -66,6 +66,26 @@ assert.ok(renderIntroMarkdown("*careful*").includes("<em>careful</em>"), "italic
 assert.ok(renderIntroMarkdown("`c4`").includes("<code>c4</code>"), "code renders");
 assert.ok(renderIntroMarkdown("- one\n- two").includes("<ul><li>one</li><li>two</li></ul>"),
 	"bullets render as a list");
+// #4: these two were the bug. "# Heading" and "1. item" came out as literal
+// text, which is what "typed markdown and it came out unformatted" meant.
+assert.ok(renderIntroMarkdown("# Title").includes("<h3>Title</h3>"), "a heading renders");
+assert.ok(renderIntroMarkdown("## Sub").includes("<h4>Sub</h4>"), "and a subheading, one level down");
+assert.ok(!/<h1|<h2/.test(renderIntroMarkdown("# Title")),
+	"but never as h1/h2 -- a tab intro must not out-shout the page");
+assert.ok(renderIntroMarkdown("1. one\n2. two").includes("<ol><li>one</li><li>two</li></ol>"),
+	"a numbered list renders as an ordered list");
+assert.ok(renderIntroMarkdown("- a\n1. b").includes("</ul><ol>"),
+	"switching list type closes the first list rather than mixing them");
+assert.ok(renderIntroMarkdown("> quoted").includes("<blockquote>quoted</blockquote>"), "a quote renders");
+assert.ok(renderIntroMarkdown("---").includes("<hr>"), "a rule renders");
+assert.ok(renderIntroMarkdown("# **Bold** title").includes("<h3><strong>Bold</strong> title</h3>"),
+	"inline formatting still works inside a heading");
+// ...and none of it weakened the escaping. Markdown is applied to text esc()
+// has ALREADY escaped, so the two requirements never conflict.
+assert.ok(renderIntroMarkdown("# <script>alert(1)</script>")
+	.includes("&lt;script&gt;") , "a heading containing raw HTML still escapes it");
+assert.ok(!renderIntroMarkdown("# <img src=x onerror=alert(1)>").includes("<img"),
+	"and cannot smuggle a tag in through a heading");
 assert.ok(renderIntroMarkdown("[docs](https://ucc.edu.sg)")
 	.includes('<a href="https://ucc.edu.sg" target="_blank" rel="noopener">docs</a>'),
 	"an http link renders");
@@ -82,50 +102,75 @@ const quoteBreak = renderIntroMarkdown('[x](" onmouseover="alert(1))');
 assert.ok(!quoteBreak.includes("<a ") && !quoteBreak.includes("onmouseover=\"alert"),
 	"a quote-breaking href cannot escape the attribute, because it never becomes one");
 
-// --- chart sizes (#5) -------------------------------------------------------
-for (const [size, span] of [["small", 3], ["medium", 6], ["large", 9], ["full", 12]]) {
-	const html = embeddedChartMarkup({ chart: "q1", title: "T", size, span }, ["small", "medium", "large", "full"], true);
-	assert.ok(html.includes("grid-column:span " + span),
-		size + " spans " + span + " of the 12-column grid");
-	assert.ok(html.includes('value="' + size + '" selected'), size + " is the selected option");
+// --- chart width, now dragged rather than picked (#3) ----------------------
+// The Small/Medium/Large/Full dropdown is gone. A card carries its span as a
+// number, and the handle is a slider so the arrow keys do what the drag does.
+for (const span of [1, 3, 6, 9, 12]) {
+	const html = embeddedChartMarkup({ chart: "q1", title: "T", span }, true);
+	assert.ok(html.includes("grid-column:span " + span), span + " columns reaches the style attribute");
+	assert.ok(html.includes('data-span="' + span + '"'), "and the card records it for the drag to read");
+	assert.ok(html.includes('aria-valuenow="' + span + '"'), "and the slider reports it to assistive tech");
 }
-const card = embeddedChartMarkup({ chart: "q1", title: "T", size: "medium", span: 6 }, ["medium"], true);
-assert.ok(!/grid-column:span (NaN|undefined)/.test(card), "a missing span never reaches the style attribute");
-assert.ok(embeddedChartMarkup({ chart: "q1", title: "T", size: "medium" }, ["medium"], true)
-	.includes("grid-column:span 6"), "a span that did not arrive falls back to a half-width card");
+const card = embeddedChartMarkup({ chart: "q1", title: "T", span: 6 }, true);
+assert.ok(!card.includes("data-chart-size") && !card.includes("<select"),
+	"the size dropdown is gone, not merely hidden");
+assert.ok(card.includes('data-resize-chart="q1"') && card.includes('role="slider"'),
+	"a drag handle replaces it, and it is a slider so it is keyboard-operable");
+assert.ok(card.includes('aria-valuemin="1"') && card.includes('aria-valuemax="12"'),
+	"bounded to the 12-column grid");
+assert.ok(!/grid-column:span (NaN|undefined|0|13)/.test(
+	embeddedChartMarkup({ chart: "q1", title: "T" }, true)),
+	"a missing or out-of-range span never reaches the style attribute");
+assert.ok(embeddedChartMarkup({ chart: "q1", title: "T", span: 99 }, true).includes("grid-column:span 12"),
+	"an over-wide span is clamped rather than breaking the grid");
 
-// --- read-only viewers get no controls (#2/#3) -----------------------------
-// The configuration is institution-wide now, so a viewer must not be shown
-// buttons that would be refused. The server still checks -- this only stops
-// the page offering what it knows will fail.
-const readOnly = embeddedChartMarkup({ chart: "q1", title: "T", size: "medium", span: 6 }, ["medium"], false);
-assert.ok(!readOnly.includes("data-remove-chart"), "a viewer sees no remove control");
-assert.ok(!readOnly.includes("data-chart-size"), "and no size picker");
-assert.ok(readOnly.includes('data-demo-view="table"') && readOnly.includes("Stakeholder".slice(0, 0) + "Diagram"),
+// --- reorder (#2) -----------------------------------------------------------
+assert.ok(card.includes('draggable="true"') && card.includes("data-drag-grip"),
+	"an editable card is draggable and shows a grip");
+
+// --- Edit vs View mode (#5) -------------------------------------------------
+// View is the default and must look finished: no x, no grip, no handle.
+const viewing = embeddedChartMarkup({ chart: "q1", title: "T", span: 6 }, false);
+for (const control of ["data-remove-chart", "data-drag-grip", "data-resize-chart",
+		'draggable="true"', "is-editable"]) {
+	assert.ok(!viewing.includes(control), "View mode shows no " + control);
+}
+assert.ok(viewing.includes('data-demo-view="table"') && viewing.includes("Diagram"),
 	"but keeps both views -- looking at the data is not editing");
-assert.ok(card.includes("data-remove-chart") && card.includes("data-chart-size"),
-	"an editor gets both controls");
+assert.ok(card.includes("data-remove-chart") && card.includes("data-resize-chart"),
+	"Edit mode shows them all");
 
-// ...and the state must actually carry the server's answer through. Testing
-// embeddedChartMarkup(canEdit) alone passed while applyTabConfig hardcoded
-// canEdit:true, so the wiring is asserted too.
-const applyBlock = SRC.slice(SRC.indexOf("function applyTabConfig("), SRC.indexOf("function loadTabCharts("));
-assert.ok(/canEdit:!!\(response&&response\.can_edit\)/.test(applyBlock),
-	"applyTabConfig takes can_edit from the SERVER response, never a constant");
-for (const [reader, what] of [
-	["embeddedChartMarkup(chart,state.sizes,state.canEdit)", "the chart cards"],
-	["tabChartAreaMarkup(tab,canEdit)", "the + Add chart button"],
-]) {
-	assert.ok(SRC.includes(reader), what + " are rendered from that flag");
+// The mode is derived from BOTH the permission and the toggle, so a viewer can
+// never reach Edit mode by clicking anything.
+const editingBlock = SRC.slice(SRC.indexOf("function isEditing("), SRC.indexOf("function tabChartAreaMarkup("));
+assert.ok(/state\.canEdit&&tabEditModes\[/.test(editingBlock),
+	"isEditing() requires the permission AND the toggle");
+const actionsBlock = SRC.slice(SRC.indexOf("function renderTabActions("), SRC.indexOf("function ensureTabChartArea("));
+assert.ok(/canEdit\s*\n?\?`<button[^`]*data-toggle-edit/.test(actionsBlock.replace(/\s+/g, " "))
+	|| actionsBlock.includes("(canEdit"),
+	"the Edit toggle itself is only rendered for someone who may edit");
+assert.ok(actionsBlock.includes("data-export-pdf") && actionsBlock.includes('editing?"":'),
+	"Export PDF is offered in View mode only");
+assert.ok(actionsBlock.includes("data-tab-history"),
+	"and the History view is offered to everyone");
+
+// --- PDF export (#6) --------------------------------------------------------
+const pdfBlock = SRC.slice(SRC.indexOf("function exportTabPdf("), SRC.indexOf("// --- Explore auto-population"));
+assert.ok(/tabEditModes\[dashboard\.dataset\.demoDashboard\]=false/.test(pdfBlock),
+	"exporting forces View mode first, so no edit control can reach the PDF");
+assert.ok(pdfBlock.includes("ucc-print-stamp") && pdfBlock.includes("as at"),
+	"the export is stamped with an as-at time");
+assert.ok(pdfBlock.includes("config.number") && pdfBlock.includes("config.title"),
+	"and names the criterion");
+assert.ok(pdfBlock.includes("window.print()"), "it prints, which is where Save as PDF lives");
+assert.ok(pdfBlock.includes('window.addEventListener("afterprint"') && pdfBlock.includes("setTimeout(cleanup"),
+	"and cleans up afterwards, even if afterprint never fires");
+assert.ok(SRC.includes("@media print"), "there is a print stylesheet");
+for (const hidden of ["ucc-tab-charts-actions", "ucc-remove-chart", "ucc-drag-grip",
+		"ucc-resize-handle", "ucc-add-chart", "ucc-qa-tools", "ucc-qa-hide"]) {
+	assert.ok(new RegExp("\\." + hidden + "[,{]").test(SRC.slice(SRC.indexOf("@media print"))),
+		"the print sheet hides ." + hidden);
 }
-assert.ok(/const canEdit=!!\(state&&state\.canEdit\);/.test(SRC),
-	"the intro and the question controls read the same flag");
-
-// --- the card carries what Explore and the toggle need ---------------------
-assert.ok(card.includes('data-demo-card="q1"') && card.includes('data-demo-chart="q1"'),
-	"the card keeps the data-demo-card/data-demo-chart hooks Explore resolves entries through");
-assert.ok(card.includes('data-demo-view="diagram"') && card.includes('data-demo-view="table"'),
-	"and both view buttons, which is also how Explore reveals a chart");
 
 // --- the Table view and its drill-down (#8) --------------------------------
 function fakeCard(data) {

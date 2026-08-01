@@ -50,6 +50,8 @@ class State:
 	criteria = {}      # criterion -> visible?
 	tabs = {}          # "<criterion>::<tab>" -> the shared config record
 	may_write = True   # write permission on UCC Analytics Tab
+	audit = []         # UCC Analytics Tab Change records, newest last
+	audit_fails = False
 	rows = [{"status": "Open", "count": 3}]
 	executed = []
 
@@ -69,6 +71,23 @@ class FakeDoc:
 	def execute(self, page_size=None):
 		State.executed.append(self.name)
 		return {"rows": list(State.rows)}
+
+
+class FakeAudit:
+	"""One UCC Analytics Tab Change. insert() is the only way one exists, and
+	it ignores permissions on purpose -- see analytics/tab_audit.py."""
+
+	def __init__(self):
+		self.data = {}
+
+	def update(self, values):
+		self.data.update(values)
+
+	def insert(self, ignore_permissions=False):
+		if State.audit_fails:
+			raise RuntimeError("audit backend unavailable")
+		assert ignore_permissions, "an audit record the actor could refuse to write is not an audit record"
+		State.audit.append(dict(self.data))
 
 
 class FakeTab:
@@ -119,8 +138,19 @@ def fake_get_doc(doctype, name):
 
 
 def fake_new_doc(doctype):
+	if doctype == "UCC Analytics Tab Change":
+		return FakeAudit()
 	assert doctype == "UCC Analytics Tab"
 	return FakeTab()
+
+
+def fake_get_all(doctype, filters=None, fields=None, order_by=None,
+		limit_page_length=None, ignore_permissions=False):
+	assert doctype == "UCC Analytics Tab Change"
+	rows = [dict(entry) for entry in State.audit
+		if entry["criterion"] == (filters or {}).get("criterion")
+		and entry["tab"] == (filters or {}).get("tab")]
+	return list(reversed(rows))[: (limit_page_length or 50)]
 
 
 def install_fake_frappe():
@@ -150,7 +180,10 @@ def install_fake_frappe():
 		return name in State.charts
 
 	frappe.db = types.SimpleNamespace(exists=exists)
-	frappe.utils = types.SimpleNamespace(now=lambda: "2026-08-01 00:00:00")
+	frappe.get_all = fake_get_all
+	frappe.log_error = lambda **kwargs: None
+	frappe.get_traceback = lambda: ""
+	frappe.utils = types.SimpleNamespace(now=lambda: "2026-08-02 09:30:00")
 	frappe.logger = lambda *a, **k: types.SimpleNamespace(
 		info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
 	frappe.session = types.SimpleNamespace(user="tester@ucc")
@@ -178,6 +211,8 @@ def reset():
 	State.criteria = {key: True for key in access.CRITERION_KEYS}
 	State.tabs = {}
 	State.may_write = True
+	State.audit = []
+	State.audit_fails = False
 	State.executed = []
 
 
@@ -312,21 +347,33 @@ State.tabs[tab_charts._key("criterion_3", "overview")] = {"charts": json.dumps([
 legacy = tab_charts.get_tab("criterion_3", "overview")
 report([c["chart"] for c in legacy["charts"]] == ["q-open", "q-agents"],
 	"a tab stored in the original list-of-ids shape still loads its charts")
-report(all(c["size"] == tab_charts.DEFAULT_SIZE for c in legacy["charts"]),
-	"...at the default size, rather than being discarded for having none")
+report(all(c["span"] == tab_charts.DEFAULT_SPAN for c in legacy["charts"]),
+	"...at the default width, rather than being discarded for having none")
 
 # --- card size (#5) ----------------------------------------------------------
 reset()
 tab_charts.add("criterion_3", "overview", "q-open")
-report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["size"] == "medium",
-	"a new card starts at the default size")
-sized = tab_charts.set_size("criterion_3", "overview", "q-open", "full")
-report(sized["charts"][0]["size"] == "full" and sized["charts"][0]["span"] == 12,
-	"a resized card stores its size and reports the grid span the page needs")
-report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["size"] == "full",
-	"and the size persists")
-report(raises(ValidationError_, tab_charts.set_size, "criterion_3", "overview", "q-open", "enormous"),
-	"an invented size is rejected -- the page cannot write arbitrary CSS through this")
+report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["span"] == tab_charts.DEFAULT_SPAN,
+	"a new card starts at the default width")
+sized = tab_charts.set_size("criterion_3", "overview", "q-open", 12)
+report(sized["charts"][0]["span"] == 12, "a dragged card stores the column span it landed on")
+report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["span"] == 12, "and it persists")
+report(tab_charts.set_size("criterion_3", "overview", "q-open", "4")["charts"][0]["span"] == 4,
+	"a span arriving as a string from the browser is accepted")
+for bad in ("enormous", 0, 13, -3, None):
+	report(raises(ValidationError_, tab_charts.set_size, "criterion_3", "overview", "q-open", bad),
+		"a width off the 12-column grid is rejected (%r)" % (bad,))
+report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["span"] == 4,
+	"...and none of them changed the stored width")
+
+# The four old size NAMES are still readable, because tabs configured before
+# drag-resize hold them.
+reset()
+State.tabs[tab_charts._key("criterion_3", "overview")] = {
+	"charts": json.dumps([{"chart": "q-open", "size": "large"}, {"chart": "q-agents", "size": "small"}]),
+	"intro": "", "hidden_questions": "[]"}
+spans = [c["span"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]]
+report(spans == [9, 3], "a card stored under an old size name still knows its width (%s)" % spans)
 
 # --- the tab intro (#4) ------------------------------------------------------
 reset()
@@ -480,6 +527,97 @@ report(tab_charts.get_tab("criterion_3", "overview")["charts"] == [],
 	"a chart on the shared tab still disappears for someone who may not read its query")
 report(tab_charts.chart_data("q-open")["status"] == "permission_denied",
 	"and executing it is still refused, per user")
+
+# --- ORDER (#2) --------------------------------------------------------------
+# The stored list IS the display order, so a reorder rewrites it rather than
+# adding a second field that could disagree.
+reset()
+State.charts["q-third"] = "Third"
+State.readable.add("q-third")
+for chart in ("q-open", "q-agents", "q-third"):
+	tab_charts.add("criterion_3", "overview", chart)
+report([c["chart"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]]
+	== ["q-open", "q-agents", "q-third"], "charts come back in the order they were added")
+moved = tab_charts.set_order("criterion_3", "overview", ["q-third", "q-open", "q-agents"])
+report([c["chart"] for c in moved["charts"]] == ["q-third", "q-open", "q-agents"],
+	"a reorder rewrites the stored order")
+report([c["chart"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]]
+	== ["q-third", "q-open", "q-agents"], "and it persists")
+
+# A reorder that omits a card must not delete it -- a drag is not a delete.
+kept = tab_charts.set_order("criterion_3", "overview", ["q-agents"])
+report(sorted(c["chart"] for c in kept["charts"]) == ["q-agents", "q-open", "q-third"],
+	"a card left out of the order keeps its place instead of vanishing")
+report(kept["charts"][0]["chart"] == "q-agents", "and the ones that were named lead")
+report(tab_charts.set_order("criterion_3", "overview", ["q-open", "not-on-this-tab"]),
+	"an unknown id in the order is ignored rather than raising")
+report(raises(ValidationError_, tab_charts.set_order, "criterion_3", "overview", "not a list"),
+	"a malformed order is rejected")
+report([c["chart"] for c in tab_charts.set_order(
+	"criterion_3", "overview", json.dumps(["q-third", "q-open", "q-agents"]))["charts"]]
+	== ["q-third", "q-open", "q-agents"],
+	"an order arriving as a JSON string from the browser is accepted")
+
+# --- AUDIT TRAIL (#1) --------------------------------------------------------
+# These tabs feed EduTrust evidence, so every change records who and when.
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+tab_charts.set_size("criterion_3", "overview", "q-open", 9)
+tab_charts.set_intro("criterion_3", "overview", "Scope note.")
+tab_charts.set_question("criterion_3", "overview", "metric-7", False)
+tab_charts.add("criterion_3", "overview", "q-agents")
+tab_charts.set_order("criterion_3", "overview", ["q-agents", "q-open"])
+tab_charts.remove("criterion_3", "overview", "q-open")
+
+actions = [entry["action"] for entry in State.audit]
+report(actions == ["chart_added", "chart_resized", "intro_edited", "question_hidden",
+	"chart_added", "charts_reordered", "chart_removed"],
+	"every kind of change is recorded, in order (%s)" % actions)
+report(all(entry["changed_by"] == "tester@ucc" and entry["changed_at"] for entry in State.audit),
+	"each one records who and when")
+report(all(entry["criterion"] == "criterion_3" and entry["tab"] == "overview" for entry in State.audit),
+	"and which tab it was")
+resize = next(e for e in State.audit if e["action"] == "chart_resized")
+report(resize["before_value"] == "6" and resize["after_value"] == "9",
+	"a resize records the before and after width (%s -> %s)" % (resize["before_value"], resize["after_value"]))
+report("6 to 9" in resize["summary"], "and says so in words: %r" % resize["summary"])
+intro = next(e for e in State.audit if e["action"] == "intro_edited")
+report(intro["before_value"] == "" and intro["after_value"] == "Scope note.",
+	"an intro edit records the text before and after")
+report(intro["summary"] == "Added the tab introduction",
+	"and distinguishes adding from editing: %r" % intro["summary"])
+order = next(e for e in State.audit if e["action"] == "charts_reordered")
+report("q-open" in order["before_value"] and "q-agents" in order["after_value"],
+	"a reorder records both orders")
+
+# A change that changes nothing is not a change.
+before_count = len(State.audit)
+tab_charts.set_size("criterion_3", "overview", "q-agents", 6)
+tab_charts.set_intro("criterion_3", "overview", "Scope note.")
+tab_charts.remove("criterion_3", "overview", "never-was-here")
+report(len(State.audit) == before_count,
+	"a no-op write records nothing -- the trail is changes, not requests")
+
+# The audit trail holds configuration, never figures.
+report(not any("62" in str(entry) or "96.77" in str(entry) for entry in State.audit),
+	"no institutional data reaches the audit trail")
+
+# An audit write that fails must not cost the user their change.
+reset()
+State.audit_fails = True
+tab_charts.add("criterion_3", "overview", "q-open")
+report([c["chart"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]] == ["q-open"],
+	"the change still lands when the audit write fails")
+State.audit_fails = False
+
+# ...and reading the history back is validated like any other read.
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+report(len(tab_charts.history("criterion_3", "overview")["changes"]) == 1,
+	"the history reads back")
+State.criteria["criterion_5"] = False
+report(raises(PermissionError_, tab_charts.history, "criterion_5", "overview"),
+	"a criterion this user cannot see has no readable history either")
 
 print(("PASS" if all(checks) else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
 sys.exit(0 if all(checks) else 1)

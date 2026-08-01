@@ -55,6 +55,7 @@ import json
 import frappe
 
 from ucc_intelligence.analytics.admission_intelligence_embed import clean_text, rows_to_chart_series
+from ucc_intelligence.analytics import tab_audit
 from ucc_intelligence.permissions import access
 
 # Only a record type we can actually EXECUTE and permission-check is offered.
@@ -80,11 +81,15 @@ MAX_PER_TAB = 12
 MAX_INTRO_LENGTH = 4000
 MAX_QUESTION_IDS = 60
 
-# Card widths, as a fraction of the tab's chart grid (12 columns). A picker,
-# not drag-resize: four honest choices beat a pixel value nobody can reproduce
-# on the next screen size.
-SIZES = {"small": 3, "medium": 6, "large": 9, "full": 12}
-DEFAULT_SIZE = "medium"
+# Card width, in columns of the tab's 12-column grid. Stored as the SPAN, not
+# as a name: the size is now set by dragging a card's edge, which snaps to the
+# grid, so any of 1..12 is reachable and "medium" no longer describes it.
+#
+# The four old names are still read, because tabs configured before the drag
+# handle existed hold them. They are never written.
+GRID_COLUMNS = 12
+LEGACY_SIZE_SPANS = {"small": 3, "medium": 6, "large": 9, "full": 12}
+DEFAULT_SPAN = 6
 
 # Tab keys come from the page (criterion sub-sections such as "4.1.1", plus
 # "overview"). Constrained so a caller cannot write an arbitrary defaults key.
@@ -127,6 +132,17 @@ def _validated(criterion, tab):
 		frappe.throw(
 			frappe._("This criterion is not available to your account."), frappe.PermissionError)
 	return criterion, tab
+
+
+def _span(item):
+	"""This card's width in grid columns, from either shape it was ever stored
+	in: a `span` integer now, or one of the four old size names before that."""
+	span = item.get("span")
+	try:
+		span = int(span)
+	except (TypeError, ValueError):
+		span = LEGACY_SIZE_SPANS.get(item.get("size"), DEFAULT_SPAN)
+	return max(1, min(span, GRID_COLUMNS))
 
 
 def _blank():
@@ -174,13 +190,9 @@ def _stored(criterion, tab):
 
 	for item in (stored.get("charts") or [])[:MAX_PER_TAB]:
 		if isinstance(item, str) and item:
-			config["charts"].append({"chart": item, "size": DEFAULT_SIZE})
+			config["charts"].append({"chart": item, "span": DEFAULT_SPAN})
 		elif isinstance(item, dict) and item.get("chart"):
-			size = item.get("size")
-			config["charts"].append({
-				"chart": str(item["chart"]),
-				"size": size if size in SIZES else DEFAULT_SIZE,
-			})
+			config["charts"].append({"chart": str(item["chart"]), "span": _span(item)})
 
 	intro = stored.get("intro")
 	if isinstance(intro, str):
@@ -262,8 +274,7 @@ def get_tab(criterion, tab):
 		"criterion": criterion,
 		"tab": tab,
 		"charts": [
-			{"chart": item["chart"], "title": titles[item["chart"]],
-				"size": item["size"], "span": SIZES[item["size"]]}
+			{"chart": item["chart"], "title": titles[item["chart"]], "span": item["span"]}
 			for item in config["charts"] if item["chart"] in titles
 		],
 		"intro": config["intro"],
@@ -273,7 +284,7 @@ def get_tab(criterion, tab):
 		# every write endpoint checks again.
 		"can_edit": can_edit(),
 		"max": MAX_PER_TAB,
-		"sizes": sorted(SIZES, key=lambda name: SIZES[name]),
+		"columns": GRID_COLUMNS,
 	}
 
 
@@ -290,8 +301,10 @@ def add(criterion, tab, chart):
 		return get_tab(criterion, tab)
 	if len(config["charts"]) >= MAX_PER_TAB:
 		frappe.throw(frappe._("A tab holds at most {0} charts. Remove one first.").format(MAX_PER_TAB))
-	config["charts"].append({"chart": chart, "size": DEFAULT_SIZE})
+	config["charts"].append({"chart": chart, "span": DEFAULT_SPAN})
 	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "chart_added",
+		tab_audit.added(readable([chart]).get(chart), chart), after=chart)
 	return get_tab(criterion, tab)
 
 
@@ -303,26 +316,84 @@ def remove(criterion, tab, chart):
 	_require_edit()
 	chart = clean_text(chart)
 	config = _stored(criterion, tab)
+	if not any(item["chart"] == chart for item in config["charts"]):
+		return get_tab(criterion, tab)
 	config["charts"] = [item for item in config["charts"] if item["chart"] != chart]
 	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "chart_removed",
+		tab_audit.removed(readable([chart]).get(chart), chart), before=chart)
 	return get_tab(criterion, tab)
 
 
-def set_size(criterion, tab, chart, size):
-	"""Resize one card. No permission check on the chart: this changes a number
-	in your own layout and reveals nothing -- an unreadable chart still will
-	not render."""
+def set_size(criterion, tab, chart, span):
+	"""Resize one card to a whole number of grid columns.
+
+	The card is dragged, and the drag snaps to the grid before it gets here, so
+	this only has to refuse what is off the grid entirely. No permission check
+	on the chart itself: a width reveals nothing, and an unreadable chart still
+	does not render.
+	"""
 	criterion, tab = _validated(criterion, tab)
 	_require_edit()
 	chart = clean_text(chart)
-	size = clean_text(size)
-	if size not in SIZES:
-		frappe.throw(frappe._("Unknown chart size."), frappe.ValidationError)
+	try:
+		span = int(span)
+	except (TypeError, ValueError):
+		frappe.throw(frappe._("A chart width must be a whole number of columns."), frappe.ValidationError)
+	if span < 1 or span > GRID_COLUMNS:
+		frappe.throw(
+			frappe._("A chart must be between 1 and {0} columns wide.").format(GRID_COLUMNS),
+			frappe.ValidationError)
 	config = _stored(criterion, tab)
+	before = None
 	for item in config["charts"]:
 		if item["chart"] == chart:
-			item["size"] = size
+			before = item["span"]
+			item["span"] = span
+	if before is None or before == span:
+		return get_tab(criterion, tab)
 	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "chart_resized",
+		tab_audit.resized(readable([chart]).get(chart), chart, before, span),
+		before=before, after=span)
+	return get_tab(criterion, tab)
+
+
+def set_order(criterion, tab, order):
+	"""Reorder the cards on a tab. The stored list IS the display order, so
+	this rewrites it -- it does not add a second ordering field that could
+	disagree with the list.
+
+	Ids not currently on the tab are ignored, and anything the caller left out
+	keeps its place at the end. A dropped card would be a silent deletion
+	through a reorder endpoint, which is not what a drag means.
+	"""
+	criterion, tab = _validated(criterion, tab)
+	_require_edit()
+	if isinstance(order, str):
+		try:
+			order = json.loads(order)
+		except (TypeError, ValueError):
+			frappe.throw(frappe._("A chart order must be a list."), frappe.ValidationError)
+	if not isinstance(order, list):
+		frappe.throw(frappe._("A chart order must be a list."), frappe.ValidationError)
+
+	config = _stored(criterion, tab)
+	by_chart = {item["chart"]: item for item in config["charts"]}
+	before = [item["chart"] for item in config["charts"]]
+	reordered = []
+	for chart in order:
+		item = by_chart.pop(clean_text(chart), None)
+		if item:
+			reordered.append(item)
+	reordered.extend(item for item in config["charts"] if item["chart"] in by_chart)
+	after = [item["chart"] for item in reordered]
+	if after == before:
+		return get_tab(criterion, tab)
+	config["charts"] = reordered
+	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "charts_reordered",
+		tab_audit.reordered(len(after)), before=before, after=after)
 	return get_tab(criterion, tab)
 
 
@@ -335,8 +406,13 @@ def set_intro(criterion, tab, intro):
 	criterion, tab = _validated(criterion, tab)
 	_require_edit()
 	config = _stored(criterion, tab)
+	before = config["intro"]
 	config["intro"] = clean_text(intro)[:MAX_INTRO_LENGTH]
+	if before == config["intro"]:
+		return get_tab(criterion, tab)
 	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "intro_edited",
+		tab_audit.intro_edited(before, config["intro"]), before=before, after=config["intro"])
 	return get_tab(criterion, tab)
 
 
@@ -368,8 +444,13 @@ def set_question(criterion, tab, question, visible):
 		if len(hidden) >= MAX_QUESTION_IDS:
 			frappe.throw(frappe._("That is as many hidden questions as one tab can carry."))
 		hidden.append(question)
+	before = list(config["questions"]["hidden"])
+	if before == hidden:
+		return get_tab(criterion, tab)
 	config["questions"] = {"hidden": hidden}
 	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "question_shown" if visible else "question_hidden",
+		tab_audit.question_visibility(question, visible), before=before, after=hidden)
 	return get_tab(criterion, tab)
 
 
@@ -413,3 +494,14 @@ def chart_data(chart):
 		"columns": list(rows[0].keys()) if rows else [],
 		"rows": rows,
 	}
+
+
+def history(criterion, tab, limit=50):
+	"""The change history for one tab, for the History view.
+
+	Validated the same way every other read is, so the audit trail cannot be
+	used to enumerate criteria a user may not see.
+	"""
+	criterion, tab = _validated(criterion, tab)
+	return {"ok": True, "criterion": criterion, "tab": tab,
+		"changes": tab_audit.history(criterion, tab, limit)}

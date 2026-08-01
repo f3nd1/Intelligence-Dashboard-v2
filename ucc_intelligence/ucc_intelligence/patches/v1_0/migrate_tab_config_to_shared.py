@@ -31,7 +31,8 @@ import json
 import frappe
 
 from ucc_intelligence.analytics.tab_charts import (
-	CONFIG_DOCTYPE, DEFAULT_SIZE, LEGACY_DEFAULTS_PREFIX, MAX_PER_TAB, MAX_QUESTION_IDS, SIZES,
+	CONFIG_DOCTYPE, DEFAULT_SPAN, GRID_COLUMNS, LEGACY_DEFAULTS_PREFIX, LEGACY_SIZE_SPANS,
+	MAX_PER_TAB, MAX_QUESTION_IDS,
 )
 
 
@@ -50,10 +51,16 @@ def parse(raw):
 	charts = []
 	for item in stored.get("charts") or []:
 		if isinstance(item, str) and item:
-			charts.append({"chart": item, "size": DEFAULT_SIZE})
+			charts.append({"chart": item, "span": DEFAULT_SPAN})
 		elif isinstance(item, dict) and item.get("chart"):
-			size = item.get("size")
-			charts.append({"chart": str(item["chart"]), "size": size if size in SIZES else DEFAULT_SIZE})
+			# Written before drag-resize, so these carry a size NAME. Mapped
+			# here rather than left for the reader, so the migrated record is
+			# already in the shape everything now expects.
+			try:
+				span = int(item.get("span"))
+			except (TypeError, ValueError):
+				span = LEGACY_SIZE_SPANS.get(item.get("size"), DEFAULT_SPAN)
+			charts.append({"chart": str(item["chart"]), "span": max(1, min(span, GRID_COLUMNS))})
 
 	questions = stored.get("questions") or {}
 	hidden = questions.get("hidden") if isinstance(questions, dict) else None
