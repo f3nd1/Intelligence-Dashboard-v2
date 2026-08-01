@@ -66,6 +66,32 @@ shell_transformed = shell_source.replace(
 	1,
 )
 shell_transformed = shell_transformed.rstrip()[: -len("})();")] + "}"
+
+# --- THE OPERATIONS WORKSPACE (2026-08-03) ---------------------------------
+# The fourth workspace needs the shell's own switcher to open it, so this is a
+# real edit to the legacy shell body -- declared here as a mechanical swap so
+# every OTHER line of that body is still asserted verbatim.
+#
+# Loaded on first entry rather than at boot: it is two extra round trips most
+# sessions never need, and a criterion tab must not wait on the monitoring
+# engine to render.
+SHELL_DASHBOARD_CONTROL = (
+	'if (dashboardControl) {\n'
+	'dashboardControl.hidden = workspace !== "analytics" && workspace !== "explore";\n'
+	'}\n'
+)
+OPERATIONS_HOOK = (
+	'// Operations loads on first entry rather than at boot: two extra round trips\n'
+	'// most sessions never need, and a criterion tab should not wait on the\n'
+	'// monitoring engine to render.\n'
+	'if (workspace === "operations" && window.UCCOperations) {\n'
+	'window.UCCOperations.open(root);\n'
+	'}\n'
+)
+checks.append(report(shell_transformed.count(SHELL_DASHBOARD_CONTROL) == 1,
+	"the legacy shell's dashboard-control block is where the Operations hook attaches"))
+shell_transformed = shell_transformed.replace(
+	SHELL_DASHBOARD_CONTROL, SHELL_DASHBOARD_CONTROL + OPERATIONS_HOOK, 1)
 checks.append(report(shell_transformed in ported, "transformed platform-shell body is present in the ported page verbatim"))
 
 # --- engine: re-extract, re-transform, confirm present verbatim ---
@@ -400,13 +426,26 @@ if m:
 		'<span aria-hidden="true">&#9881;</span>'
 		'<span class="ucc-visually-hidden">UCC Intelligence Settings</span></button>'
 	)
+	# A SECOND documented addition to the legacy nav: an Operations tab, added
+	# 2026-08-03. Monitoring and Document Search were both complete engines
+	# with no way to see them outside a bench console, which is not a feature.
+	# It is a fourth WORKSPACE, not a fourth criterion -- it sits inside the
+	# nav with the other three because it is the same kind of thing, whereas
+	# the settings gear sits outside because it is not.
+	#
+	# Rebuilt from the legacy line here for the same reason the gear is: an
+	# *undocumented* edit to the shell must still fail this check.
+	OPERATIONS_TAB = (
+		'<button aria-pressed="false" data-ucc-workspace="operations" type="button">'
+		'Operations</button>'
+	)
 	checks.append(report(html_lines[3].endswith('>Ask UCC</button>'),
 		"the legacy nav's last tab is Ask UCC -- the gear must come after it, not among it"))
 	checks.append(report(dashboard_line.startswith("</nav>"),
 		"the legacy nav closes at the start of the next line -- where the gear is inserted"))
 	dashboard_line_with_gear = dashboard_line.replace("</nav>", "</nav>" + SETTINGS_GEAR, 1)
 	expected_shell_prefix = (
-		header_no_changelog + nav_line + html_lines[2] + html_lines[3]
+		header_no_changelog + nav_line + html_lines[2] + html_lines[3] + OPERATIONS_TAB
 		+ dashboard_line_with_gear + criteria_line + "</section>" + explore_panel
 	)
 	shell_match = re.search(r'const SHELL_HTML = (".*?");\n', ported, re.S)
@@ -414,7 +453,12 @@ if m:
 	if shell_match:
 		embedded = json.loads(shell_match.group(1))
 		checks.append(report(embedded.startswith(expected_shell_prefix),
-			"shell HTML matches HTML.html's header + all 3 workspace buttons + Analytics + Explore panels verbatim"))
+			"shell HTML matches HTML.html's header + the 3 legacy workspace buttons + the "
+			"declared Operations tab + Analytics + Explore panels verbatim"))
+		checks.append(report('data-ucc-workspace-panel="operations"' in embedded
+			and 'data-ops-panel="monitoring"' in embedded
+			and 'data-ops-panel="knowledge"' in embedded,
+			"the Operations workspace mounts both of its panels"))
 		checks.append(report(embedded.endswith("</main></div>"), "shell HTML closes <main> and the platform wrapper"))
 		# The Ask panel is deliberately OURS, not legacy line 57's aja-app markup,
 		# which embeds the browser OpenAI key modal CLAUDE.md forbids.

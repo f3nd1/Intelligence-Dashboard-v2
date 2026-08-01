@@ -52,7 +52,8 @@ function lift(name) {
 const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown",
 	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId",
 	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
-	"paintDonutSeries", "paintNumberSeries", "paintChartSeries", "paintTableOnly"];
+	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
+	"paintTableOnly"];
 // CHART_PAINTERS is a const, not a function, so lift() cannot reach it. It is
 // taken from the real source verbatim rather than retyped here, so a painter
 // added to the page cannot silently disagree with what this harness tests.
@@ -67,7 +68,7 @@ const exported = new Function("window", "document", "frappe", "CSS",
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
 	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
 	paintBarSeries, paintLineSeries, paintDonutSeries, paintNumberSeries,
-	paintChartSeries } = exported;
+	paintFunnelSeries, paintChartSeries } = exported;
 
 // --- the tab intro's Markdown subset (#4) ----------------------------------
 // Escaped FIRST, formatted after, so nothing a person types can become markup.
@@ -285,7 +286,7 @@ assert.deepStrictEqual(paletteOf(cardWith({})), ["#2563EB"],
 	"a card with no palette still has a colour rather than none");
 
 for (const [name, painter] of [["bar", paintBarSeries], ["line", paintLineSeries],
-		["donut", paintDonutSeries]]) {
+		["donut", paintDonutSeries], ["funnel", paintFunnelSeries]]) {
 	const target = node();
 	painter(CHART, target, SERIES);
 	assert.ok(target.innerHTML.includes('data-chart-segment="Consultative"'),

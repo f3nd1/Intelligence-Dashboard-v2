@@ -280,8 +280,24 @@ def search(term=None, limit=20):
 	# labelled rather than withheld.
 	built = chart_presentation.charts_by_query()
 	charts = []
+	# ONE ROW PER CHART (decided 2026-08-03, see the note in chart_presentation).
+	#
+	# Insights creates a backing `data_query` when a chart is built, so ONE
+	# chart can be reachable through TWO Query records. Both resolve to the
+	# same chart and render identically, so listing both offers a choice that
+	# is not a choice -- and Felix's constraint was that he must not be able to
+	# pick a "query version" and then wonder why it is a table. Collapsing to
+	# one row makes that impossible rather than merely unlikely.
+	# Authored queries first, so when two rows collapse the one that survives
+	# is the query someone named -- not the backing query Insights generated.
+	rows = sorted(rows, key=lambda row: not (built.get(row["name"]) or {}).get("authored"))
+	seen_charts = set()
 	for row in rows:
 		chart = built.get(row["name"]) or {}
+		if chart.get("chart"):
+			if chart["chart"] in seen_charts:
+				continue
+			seen_charts.add(chart["chart"])
 		charts.append({
 			"chart": row["name"],
 			# Same rule as the card: a picker showing 52 hashes is a picker

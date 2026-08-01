@@ -15,6 +15,7 @@ from ucc_intelligence.actions import service as _action_service
 from ucc_intelligence.knowledge import ingestion as _knowledge_ingestion
 from ucc_intelligence.knowledge import retrieval as _knowledge_retrieval
 from ucc_intelligence.monitoring import engine as _monitoring_engine
+from ucc_intelligence.operations import service as _operations
 from ucc_intelligence.monitoring import rule_registry as _monitoring_rules
 from ucc_intelligence.permissions.access import get_dashboard_access as _get_dashboard_access
 from ucc_intelligence.settings import status as _settings_status
@@ -289,6 +290,64 @@ def set_tab_chart_palette(criterion, tab, chart, palette=None):
 	override and the chart returns to the institution's default.
 	"""
 	return _tab_charts.set_palette(criterion, tab, chart, palette)
+
+
+# ---------------------------------------------------------------------------
+# OPERATIONS -- monitoring findings and document knowledge, made visible
+#
+# Both engines existed and neither was reachable outside a bench console. These
+# read and act; no detection or retrieval logic lives here. See
+# operations/service.py for who may see and do what, and why the two differ.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_monitoring_overview():
+	"""Rules, open findings by severity, and recent runs.
+
+	No only_for: every read inside goes through frappe.get_list, so a user sees
+	exactly the findings whose target records they may already read. Someone
+	with no access to Student Log sees no Student Log findings.
+	"""
+	return _operations.monitoring_overview()
+
+
+@frappe.whitelist()
+def get_monitoring_findings_list(status="Open", rule=None, severity=None, limit=100):
+	"""Findings, filtered. Permission-applied per row by get_list."""
+	return _operations.findings(status=status, rule=rule, severity=severity, limit=limit)
+
+
+@frappe.whitelist()
+def set_monitoring_finding_status(finding, status, note=None):
+	"""Resolve, suppress or reopen one finding.
+
+	Gated on write permission for UCC Monitoring Finding -- seeing a finding
+	and being the person who may declare it dealt with are different things.
+	Suppression requires a note, because a suppressed finding never returns on
+	a later run and an unexplained permanent silence is not auditable.
+	"""
+	return _operations.set_finding_status(finding, status, note)
+
+
+@frappe.whitelist()
+def get_knowledge_overview():
+	"""Registered document sources and their indexing state.
+
+	Returns an empty list when nothing is registered, which is the honest
+	answer -- the panel says so rather than implying an index exists.
+	"""
+	return _operations.knowledge_overview()
+
+
+@frappe.whitelist()
+def add_knowledge_source(title, source_type="Policy", text=None, attached_file=None):
+	"""Register a document and index it. Write permission on the DocType."""
+	return _operations.add_source(title, source_type, text=text, attached_file=attached_file)
+
+
+@frappe.whitelist()
+def reindex_knowledge(source=None):
+	"""Re-index one source, or every stale one."""
+	return _operations.reindex(source)
 
 
 @frappe.whitelist()

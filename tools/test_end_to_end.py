@@ -324,6 +324,37 @@ report("chosen to resemble" in presentation_source.lower()
 ADR_015 = ROOT / "docs" / "architecture" / "decisions" / "ADR-015-sophia-owns-chart-colour.md"
 report(ADR_015.exists(), "ADR-015 records the colour decision")
 
+# --- OPERATIONS: two finished engines, finally visible ----------------------
+OPERATIONS = APP / "operations" / "service.py"
+report(OPERATIONS.exists(), "operations/service.py surfaces monitoring and knowledge")
+operations_source = OPERATIONS.read_text(encoding="utf-8")
+findings_body = operations_source[operations_source.index("def findings("):
+	operations_source.index("def set_finding_status(")]
+report("frappe.get_list(" in findings_body and "frappe.get_all(" not in findings_body,
+	"findings are read through get_list -- a finding names a real record")
+report('frappe.has_permission(FINDING_DOCTYPE, "write")' in operations_source,
+	"acting on a finding needs write permission, not just the ability to see it")
+report('status == "Suppressed" and not note' in operations_source,
+	"suppressing without a reason is refused -- a suppressed finding never returns")
+report('frappe.has_permission(SOURCE_DOCTYPE, "write")' in operations_source,
+	"registering a knowledge source needs write permission on the DocType")
+# Comments explaining that nothing bypasses permissions are not a bypass --
+# the same distinction the cutover check already makes for legacy names.
+report("ignore_permissions" not in strip_comments_and_strings(operations_source, True),
+	"nothing in the operations layer bypasses permissions at all")
+for method in ("get_monitoring_overview", "get_monitoring_findings_list",
+		"set_monitoring_finding_status", "get_knowledge_overview",
+		"add_knowledge_source", "reindex_knowledge"):
+	report("def %s(" % method in api_source, "api.py exposes %s" % method)
+report("data-ucc-workspace=\\\"operations\\\"" in page_source,
+	"the Operations workspace is reachable from the shell nav")
+report("window.UCCOperations" in page_source,
+	"...and the shell's switcher opens it on first entry rather than at boot")
+
+# No external provider anywhere in this layer -- it must work with AI off.
+report("openai" not in operations_source.lower() and "requests." not in operations_source,
+	"the operations layer calls no external provider")
+
 # No hand-rolled SVG, ever again. The deleted renderers are asserted gone
 # elsewhere; this asserts their replacement did not quietly become one.
 page_source = (APP / "sophia" / "page" / "sophia_analytics" / "sophia_analytics.js").read_text(encoding="utf-8")

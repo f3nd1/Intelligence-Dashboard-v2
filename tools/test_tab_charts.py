@@ -753,10 +753,10 @@ for chart_type in V3_BUILDER_TYPES:
 	State.insights_charts[0]["chart_type"] = chart_type
 	result = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
 	(drawn if result["status"] == "available" else fell_back).append(chart_type)
-report(drawn == ["Number", "Bar", "Line", "Row", "Donut"],
-	"of the ten v3 chart types, these five are drawn: %s" % drawn)
-report(fell_back == ["Funnel", "Table", "Map", "Bubble", "Sankey"],
-	"...and these five show their rows instead: %s" % fell_back)
+report(drawn == ["Number", "Bar", "Line", "Row", "Donut", "Funnel"],
+	"of the ten v3 chart types, these six are drawn: %s" % drawn)
+report(fell_back == ["Table", "Map", "Bubble", "Sankey"],
+	"...and these four show their rows instead: %s" % fell_back)
 
 # "Table" is not a gap and must not apologise for itself.
 State.insights_charts[0]["chart_type"] = "Table"
@@ -895,6 +895,22 @@ report("q-agents" in listed and not listed["q-agents"]["has_chart"],
 	"a chart-less query is still OFFERED -- 45 of 52 would vanish otherwise")
 report("q-secret" not in listed,
 	"...but a query this user cannot read is still absent")
+
+# ONE row per chart, even when Insights reaches it through two queries.
+reset()
+State.doctypes.add("Insights Chart v3")
+State.charts["q-backing"] = ""            # the untitled data_query Insights made
+State.readable.add("q-backing")
+State.insights_charts = [{"name": "chart-1", "title": "Open by status",
+	"chart_type": "Bar", "query": "q-open", "data_query": "q-backing", "config": "{}"}]
+rows = tab_charts.search("")["charts"]
+report(len([row for row in rows if row.get("chart_type") == "Bar"]) == 1,
+	"a chart reachable through two queries is offered ONCE, not twice")
+report(any(row["chart"] == "q-open" for row in rows)
+	and not any(row["chart"] == "q-backing" for row in rows),
+	"...and it is the authored query that survives, not the generated backing one")
+report(all(row["title"] != row["chart"] for row in rows),
+	"no surviving row is labelled with its own id")
 
 print(("PASS" if all(checks) else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
 sys.exit(0 if all(checks) else 1)
