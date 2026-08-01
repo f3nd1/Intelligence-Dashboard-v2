@@ -463,7 +463,10 @@ return`<article class="ucc-embedded-chart${editing?" is-editable":""}" data-embe
 +`<button type="button" data-demo-view="diagram" class="is-active" aria-pressed="true">Diagram</button>`
 +`<button type="button" data-demo-view="table" aria-pressed="false">Table</button></div>`
 +(editing
-?`<span class="ucc-drag-grip" data-drag-grip title="Drag to reorder" aria-hidden="true">&#8942;&#8942;</span>`
+?`<span class="ucc-palette-control"><input type="color" data-recolour-chart="${esc(chart.chart)}" `
++`value="${esc((chart.palette&&chart.palette[0])||"#2563EB")}" `
++`title="Series colour for this chart" aria-label="Series colour for ${esc(chart.title)}"></span>`
++`<span class="ucc-drag-grip" data-drag-grip title="Drag to reorder" aria-hidden="true">&#8942;&#8942;</span>`
 +`<button type="button" class="ucc-remove-chart" data-remove-chart="${esc(chart.chart)}" `
 +`title="Remove this chart from the tab" aria-label="Remove ${esc(chart.title)} from this tab">&times;</button>`
 :"")
@@ -498,9 +501,10 @@ return;
 }
 const editing=isEditing(dashboard,tab);
 grid.innerHTML=state.charts.map(function(chart){return embeddedChartMarkup(chart,editing);}).join("");
-state.charts.forEach(function(chart){paintEmbeddedChart(grid,chart);});
+state.charts.forEach(function(chart){paintEmbeddedChart(grid,chart,dashboard,tab);});
 initChartDragging(dashboard,config,tab,grid);
 initChartResizing(dashboard,config,tab,grid);
+initChartRecolouring(dashboard,config,tab,grid);
 }
 
 function applyTabConfig(dashboard,config,tab,response){
@@ -540,19 +544,21 @@ renderTabCharts(dashboard,config,tab);
 
 // One embedded chart. A failure is SHOWN as a failure -- there is no second
 // data source to quietly fall back to.
-function paintEmbeddedChart(grid,chart){
+// dashboard/tab are threaded in so the server can resolve THIS tab's colour
+// override -- the same chart on two criteria may legitimately differ.
+function paintEmbeddedChart(grid,chart,dashboard,tab){
 const card=grid.querySelector(`[data-embedded-chart="${CSS.escape(chart.chart)}"]`);
 const body=card&&card.querySelector("[data-embedded-chart-body]");
 if(!body)return;
 if(!(window.frappe&&frappe.call)){body.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
 frappe.call({
 method:"ucc_intelligence.api.get_tab_chart_data",
-args:{chart:chart.chart},
+args:{chart:chart.chart,criterion:dashboard.dataset.demoDashboard,tab:tab},
 callback(response){
 const data=(response&&response.message)||{};
 card._chartData=data;
 if(data.status==="available"&&(data.series||[]).length){
-paintChartSeries(body,data.series);
+paintChartSeries(body,data.series,card);
 renderChartTable(card,null);
 loadDrilldown(card,chart.chart);
 return;
@@ -576,17 +582,127 @@ error(error){body.innerHTML=tabChartNotice(apiErrorMessage(error));},
 //
 // Each bar carries its own label so the Table view can be filtered to it --
 // see selectChartSegment().
-function paintChartSeries(node,series){
+// --- how a chart LOOKS ------------------------------------------------------
+// Sophia embeds Insights QUERIES, which carry data and no presentation. Chart
+// type, axis assignment, labels and legend live on a separate Insights Chart
+// v3 record; the server reads it (analytics/chart_presentation.py) and hands
+// down a `presentation` block with everything already resolved and validated
+// against the columns the query really returned.
+//
+// COLOUR IS SOPHIA'S. The live probe dumped all seven Chart records in full
+// and there is no colour field on any of them -- Insights applies a palette at
+// render time from somewhere it does not save. So the palette comes from
+// UCC Intelligence Settings, overridable per chart, and is documented as
+// CHOSEN TO RESEMBLE Insights rather than read from it. See ADR-015.
+//
+// NO HAND-ROLLED SVG. `chartForLive` and `registerChartPlugin` were deleted
+// earlier in this migration and test_end_to_end.py asserts they stay gone.
+// Every shape below is CSS on real DOM nodes -- which is also what keeps
+// drill-down working, because a bar stays a <button> we own and can attach a
+// click to. An iframe of Insights' own renderer would have taken that away.
+function paletteOf(card){
+const palette=((card&&card._chartData&&card._chartData.presentation)||{}).palette;
+return (palette&&palette.length)?palette:["#2563EB"];
+}
+
+function seriesColour(card,index){
+const palette=paletteOf(card);
+return palette[index%palette.length];
+}
+
+function segmentButton(card,row,index,inner,extraClass){
+return'<button type="button" class="'+extraClass+'" data-chart-segment="'+esc(row.label)+'" '
++'title="Show the rows behind '+esc(row.label)+'">'+inner+"</button>";
+}
+
+function paintBarSeries(card,node,series){
 const max=Math.max.apply(null,series.map(row=>Number(row.value)||0).concat([1]));
-node.innerHTML='<div class="ucc-insights-series">'+series.map(row=>{
+node.innerHTML='<div class="ucc-insights-series">'+series.map((row,index)=>{
 const value=Number(row.value)||0;
 const width=Math.max(1,Math.round((value/max)*100));
-return'<button type="button" class="ucc-insights-bar" data-chart-segment="'+esc(row.label)+'" '
-+'title="Show the rows behind '+esc(row.label)+'">'
-+'<span class="ucc-insights-bar-label">'+esc(row.label)+"</span>"
-+'<span class="ucc-insights-bar-track"><span class="ucc-insights-bar-fill" style="width:'+width+'%"></span></span>'
-+'<span class="ucc-insights-bar-value">'+esc(value.toLocaleString())+"</span></button>";
+return segmentButton(card,row,index,
+'<span class="ucc-insights-bar-label">'+esc(row.label)+"</span>"
++'<span class="ucc-insights-bar-track"><span class="ucc-insights-bar-fill" style="width:'+width+"%;background:"+esc(seriesColour(card,index))+'"></span></span>'
++'<span class="ucc-insights-bar-value">'+esc(value.toLocaleString())+"</span>",
+"ucc-insights-bar");
 }).join("")+"</div>";
+}
+
+// A line is the same bars laid out along the x axis -- one column per point,
+// each a button, with the fill height carrying the value. Not a polyline,
+// because a polyline is not clickable per point and drill-down is the
+// requirement that outranks the flourish.
+function paintLineSeries(card,node,series){
+const max=Math.max.apply(null,series.map(row=>Number(row.value)||0).concat([1]));
+const colour=seriesColour(card,0);
+node.innerHTML='<div class="ucc-insights-plot">'+series.map((row,index)=>{
+const value=Number(row.value)||0;
+const height=Math.max(2,Math.round((value/max)*100));
+return segmentButton(card,row,index,
+'<span class="ucc-insights-plot-value">'+esc(value.toLocaleString())+"</span>"
++'<span class="ucc-insights-plot-fill" style="height:'+height+"%;background:"+esc(colour)+'"></span>'
++'<span class="ucc-insights-plot-label">'+esc(row.label)+"</span>",
+"ucc-insights-point");
+}).join("")+"</div>";
+}
+
+// One conic-gradient, and a legend of buttons beside it. The gradient is the
+// browser drawing a pie; the clickable part is the legend, so every segment is
+// still reachable by keyboard as well as mouse.
+function paintDonutSeries(card,node,series){
+const total=series.reduce((sum,row)=>sum+(Number(row.value)||0),0)||1;
+let cursor=0;
+const stops=series.map((row,index)=>{
+const share=((Number(row.value)||0)/total)*100;
+const start=cursor;cursor+=share;
+return esc(seriesColour(card,index))+" "+start.toFixed(2)+"% "+cursor.toFixed(2)+"%";
+}).join(",");
+node.innerHTML='<div class="ucc-insights-donut-wrap">'
++'<div class="ucc-insights-donut" style="background:conic-gradient('+stops+')" aria-hidden="true"></div>'
++'<div class="ucc-insights-donut-legend">'+series.map((row,index)=>{
+const value=Number(row.value)||0;
+return segmentButton(card,row,index,
+'<span class="ucc-insights-swatch" style="background:'+esc(seriesColour(card,index))+'"></span>'
++'<span class="ucc-insights-legend-label">'+esc(row.label)+"</span>"
++'<span class="ucc-insights-legend-value">'+esc(value.toLocaleString())+" ("
++Math.round((value/total)*100)+"%)</span>","ucc-insights-legend-item");
+}).join("")+"</div></div>";
+}
+
+// A single figure. Insights' "Number" type is one measure with no dimension,
+// so there is nothing to drill into and no segment button is offered.
+function paintNumberSeries(card,node,series){
+const value=series.length?(Number(series[0].value)||0):0;
+node.innerHTML='<div class="ucc-insights-number"><strong>'+esc(value.toLocaleString())+"</strong>"
++'<span>'+esc(series.length?series[0].label:"")+"</span></div>";
+}
+
+const CHART_PAINTERS={bar:paintBarSeries,line:paintLineSeries,donut:paintDonutSeries,
+number:paintNumberSeries};
+
+function paintChartSeries(node,series,card){
+const presentation=((card&&card._chartData)||{}).presentation||{};
+// Unsupported or unresolvable -> the table, LABELLED. chart_type is a free
+// text field in Insights, so an unknown value is expected, not exceptional.
+if(presentation.status==="table_only"){
+paintTableOnly(card,node,presentation);
+return;
+}
+const painter=CHART_PAINTERS[presentation.render_as]||paintBarSeries;
+painter(card,node,series);
+if(presentation.axis_label){
+node.insertAdjacentHTML("beforeend",
+'<p class="ucc-insights-axis-label">'+esc(presentation.axis_label)+"</p>");
+}
+}
+
+// Never a blank card and never a broken one: the rows are real, and the notice
+// says exactly why this is a table rather than the chart Insights would show.
+function paintTableOnly(card,node,presentation){
+node.innerHTML='<div class="ucc-insights-table-only">'
++'<p class="ucc-insights-table-note">'+esc(presentation.reason||"Shown as a table.")
++(presentation.chart_type?" ":"")+"</p></div>";
+setChartView(card,"table");
 }
 
 // --- Table view and drill-down ---------------------------------------------
@@ -997,6 +1113,29 @@ commitSpan(dashboard,config,tab,card.dataset.embeddedChart,span);
 });
 }
 
+
+// #2 (colour): a per-chart override, committed on change so dragging the OS
+// colour picker is one save. Colour is Sophia's -- Insights stores none. The
+// override is scoped to THIS tab; the same chart elsewhere keeps its own.
+function initChartRecolouring(dashboard,config,tab,grid){
+if(grid.dataset.colourReady==="1")return;
+grid.dataset.colourReady="1";
+grid.addEventListener("change",function(event){
+const input=event.target.closest("[data-recolour-chart]");
+if(!input||!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_chart_palette",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,
+chart:input.dataset.recolourChart,palette:input.value},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
+error(error){
+logEvent(dashboard,"ERROR","tab_chart_palette_failed",apiErrorMessage(error));
+renderTabCharts(dashboard,config,tab);
+},
+});
+});
+}
+
 // --- #1: the change history, somewhere readable -----------------------------
 // The records are in Desk as UCC Analytics Tab Change, but "open the list view
 // and filter it" is not an answer for the person who owns the tab. This is the
@@ -1106,7 +1245,7 @@ openModal("Add a chart to this tab",
 '<div class="ucc-chart-picker">'
 +'<input type="search" class="ucc-chart-picker-search" data-chart-picker-search '
 +'placeholder="Search Frappe Insights charts…" autocomplete="off" aria-label="Search Insights charts">'
-+'<p class="ucc-chart-picker-note">Only charts you can already open in Frappe Insights are listed.</p>'
++'<p class="ucc-chart-picker-note">Only charts you can already open in Frappe Insights are listed. Ones marked <em>Table only</em> have no Insights chart built yet and will show their rows as a table.</p>'
 +'<div class="ucc-chart-picker-results" data-chart-picker-results>'+tabChartNotice("Loading…")+"</div></div>");
 const modal=ensureModal();
 const input=modal.querySelector("[data-chart-picker-search]");
@@ -1123,9 +1262,17 @@ const data=(response&&response.message)||{};
 const charts=data.charts||[];
 if(!charts.length){
 results.innerHTML=tabChartNotice(data.message||"No Insights chart matched that search.");return;}
+// BOTH kinds are listed, each marked. The probe found 52 queries and only
+// 7 charts -- offering charts only would have hidden 45 things that work,
+// since a chart-less query still shows its real rows as a table, exports,
+// and drills down to records. Marked so nothing is a surprise after adding.
 results.innerHTML=charts.map(chart=>
 `<button type="button" class="ucc-chart-picker-result" data-pick-chart="${esc(chart.chart)}">`
-+`${esc(chart.title)}</button>`).join("");
++`${esc(chart.title)}`
++(chart.has_chart
+?`<span class="ucc-chart-picker-type">${esc(chart.chart_type||"chart")}</span>`
+:`<span class="ucc-chart-picker-type is-table" title="No Insights chart has been built for this query yet, so it shows as a table">Table only</span>`)
++`</button>`).join("");
 },
 error(error){results.innerHTML=tabChartNotice(apiErrorMessage(error));},
 });
@@ -1218,6 +1365,45 @@ style.textContent=`
 .ucc-drilldown-paging button{border:1px solid #D8E0EC;background:#fff;border-radius:6px;
  min-height:28px;padding:0 10px;font-size:12px;cursor:pointer;color:#334155}
 .ucc-drilldown-paging button:hover{background:#F1F5F9}
+/* --- chart shapes driven by the Insights Chart record ---------------------
+   Every one of these is CSS on real DOM nodes. No SVG is generated anywhere:
+   the deleted hand-rolled renderers are not coming back, and a segment that
+   stays a <button> is what keeps drill-down clickable and keyboard-reachable. */
+.ucc-insights-plot{display:flex;align-items:flex-end;gap:6px;min-height:180px;padding:4px 0}
+.ucc-insights-point{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+ gap:4px;border:0;background:transparent;cursor:pointer;padding:0;min-width:0}
+.ucc-insights-point:hover .ucc-insights-plot-fill{filter:brightness(1.15)}
+.ucc-insights-point:focus-visible{outline:2px solid #2563EB;outline-offset:2px;border-radius:4px}
+.ucc-insights-plot-fill{width:100%;max-width:34px;border-radius:4px 4px 0 0;min-height:2px}
+.ucc-insights-plot-value{font-size:11px;color:#334155;font-variant-numeric:tabular-nums}
+.ucc-insights-plot-label{font-size:10px;color:#64748B;max-width:100%;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.ucc-insights-donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.ucc-insights-donut{width:132px;height:132px;border-radius:50%;flex:none;
+ -webkit-mask:radial-gradient(circle,transparent 54%,#000 55%);
+ mask:radial-gradient(circle,transparent 54%,#000 55%)}
+.ucc-insights-donut-legend{display:flex;flex-direction:column;gap:2px;min-width:180px;flex:1}
+.ucc-insights-legend-item{display:flex;align-items:center;gap:8px;border:0;background:transparent;
+ cursor:pointer;padding:3px 4px;border-radius:6px;text-align:left;font-size:12px;color:#334155}
+.ucc-insights-legend-item:hover{background:#F1F5F9}
+.ucc-insights-legend-item:focus-visible{outline:2px solid #2563EB;outline-offset:1px}
+.ucc-insights-swatch{width:10px;height:10px;border-radius:3px;flex:none}
+.ucc-insights-legend-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ucc-insights-legend-value{color:#64748B;font-variant-numeric:tabular-nums}
+.ucc-insights-number{display:flex;flex-direction:column;gap:2px;padding:18px 4px}
+.ucc-insights-number strong{font-size:34px;color:#172554;font-variant-numeric:tabular-nums;line-height:1}
+.ucc-insights-number span{font-size:12px;color:#64748B}
+.ucc-insights-axis-label{margin:8px 0 0;font-size:11px;color:#64748B;text-align:center}
+/* The labelled fallback. Never blank, never a broken chart -- it says why. */
+.ucc-insights-table-only{padding:10px 0}
+.ucc-insights-table-note{margin:0;font-size:12px;color:#64748B}
+.ucc-chart-picker-type{display:inline-block;margin-left:8px;font-size:10px;font-weight:600;
+ padding:1px 6px;border-radius:999px;background:#EFF6FF;color:#1D4ED8;text-transform:uppercase;
+ letter-spacing:.03em}
+.ucc-chart-picker-type.is-table{background:#F1F5F9;color:#64748B}
+.ucc-palette-control{display:flex;align-items:center;gap:6px;margin-left:auto}
+.ucc-palette-control input{width:34px;height:26px;padding:0;border:1px solid #D8E0EC;border-radius:6px;
+ background:#fff;cursor:pointer}
 /* #4: the intro renders Markdown, so it needs the elements Markdown makes. */
 .ucc-tab-intro-text h3{margin:10px 0 6px;font-size:15px;font-weight:600;color:#172554}
 .ucc-tab-intro-text h4,.ucc-tab-intro-text h5,.ucc-tab-intro-text h6{margin:8px 0 4px;font-size:13px;font-weight:600;color:#334155}

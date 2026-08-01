@@ -267,7 +267,7 @@ def remove_tab_chart(criterion, tab, chart):
 
 
 @frappe.whitelist()
-def get_tab_chart_data(chart):
+def get_tab_chart_data(chart, criterion=None, tab=None):
 	"""Execute one embedded chart.
 
 	The id is checked against what this user may read at THIS moment, not
@@ -276,7 +276,19 @@ def get_tab_chart_data(chart):
 	effect on the next refresh. The public-dashboard mechanism is never used --
 	it applies no permissions at all.
 	"""
-	return _tab_charts.chart_data(chart)
+	return _tab_charts.chart_data(chart, criterion=criterion, tab=tab)
+
+
+@frappe.whitelist()
+def set_tab_chart_palette(criterion, tab, chart, palette=None):
+	"""Override one chart's series colours on one tab.
+
+	Colour is Sophia's, not Insights': the live probe on 2026-08-02 dumped all
+	seven Insights Chart v3 records in full and there is no colour field on any
+	of them. See analytics/chart_presentation.py and ADR-015. Blank clears the
+	override and the chart returns to the institution's default.
+	"""
+	return _tab_charts.set_palette(criterion, tab, chart, palette)
 
 
 @frappe.whitelist()

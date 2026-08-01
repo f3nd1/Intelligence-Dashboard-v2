@@ -39,6 +39,7 @@ ACTIONS = (
 	"chart_added",
 	"chart_removed",
 	"chart_resized",
+	"chart_recoloured",
 	"charts_reordered",
 	"intro_edited",
 	"question_hidden",

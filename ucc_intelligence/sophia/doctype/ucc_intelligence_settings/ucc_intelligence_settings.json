@@ -1,90 +1,101 @@
 {
-	"doctype": "DocType",
-	"name": "UCC Intelligence Settings",
-	"module": "Sophia",
-	"custom": 0,
-	"istable": 0,
-	"issingle": 1,
-	"track_changes": 1,
-	"engine": "InnoDB",
-	"fields": [
-		{
-			"fieldname": "ai_settings_section",
-			"fieldtype": "Section Break",
-			"label": "AI Settings"
-		},
-		{
-			"fieldname": "enable_ai",
-			"fieldtype": "Check",
-			"label": "Enable AI",
-			"description": "When on, Ask UCC layers an AI interpretation on top of the retrieved facts. Facts are always returned either way."
-		},
-		{
-			"fieldname": "ai_provider",
-			"fieldtype": "Select",
-			"label": "AI Provider",
-			"description": "Provider identifier only -- NEVER a key. The API key is read exclusively from site_config.json (ucc_intelligence_ai_api_key) and has no field here by design. OpenAI is the only option because it is the only one implemented; which providers are institutionally approved is still open (CLAUDE.md \u00a719).",
-			"options": "\nOpenAI"
-		},
-		{
-			"fieldname": "ai_model",
-			"fieldtype": "Select",
-			"label": "AI Model",
-			"description": "Use \u201cFetch Available Models\u201d to populate this from the provider\u2019s own model list. Not free text -- a free-text field is where a pasted secret ends up."
-		},
-		{
-			"fieldname": "ai_settings_column_break",
-			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "max_output_tokens",
-			"fieldtype": "Int",
-			"label": "Max Output Tokens"
-		},
-		{
-			"fieldname": "default_temperature",
-			"fieldtype": "Float",
-			"label": "Default Temperature",
-			"default": "0.2",
-			"description": "CLAUDE.md \u00a77.1: \"normally low for institutional answers.\" Clamped to 0-2 on save."
-		},
-		{
-			"fieldname": "ai_request_timeout_seconds",
-			"fieldtype": "Int",
-			"label": "AI Request Timeout (seconds)"
-		},
-		{
-			"fieldname": "feature_toggles_section",
-			"fieldtype": "Section Break",
-			"label": "Feature Toggles"
-		},
-		{
-			"fieldname": "enable_persistent_conversations",
-			"fieldtype": "Check",
-			"label": "Enable Persistent Conversations",
-			"default": "1",
-			"description": "REAL, not a placeholder -- when off, Ask UCC answers questions normally but stores no UCC AI Conversation or UCC AI Message rows. UCC AI Usage Log is always written regardless (audit trail, not conversation memory). Conversations are retained 30 days."
-		},
-		{
-			"fieldname": "enable_document_knowledge",
-			"fieldtype": "Check",
-			"label": "Enable Document Knowledge",
-			"description": "Placeholder -- Phase 9 (institutional knowledge / document search) is not built yet."
-		},
-		{
-			"fieldname": "enable_monitoring",
-			"fieldtype": "Check",
-			"label": "Enable Monitoring",
-			"description": "Placeholder -- Phase 11 (monitoring and housekeeping) is not built yet."
-		}
-	],
-	"permissions": [
-		{
-			"role": "System Manager",
-			"read": 1,
-			"write": 1,
-			"create": 1,
-			"delete": 0
-		}
-	]
+ "doctype": "DocType",
+ "name": "UCC Intelligence Settings",
+ "module": "Sophia",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 1,
+ "track_changes": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "ai_settings_section",
+   "fieldtype": "Section Break",
+   "label": "AI Settings"
+  },
+  {
+   "fieldname": "enable_ai",
+   "fieldtype": "Check",
+   "label": "Enable AI",
+   "description": "When on, Ask UCC layers an AI interpretation on top of the retrieved facts. Facts are always returned either way."
+  },
+  {
+   "fieldname": "ai_provider",
+   "fieldtype": "Select",
+   "label": "AI Provider",
+   "description": "Provider identifier only -- NEVER a key. The API key is read exclusively from site_config.json (ucc_intelligence_ai_api_key) and has no field here by design. OpenAI is the only option because it is the only one implemented; which providers are institutionally approved is still open (CLAUDE.md \u00a719).",
+   "options": "\nOpenAI"
+  },
+  {
+   "fieldname": "ai_model",
+   "fieldtype": "Select",
+   "label": "AI Model",
+   "description": "Use \u201cFetch Available Models\u201d to populate this from the provider\u2019s own model list. Not free text -- a free-text field is where a pasted secret ends up."
+  },
+  {
+   "fieldname": "ai_settings_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "max_output_tokens",
+   "fieldtype": "Int",
+   "label": "Max Output Tokens"
+  },
+  {
+   "fieldname": "default_temperature",
+   "fieldtype": "Float",
+   "label": "Default Temperature",
+   "default": "0.2",
+   "description": "CLAUDE.md \u00a77.1: \"normally low for institutional answers.\" Clamped to 0-2 on save."
+  },
+  {
+   "fieldname": "ai_request_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "AI Request Timeout (seconds)"
+  },
+  {
+   "fieldname": "feature_toggles_section",
+   "fieldtype": "Section Break",
+   "label": "Feature Toggles"
+  },
+  {
+   "fieldname": "enable_persistent_conversations",
+   "fieldtype": "Check",
+   "label": "Enable Persistent Conversations",
+   "default": "1",
+   "description": "REAL, not a placeholder -- when off, Ask UCC answers questions normally but stores no UCC AI Conversation or UCC AI Message rows. UCC AI Usage Log is always written regardless (audit trail, not conversation memory). Conversations are retained 30 days."
+  },
+  {
+   "fieldname": "enable_document_knowledge",
+   "fieldtype": "Check",
+   "label": "Enable Document Knowledge",
+   "description": "Placeholder -- Phase 9 (institutional knowledge / document search) is not built yet."
+  },
+  {
+   "fieldname": "enable_monitoring",
+   "fieldtype": "Check",
+   "label": "Enable Monitoring",
+   "description": "Placeholder -- Phase 11 (monitoring and housekeeping) is not built yet."
+  },
+  {
+   "fieldname": "appearance_section",
+   "fieldtype": "Section Break",
+   "label": "Analytics Appearance"
+  },
+  {
+   "fieldname": "chart_palette",
+   "fieldtype": "Small Text",
+   "label": "Chart Colour Palette",
+   "description": "Series colours for embedded charts, one hex value per line (e.g. #2563EB). Leave blank for the shipped default. Insights does not store colours on its chart records, so Sophia owns this -- the default was chosen to resemble Insights and is not read from it. A single tab chart can override this."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0
+  }
+ ]
 }
