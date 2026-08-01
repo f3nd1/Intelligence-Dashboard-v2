@@ -25,8 +25,26 @@ class UCCAnalyticsTabChange(Document):
 	on_update refuses an edit outright rather than trusting the missing
 	permission, because permissions can be granted in Desk by someone who has
 	not read this docstring.
+
+	WHY THE INSERT FLAG (fixed 2026-08-01)
+	`on_update` fires after an INSERT as well as after an update, so the guard
+	fired against the very insert that creates the record. The row survived --
+	tab_audit.record() catches everything -- but `frappe.throw` had already put
+	"Audit records cannot be edited." into the message log, and the message log
+	reaches the browser whether or not the exception was caught. So a
+	successful resize reported a failure that had not happened.
+
+	The discriminator is a flag set in `before_insert`, which runs on inserts
+	and only on inserts. Flags live on the document instance and are never
+	persisted, so a document loaded later for a genuine edit cannot carry one.
+	The guard itself is unchanged in strength: an edit is still refused, and
+	an insert was never an edit.
 	"""
 
+	def before_insert(self):
+		self.flags.ucc_inserting = True
+
 	def on_update(self):
-		if not self.is_new():
-			frappe.throw(frappe._("Audit records cannot be edited."), frappe.PermissionError)
+		if self.flags.ucc_inserting:
+			return
+		frappe.throw(frappe._("Audit records cannot be edited."), frappe.PermissionError)
