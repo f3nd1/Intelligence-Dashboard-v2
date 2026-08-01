@@ -112,14 +112,34 @@ SETTINGS_DOCTYPE = "UCC Intelligence Settings"
 #
 # THE TEN TYPES THE v3 BUILDER OFFERS, read off the UI on 2026-08-02:
 #     Number, Bar, Line, Row, Donut, Funnel, Table, Map, Bubble, Sankey
-# Five are drawn (Number, Bar, Line, Row, Donut), Table is the table by
-# definition, and four fall back: Funnel, Map, Bubble, Sankey.
+# Six are drawn (Number, Bar, Line, Row, Donut, Funnel), Table is the table by
+# definition, and three fall back: Map, Bubble, Sankey.
+#
+# FOUR OF THE FIVE UNDRAWN TYPES WERE ASSESSED ON 2026-08-03. Only Funnel was
+# built. The other three are NOT gaps to close later -- they are refusals, and
+# the reason is the same for each: Sophia's series contract is one label and
+# one value per row, and none of those three can be drawn honestly from that.
+#
+#   Funnel  -> BUILT. Ordered stages, each a proportion of the largest. That is
+#              exactly a label/value series, so it draws truthfully.
+#   Map     -> REFUSED. Needs geographic boundaries this app does not have and
+#              cannot fabricate. A "map" that is really a list of place names
+#              would misrepresent the data more than a table does.
+#   Bubble  -> REFUSED. Needs x, y and size per point -- three numbers where
+#              the contract carries one. Anything drawn would be inventing two.
+#   Sankey  -> REFUSED. Needs source/target flow PAIRS. A label/value series
+#              has no edges, so there is no flow to draw.
+#
+# A bad renderer is worse than an honest fallback: a table is a real view of
+# real rows, whereas a wrong diagram is read as fact. All three keep saying
+# plainly that their rows are shown instead.
 SUPPORTED_TYPES = {
 	"bar": "bar",
 	"row": "bar",
 	"line": "line",
 	"donut": "donut",
 	"number": "number",
+	"funnel": "funnel",
 	# Not in v3's list. Kept as free aliases so a rename or a v2-era record
 	# lands on the right renderer instead of the fallback -- but flagged as
 	# UNOBSERVED so nobody reads them as evidence of what v3 offers.
@@ -357,7 +377,17 @@ def presentation_for(query, columns=None, palette=None):
 		"value_columns": value_columns,
 		"axis_label": _text(config.get("axis_label")),
 		"legend_position": legend if legend in LEGEND_POSITIONS else "",
-		"stacked": bool(config.get("stack")),
+		# `stack` IS NO LONGER READ (decided 2026-08-03).
+		#
+		# It was parsed into this contract and honoured by nothing, which is the
+		# worst of both: it looked supported and was not. Stacking only means
+		# anything with two or more measures per category, and Sophia's series
+		# contract is one label and one value per row -- there is no second
+		# series to stack. Reading a value we structurally cannot draw is a
+		# promise this module cannot keep, so it stops making it.
+		#
+		# When multi-series lands, `config.get("stack")` is where it comes back
+		# from; the key name is confirmed, only the renderer is missing.
 		"palette": normalise_palette(palette) or default_palette(),
 		"reason": "",
 	}
@@ -386,7 +416,11 @@ def charts_by_query():
 			if query and query not in mapping:
 				mapping[query] = {"chart": row.get("name"),
 					"title": _text(row.get("title")),
-					"chart_type": _text(row.get("chart_type"))}
+					"chart_type": _text(row.get("chart_type")),
+					# Which of the two links this is. The picker keeps the
+					# AUTHORED query and drops the generated backing one, so
+					# the surviving row is the one a person recognises.
+					"authored": field == "query"}
 			# `query` and `data_query` can point at DIFFERENT queries: Insights
 			# creates a backing query when a chart is built. Both are mapped, so
 			# whichever of them reaches a tab still resolves to this chart and
