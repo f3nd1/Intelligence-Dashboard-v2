@@ -640,7 +640,11 @@ const value=Number(row.value)||0;
 const height=Math.max(2,Math.round((value/max)*100));
 return segmentButton(card,row,index,
 '<span class="ucc-insights-plot-value">'+esc(value.toLocaleString())+"</span>"
-+'<span class="ucc-insights-plot-fill" style="height:'+height+"%;background:"+esc(colour)+'"></span>'
+// The fill's height is a percentage, so it needs a parent with a definite
+// height to resolve against. The track is that parent -- without it every
+// column collapses to a hairline, which is exactly what it did first time.
++'<span class="ucc-insights-plot-track">'
++'<span class="ucc-insights-plot-fill" style="height:'+height+"%;background:"+esc(colour)+'"></span></span>'
 +'<span class="ucc-insights-plot-label">'+esc(row.label)+"</span>",
 "ucc-insights-point");
 }).join("")+"</div>";
@@ -1369,11 +1373,12 @@ style.textContent=`
    Every one of these is CSS on real DOM nodes. No SVG is generated anywhere:
    the deleted hand-rolled renderers are not coming back, and a segment that
    stays a <button> is what keeps drill-down clickable and keyboard-reachable. */
-.ucc-insights-plot{display:flex;align-items:flex-end;gap:6px;min-height:180px;padding:4px 0}
+.ucc-insights-plot{display:flex;align-items:stretch;gap:6px;height:200px;padding:4px 0}
 .ucc-insights-point{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
- gap:4px;border:0;background:transparent;cursor:pointer;padding:0;min-width:0}
+ gap:4px;border:0;background:transparent;cursor:pointer;padding:0;min-width:0;height:100%}
 .ucc-insights-point:hover .ucc-insights-plot-fill{filter:brightness(1.15)}
 .ucc-insights-point:focus-visible{outline:2px solid #2563EB;outline-offset:2px;border-radius:4px}
+.ucc-insights-plot-track{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;min-height:0}
 .ucc-insights-plot-fill{width:100%;max-width:34px;border-radius:4px 4px 0 0;min-height:2px}
 .ucc-insights-plot-value{font-size:11px;color:#334155;font-variant-numeric:tabular-nums}
 .ucc-insights-plot-label{font-size:10px;color:#64748B;max-width:100%;overflow:hidden;
