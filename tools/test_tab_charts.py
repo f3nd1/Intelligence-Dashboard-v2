@@ -54,6 +54,9 @@ class State:
 	audit_fails = False
 	messages = []      # anything frappe.throw() put in front of the user
 	rows = [{"status": "Open", "count": 3}]
+	doctypes = {"Insights Query v3", "UCC Analytics Tab"}   # Insights Chart v3 absent by default
+	insights_charts = []   # Insights Chart v3 records this user may read
+	palette = None         # UCC Intelligence Settings.chart_palette
 	executed = []
 
 
@@ -117,6 +120,15 @@ class FakeTab:
 
 
 def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_length=None):
+	if doctype == "Insights Chart v3":
+		rows = []
+		for row in State.insights_charts:
+			for key, value in (filters or {}).items():
+				if row.get(key) != value:
+					break
+			else:
+				rows.append(dict(row))
+		return rows[: (limit_page_length or 20)] if limit_page_length else rows
 	names = sorted(State.readable)
 	wanted = (filters or {}).get("name")
 	if wanted:
@@ -182,16 +194,22 @@ def install_fake_frappe():
 
 	def exists(doctype, name=None):
 		if doctype == "DocType":
-			return name in ("Insights Query v3", "UCC Analytics Tab")
+			return name in ("Insights Query v3", "UCC Analytics Tab",
+				"Insights Chart v3") and name in State.doctypes
 		if doctype == "UCC Analytics Tab":
 			return name in State.tabs
 		return name in State.charts
 
-	frappe.db = types.SimpleNamespace(exists=exists)
+	frappe.db = types.SimpleNamespace(
+		exists=exists,
+		get_single_value=lambda doctype, field: State.palette)
 	frappe.get_all = fake_get_all
 	frappe.log_error = lambda **kwargs: None
 	frappe.get_traceback = lambda: ""
-	frappe.utils = types.SimpleNamespace(now=lambda: "2026-08-02 09:30:00")
+	frappe.utils = types.SimpleNamespace(
+		now=lambda: "2026-08-02 09:30:00",
+		cstr=lambda v: "" if v is None else str(v))
+	frappe._dict = dict
 	frappe.logger = lambda *a, **k: types.SimpleNamespace(
 		info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
 	frappe.session = types.SimpleNamespace(user="tester@ucc")
@@ -261,6 +279,9 @@ def reset():
 	State.audit = []
 	State.audit_fails = False
 	State.messages = []
+	State.doctypes = {"Insights Query v3", "UCC Analytics Tab"}
+	State.insights_charts = []
+	State.palette = None
 	State.executed = []
 
 
@@ -530,7 +551,7 @@ for call, what in [
 # The loop above cannot tell those apart -- both raise PermissionError -- so
 # the explicit gate is asserted per endpoint by name. Removing one from
 # set_intro() passed the loop and failed here, which is why this exists.
-for endpoint in ("add", "remove", "set_size", "set_intro", "set_question"):
+for endpoint in ("add", "remove", "set_size", "set_order", "set_intro", "set_question", "set_palette"):
 	body = source_of(endpoint)
 	report("_require_edit()" in body, "%s() asks permission before touching anything" % endpoint,
 		)
@@ -684,6 +705,129 @@ report(len(tab_charts.history("criterion_3", "overview")["changes"]) == 1,
 State.criteria["criterion_5"] = False
 report(raises(PermissionError_, tab_charts.history, "criterion_5", "overview"),
 	"a criterion this user cannot see has no readable history either")
+
+# --- PRESENTATION: reading Insights Chart v3 (2026-08-02) -------------------
+# Sophia embeds Queries, which carry data and no presentation. Chart type,
+# axes, legend and labels live on a separate Chart record. Colour does NOT --
+# the live probe dumped all seven records and there is no colour field, so
+# Sophia owns it. See analytics/chart_presentation.py.
+from ucc_intelligence.analytics import chart_presentation  # noqa: E402
+
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+
+# No Chart record: the table is the answer, and it says so.
+data = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")
+report(data["presentation"]["status"] == "table_only",
+	"a query with no Insights chart falls back to the table")
+report("No Insights chart" in data["presentation"]["reason"],
+	"...and the reason is stated, not blank: %r" % data["presentation"]["reason"])
+report(data["presentation"]["palette"] == chart_presentation.DEFAULT_PALETTE,
+	"...and it still carries the default palette")
+
+# With a Chart record whose columns match the query's real ones.
+State.doctypes.add("Insights Chart v3")
+State.insights_charts = [{
+	"name": "chart-1", "title": "Open by status", "chart_type": "Bar",
+	"query": "q-open", "data_query": None,
+	"config": json.dumps({"x_axis": "status", "y_axis": ["count"],
+		"legend_position": "bottom", "axis_label": "Actions", "stack": 0}),
+}]
+data = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")
+presentation = data["presentation"]
+report(presentation["status"] == "available", "a chart-backed query renders as a chart")
+report(presentation["render_as"] == "bar" and presentation["chart_type"] == "Bar",
+	"the free-text chart_type maps to a supported renderer")
+report(presentation["label_column"] == "status" and presentation["value_columns"] == ["count"],
+	"the axes come off the Chart record, not from guessing the query's columns")
+report(presentation["legend_position"] == "bottom" and presentation["axis_label"] == "Actions",
+	"legend position and axis label carry through")
+
+# chart_type is FREE TEXT, so an unknown one must degrade, never break.
+State.insights_charts[0]["chart_type"] = "Sankey"
+degraded = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
+report(degraded["status"] == "table_only" and "Sankey" in degraded["reason"],
+	"an unsupported chart type falls back to a LABELLED table: %r" % degraded["reason"])
+State.insights_charts[0]["chart_type"] = "Bar"
+
+# The check that stops a confident wrong answer.
+State.insights_charts[0]["config"] = json.dumps({"x_axis": "department", "y_axis": ["count"]})
+stale = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
+report(stale["status"] == "table_only" and "department" in stale["reason"],
+	"a config column the query no longer returns is never rendered against")
+
+# Both config shapes -- plain strings and nested dicts -- are read.
+State.insights_charts[0]["config"] = json.dumps({
+	"x_axis": {"column_name": "status"}, "y_axis": [{"measure_name": "count"}]})
+nested = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
+report(nested["label_column"] == "status" and nested["value_columns"] == ["count"],
+	"config written as nested dicts reads the same as plain strings")
+
+# A chart the user cannot read must not resolve for them.
+State.insights_charts = []
+hidden = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
+report(hidden["status"] == "table_only",
+	"a Chart record this user cannot read gives them the table, not someone else's chart")
+
+# --- COLOUR: Sophia's, not Insights' ----------------------------------------
+report(chart_presentation.normalise_palette("#FFF\n#2563EB, #000000") ==
+	["#FFF", "#2563EB", "#000000"],
+	"a palette typed as lines or commas parses")
+report(chart_presentation.normalise_palette("red; drop table charts--") == [],
+	"anything that is not a hex colour never reaches the browser")
+report(chart_presentation.normalise_palette("1234567") == [],
+	"...including a value that is the right length and all-hex but has no '#'")
+report(chart_presentation.normalise_palette('#fff" onload="alert(1)') == [],
+	"...and one carrying an attribute break, which is what makes this a security check")
+report(all(colour.startswith("#") for colour in
+	chart_presentation.normalise_palette(["#2563EB", "2563EB", "rgb(0,0,0)", "#12345"])),
+	"every colour that survives starts with '#' -- the value goes into a style attribute")
+report(chart_presentation.normalise_palette(["#2563EB", "#2563EB"]) == ["#2563EB"],
+	"duplicates collapse")
+report(len(chart_presentation.normalise_palette(["#00000%d" % (i % 10) for i in range(60)]))
+	<= chart_presentation.MAX_PALETTE, "and the list is capped")
+
+State.palette = "#111111\n#222222"
+report(chart_presentation.default_palette() == ["#111111", "#222222"],
+	"the institution default comes from UCC Intelligence Settings")
+State.palette = None
+
+# Per-chart override, on the tab, audited like every other change.
+reset()
+State.doctypes.add("Insights Chart v3")
+tab_charts.add("criterion_3", "overview", "q-open")
+tab_charts.set_palette("criterion_3", "overview", "q-open", "#ABCDEF")
+report(tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")
+	["presentation"]["palette"] == ["#ABCDEF"],
+	"a per-chart override beats the institution default")
+report(any(entry["action"] == "chart_recoloured" for entry in State.audit),
+	"...and recolouring is audited like every other tab change")
+report(tab_charts.chart_data("q-open")["presentation"]["palette"]
+	== chart_presentation.DEFAULT_PALETTE,
+	"the override is scoped to its tab -- asked without one, the default applies")
+tab_charts.set_palette("criterion_3", "overview", "q-open", "")
+report(tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")
+	["presentation"]["palette"] == chart_presentation.DEFAULT_PALETTE,
+	"clearing the override returns the chart to the default")
+
+State.may_write = False
+report(raises(PermissionError_, tab_charts.set_palette,
+	"criterion_3", "overview", "q-open", "#123456"),
+	"a reader cannot recolour a chart")
+State.may_write = True
+
+# --- THE PICKER: both kinds, marked -----------------------------------------
+reset()
+State.doctypes.add("Insights Chart v3")
+State.insights_charts = [{"name": "chart-1", "title": "Open by status",
+	"chart_type": "Donut", "query": "q-open", "data_query": None, "config": "{}"}]
+listed = {row["chart"]: row for row in tab_charts.search("")["charts"]}
+report(listed["q-open"]["has_chart"] and listed["q-open"]["chart_type"] == "Donut",
+	"the picker marks a query that has a chart, and says which type")
+report("q-agents" in listed and not listed["q-agents"]["has_chart"],
+	"a chart-less query is still OFFERED -- 45 of 52 would vanish otherwise")
+report("q-secret" not in listed,
+	"...but a query this user cannot read is still absent")
 
 print(("PASS" if all(checks) else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
 sys.exit(0 if all(checks) else 1)

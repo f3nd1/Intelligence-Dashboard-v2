@@ -55,6 +55,7 @@ import json
 import frappe
 
 from ucc_intelligence.analytics.admission_intelligence_embed import clean_text, rows_to_chart_series
+from ucc_intelligence.analytics import chart_presentation
 from ucc_intelligence.analytics import tab_audit
 from ucc_intelligence.permissions import access
 
@@ -192,7 +193,16 @@ def _stored(criterion, tab):
 		if isinstance(item, str) and item:
 			config["charts"].append({"chart": item, "span": DEFAULT_SPAN})
 		elif isinstance(item, dict) and item.get("chart"):
-			config["charts"].append({"chart": str(item["chart"]), "span": _span(item)})
+			entry = {"chart": str(item["chart"]), "span": _span(item)}
+			# Normalising to a fixed shape is what keeps a corrupt stored value
+			# from reaching the page -- but an entry only carries keys named
+			# here, so a new one has to be added deliberately. The palette is
+			# re-validated rather than trusted: it came from storage, and
+			# storage is editable in Desk.
+			palette = chart_presentation.normalise_palette(item.get("palette"))
+			if palette:
+				entry["palette"] = palette
+			config["charts"].append(entry)
 
 	intro = stored.get("intro")
 	if isinstance(intro, str):
@@ -260,8 +270,25 @@ def search(term=None, limit=20):
 	rows = frappe.get_list(
 		CHART_DOCTYPE, filters=filters, fields=["name", "title"],
 		order_by="modified desc", limit_page_length=limit)
-	return {"ok": True, "charts": [
-		{"chart": row["name"], "title": row.get("title") or row["name"]} for row in rows]}
+	# BOTH kinds are listed, each marked -- not charts only.
+	#
+	# The probe found 52 queries and 7 charts. Listing only the 7 would hide 45
+	# things that work: a query with no Insights chart still renders its real
+	# result rows as a table, still exports, and still drills down to records.
+	# Felix's own instruction was that he would rather see everything available
+	# than have things silently missing, so the chart-less ones are offered and
+	# labelled rather than withheld.
+	built = chart_presentation.charts_by_query()
+	charts = []
+	for row in rows:
+		chart = built.get(row["name"]) or {}
+		charts.append({
+			"chart": row["name"],
+			"title": row.get("title") or row["name"],
+			"chart_type": chart.get("chart_type") or "",
+			"has_chart": bool(chart),
+		})
+	return {"ok": True, "charts": charts}
 
 
 def get_tab(criterion, tab):
@@ -454,7 +481,7 @@ def set_question(criterion, tab, question, visible):
 	return get_tab(criterion, tab)
 
 
-def chart_data(chart):
+def chart_data(chart, criterion=None, tab=None):
 	"""Execute one embedded chart, returning BOTH shapes it is displayed in:
 	`series` for the diagram and `columns`/`rows` for the table.
 
@@ -486,14 +513,72 @@ def chart_data(chart):
 		return {"status": "query_error", "chart": chart, "series": [], "rows": [], "columns": [],
 			"message": clean_text(error)}
 	rows = result.get("rows") or []
+	columns = list(rows[0].keys()) if rows else []
+	# How it should LOOK comes from the Insights Chart record built on this
+	# query, if there is one and this user may read it. Passing the real
+	# columns is what stops a stale config column being rendered against --
+	# see chart_presentation.presentation_for().
+	presentation = chart_presentation.presentation_for(
+		chart, columns=columns, palette=_palette_for(criterion, tab, chart))
 	return {
 		"status": "available",
 		"chart": chart,
 		"title": doc.get("title") or chart,
 		"series": rows_to_chart_series(rows),
-		"columns": list(rows[0].keys()) if rows else [],
+		"columns": columns,
 		"rows": rows,
+		"presentation": presentation,
 	}
+
+
+def _palette_for(criterion, tab, chart):
+	"""This chart's colour override ON THIS TAB, if it has one.
+
+	Scoped to the tab it was asked for rather than searched across every tab.
+	That is not only cheaper -- it is more correct, because the same Insights
+	chart embedded on two criteria can legitimately want different colours,
+	and it avoids a permission-blind sweep of the whole configuration table to
+	answer a cosmetic question.
+	"""
+	if not (criterion and tab):
+		return None
+	try:
+		criterion, tab = _validated(criterion, tab)
+	except Exception:
+		return None
+	for item in _stored(criterion, tab)["charts"]:
+		if item.get("chart") == chart:
+			return item.get("palette")
+	return None
+
+
+def set_palette(criterion, tab, chart, palette):
+	"""Override the series colours for one chart on one tab.
+
+	Same write gate as every other tab change, and audited the same way. An
+	empty value clears the override and the chart goes back to the
+	institution's default from UCC Intelligence Settings.
+	"""
+	criterion, tab = _validated(criterion, tab)
+	_require_edit()
+	chart = clean_text(chart)
+	colours = chart_presentation.normalise_palette(palette)
+	config = _stored(criterion, tab)
+	before = None
+	for item in config["charts"]:
+		if item.get("chart") != chart:
+			continue
+		before = item.get("palette")
+		if colours:
+			item["palette"] = colours
+		else:
+			item.pop("palette", None)
+	if before == (colours or None):
+		return get_tab(criterion, tab)
+	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "chart_recoloured",
+		"Recoloured the chart %r" % chart, before=before, after=colours)
+	return get_tab(criterion, tab)
 
 
 def history(criterion, tab, limit=50):

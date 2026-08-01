@@ -50,13 +50,24 @@ function lift(name) {
 }
 
 const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown",
-	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId"];
+	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId",
+	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
+	"paintDonutSeries", "paintNumberSeries", "paintChartSeries", "paintTableOnly"];
+// CHART_PAINTERS is a const, not a function, so lift() cannot reach it. It is
+// taken from the real source verbatim rather than retyped here, so a painter
+// added to the page cannot silently disagree with what this harness tests.
+const PAINTER_MAP = (SRC.match(/const CHART_PAINTERS=\{[\s\S]*?\};/) || [])[0];
+assert.ok(PAINTER_MAP, "the page declares CHART_PAINTERS");
+
 const exported = new Function("window", "document", "frappe", "CSS",
-	"const tabChartState={};\n" + NEEDED.map(lift).join("\n")
-	+ "\n;return { " + NEEDED.join(", ") + ", tabChartState };"
+	"const tabChartState={};let lastView=null;function setChartView(c,v){lastView=v;}\n"
+	+ PAINTER_MAP + "\n" + NEEDED.map(lift).join("\n")
+	+ "\n;return { " + NEEDED.join(", ") + ", tabChartState, viewAfterPaint: () => lastView };"
 )(win, doc, frappe, { escape: (s) => s });
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
-	syncExploreCatalogue, tabChartState, qaQuestionId } = exported;
+	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
+	paintBarSeries, paintLineSeries, paintDonutSeries, paintNumberSeries,
+	paintChartSeries } = exported;
 
 // --- the tab intro's Markdown subset (#4) ----------------------------------
 // Escaped FIRST, formatted after, so nothing a person types can become markup.
@@ -248,4 +259,88 @@ assert.strictEqual(qaQuestionId({ question: "Q?" }, 3), "Q?",
 	"...its text where it does not");
 assert.strictEqual(qaQuestionId({}, 3), "row-3", "...and its position as a last resort");
 
-console.log("PASS: tab intro, chart sizes, table view, drill-down, Explore catalogue, question ids");
+
+// --- chart shapes driven by the Insights Chart record ----------------------
+// Sophia embeds Insights QUERIES, which carry no presentation. The server
+// reads the separate Chart record and hands down a `presentation` block. What
+// matters here: every shape stays clickable (drill-down is the requirement
+// that outranks the visuals), nothing emits SVG, and colour comes from the
+// palette rather than being hardcoded.
+const SERIES = [{ label: "Consultative", value: 40 }, { label: "Collaborative", value: 16 },
+	{ label: "Empowering", value: 7 }];
+
+function cardWith(presentation) {
+	return { _chartData: { presentation }, querySelector: () => null };
+}
+function node() { return { innerHTML: "", insertAdjacentHTML(_, html) { this.innerHTML += html; } }; }
+
+const CHART = cardWith({ status: "available", render_as: "bar",
+	palette: ["#111111", "#222222", "#333333"] });
+
+assert.deepStrictEqual(paletteOf(CHART), ["#111111", "#222222", "#333333"],
+	"the palette comes off the presentation block");
+assert.strictEqual(seriesColour(CHART, 4), "#222222",
+	"and wraps rather than running out on the fourth series");
+assert.deepStrictEqual(paletteOf(cardWith({})), ["#2563EB"],
+	"a card with no palette still has a colour rather than none");
+
+for (const [name, painter] of [["bar", paintBarSeries], ["line", paintLineSeries],
+		["donut", paintDonutSeries]]) {
+	const target = node();
+	painter(CHART, target, SERIES);
+	assert.ok(target.innerHTML.includes('data-chart-segment="Consultative"'),
+		name + ": every segment is still a clickable drill-down target");
+	assert.ok(!/<svg|<path|<polyline/i.test(target.innerHTML),
+		name + ": no SVG is generated -- the deleted renderers stay deleted");
+	assert.ok(target.innerHTML.includes("#111111"),
+		name + ": the first series uses the palette's first colour");
+	assert.ok(target.innerHTML.includes("<button"),
+		name + ": segments are buttons, so they are keyboard-reachable");
+}
+
+// A number has no dimension, so there is nothing to drill into.
+const numberNode = node();
+paintNumberSeries(CHART, numberNode, [{ label: "Total", value: 62 }]);
+assert.ok(!numberNode.innerHTML.includes("data-chart-segment"),
+	"a single-figure chart offers no segment to drill into");
+assert.ok(numberNode.innerHTML.includes("62"), "...but it does show the figure");
+
+// Escaping holds inside every shape, including the conic-gradient one.
+const hostileChart = node();
+paintDonutSeries(CHART, hostileChart, [{ label: '<img src=x onerror=alert(1)>', value: 1 }]);
+assert.ok(!hostileChart.innerHTML.includes("<img"),
+	"a hostile label cannot become markup in a chart");
+
+// The labelled fallback: never blank, never broken, always says why.
+const fallback = node();
+const fallbackCard = cardWith({ status: "table_only", chart_type: "Sankey",
+	reason: "Chart type 'Sankey' is not supported here yet.", palette: ["#2563EB"] });
+paintChartSeries(fallback, SERIES, fallbackCard);
+assert.ok(fallback.innerHTML.includes("Sankey"),
+	"an unsupported chart type says which type it was");
+assert.ok(!fallback.innerHTML.includes("data-chart-segment"),
+	"...and does not pretend to be a chart");
+assert.strictEqual(exported.viewAfterPaint(), "table",
+	"...it switches the card to the table, which is a real view of real rows");
+
+// The axis label from the Chart record is rendered, once.
+const labelled = node();
+paintChartSeries(labelled, SERIES, cardWith({ status: "available", render_as: "bar",
+	palette: ["#2563EB"], axis_label: "Engagements" }));
+assert.ok(labelled.innerHTML.includes("Engagements"), "the axis label from Insights is shown");
+
+// An unknown render_as must not throw -- it falls back to bars, which are
+// always drawable from a label/value series.
+const unknown = node();
+paintChartSeries(unknown, SERIES, cardWith({ status: "available", render_as: "treemap",
+	palette: ["#2563EB"] }));
+assert.ok(unknown.innerHTML.includes("data-chart-segment"),
+	"an unrecognised renderer degrades to bars rather than throwing");
+
+// --- the picker lists both kinds, marked -----------------------------------
+assert.ok(SRC.includes("Table only"),
+	"the picker marks chart-less queries rather than hiding them");
+assert.ok(SRC.includes("data-recolour-chart"),
+	"an editor can recolour a chart");
+
+console.log("PASS: tab intro, chart sizes, table view, drill-down, chart shapes, palette, Explore catalogue, question ids");

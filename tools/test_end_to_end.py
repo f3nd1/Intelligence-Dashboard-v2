@@ -305,6 +305,37 @@ report('if column not in resolved["columns"]' in records_body,
 report('SITE_DATA_SOURCES' in drilldown_source and "SUPPORTED_OPERATIONS" in drilldown_source,
 	"an external data source or an untranslatable pipeline is refused, not approximated")
 
+# --- PRESENTATION: reading Insights Chart v3, and owning colour -------------
+PRESENTATION = APP / "analytics" / "chart_presentation.py"
+report(PRESENTATION.exists(), "analytics/chart_presentation.py reads the Insights Chart record")
+presentation_source = PRESENTATION.read_text(encoding="utf-8")
+report("frappe.get_list(" in presentation_source and "frappe.get_all(" not in presentation_source,
+	"chart records are read through get_list -- one a user cannot read never resolves")
+report("SUPPORTED_TYPES" in presentation_source and "VALID_" not in presentation_source,
+	"a SUPPORTED set, not a VALID set -- chart_type is free text and has no enum")
+report("column not in available" in presentation_source,
+	"a config column the query no longer returns is refused, never rendered against")
+report("DEFAULT_PALETTE" in presentation_source and "chart_palette" in presentation_source,
+	"colour is Sophia's: a shipped default plus the UCC Intelligence Settings field")
+report("chosen to resemble" in presentation_source.lower()
+	and "not read from" in presentation_source.lower(),
+	"...and the module says plainly that it was CHOSEN to match, not read from Insights")
+
+ADR_015 = ROOT / "docs" / "architecture" / "decisions" / "ADR-015-sophia-owns-chart-colour.md"
+report(ADR_015.exists(), "ADR-015 records the colour decision")
+
+# No hand-rolled SVG, ever again. The deleted renderers are asserted gone
+# elsewhere; this asserts their replacement did not quietly become one.
+page_source = (APP / "sophia" / "page" / "sophia_analytics" / "sophia_analytics.js").read_text(encoding="utf-8")
+# Scoped to the painters, not the whole page: the Ask UCC send/clear icons are
+# inline SVG and always were. What must never come back is a chart DRAWN as SVG.
+painters = page_source[page_source.index("function paintBarSeries"):
+	page_source.index("const CHART_PAINTERS")]
+report("<svg" not in painters and "createElementNS" not in painters and "<path" not in painters,
+	"the chart shapes generate no SVG -- CSS on real DOM nodes, so segments stay clickable")
+report("data-chart-segment" in page_source and "CHART_PAINTERS" in page_source,
+	"every shape routes through one painter map, and every segment stays a drill-down target")
+
 # Input validation: a tab key becomes part of a defaults key, so it cannot be
 # free text, and a criterion cannot be invented.
 report("access.CRITERION_KEYS" in tab_charts_source, "the criterion is checked against the real list")
