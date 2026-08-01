@@ -743,11 +743,32 @@ report(presentation["label_column"] == "status" and presentation["value_columns"
 report(presentation["legend_position"] == "bottom" and presentation["axis_label"] == "Actions",
 	"legend position and axis label carry through")
 
+# The ten types the v3 builder actually offers, read off the UI on 2026-08-02.
+# Asserted as a set so the gap is explicit rather than discovered chart by
+# chart, and so adding a renderer has to update this line deliberately.
+V3_BUILDER_TYPES = ["Number", "Bar", "Line", "Row", "Donut", "Funnel", "Table",
+	"Map", "Bubble", "Sankey"]
+drawn, fell_back = [], []
+for chart_type in V3_BUILDER_TYPES:
+	State.insights_charts[0]["chart_type"] = chart_type
+	result = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
+	(drawn if result["status"] == "available" else fell_back).append(chart_type)
+report(drawn == ["Number", "Bar", "Line", "Row", "Donut"],
+	"of the ten v3 chart types, these five are drawn: %s" % drawn)
+report(fell_back == ["Funnel", "Table", "Map", "Bubble", "Sankey"],
+	"...and these five show their rows instead: %s" % fell_back)
+
+# "Table" is not a gap and must not apologise for itself.
+State.insights_charts[0]["chart_type"] = "Table"
+table = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
+report("not drawn here yet" not in table["reason"] and "table" in table["reason"].lower(),
+	"a Table chart is shown as a table without calling it unsupported: %r" % table["reason"])
+
 # chart_type is FREE TEXT, so an unknown one must degrade, never break.
 State.insights_charts[0]["chart_type"] = "Sankey"
 degraded = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
 report(degraded["status"] == "table_only" and "Sankey" in degraded["reason"],
-	"an unsupported chart type falls back to a LABELLED table: %r" % degraded["reason"])
+	"an unsupported chart type names the type it could not draw: %r" % degraded["reason"])
 State.insights_charts[0]["chart_type"] = "Bar"
 
 # The check that stops a confident wrong answer.

@@ -20,6 +20,41 @@ Read off the bench, not from source or memory:
     config holds: chart_type, x_axis, y_axis, legend_position, axis_label,
                   stack, limit, order_by, filters
 
+HOW A CHART IS MADE (recorded 2026-08-02, from Felix using the real builder)
+Not from inside a Query, which is what this module first assumed. Charts are
+their own section in the Insights sidebar -- Queries / Charts / Dashboards --
+and a Chart is created there and then pointed at a Query with a dropdown. That
+is why `query` and `data_query` are Link fields on the Chart rather than the
+Query holding a chart: the Chart points at the Query, never the reverse.
+
+WHAT THE BUILDER EXPOSES, AND WHAT IS READ HERE
+Read off the v3 builder UI. The left column is what a person sees; the right
+is whether this module acts on it.
+
+    Title                -> READ, from the record's own `title` field
+    X Axis Column        -> READ, as config.x_axis
+    Y Axis Series        -> READ, as config.y_axis (all series)
+    Stack                -> READ into `stacked`, NOT YET DRAWN
+    Show Axis Label      -> the LABEL is read (config.axis_label); the
+                            show/hide toggle itself is not
+    (legend position)    -> READ into `legend_position`, NOT YET DRAWN
+    Rotate Values        -> ignored
+    Overlap              -> ignored
+    Normalize            -> ignored
+    Show Data Labels     -> ignored
+    Show Scrollbar       -> ignored
+    Y-Min / Y-Max        -> ignored
+    Split Series         -> ignored
+
+Two of those are worth stating plainly rather than leaving implied: `stacked`
+and `legend_position` are parsed into the presentation contract and no painter
+uses them yet. They are read, not honoured.
+
+The config KEY NAMES for the ignored controls are unknown -- the probe only
+reported the six keys listed above, and the builder shows UI labels, not
+fields. Adding any of them means probing a chart that actually uses it first,
+not guessing the key from the label.
+
     52 queries exist. 7 have a chart. 45 do not.
     NO COLOUR FIELD ANYWHERE -- see "colour" below.
     Every chart resolves to a query, so drill-down is unaffected.
@@ -74,16 +109,29 @@ SETTINGS_DOCTYPE = "UCC Intelligence Settings"
 # Deliberately NOT "the valid set". Adding a type here means the renderer
 # handles it; everything else falls back to the labelled table, which is a
 # real view of real rows and not a failure state.
+#
+# THE TEN TYPES THE v3 BUILDER OFFERS, read off the UI on 2026-08-02:
+#     Number, Bar, Line, Row, Donut, Funnel, Table, Map, Bubble, Sankey
+# Five are drawn (Number, Bar, Line, Row, Donut), Table is the table by
+# definition, and four fall back: Funnel, Map, Bubble, Sankey.
 SUPPORTED_TYPES = {
 	"bar": "bar",
-	"column": "bar",
 	"row": "bar",
 	"line": "line",
-	"area": "line",
 	"donut": "donut",
-	"pie": "donut",
 	"number": "number",
+	# Not in v3's list. Kept as free aliases so a rename or a v2-era record
+	# lands on the right renderer instead of the fallback -- but flagged as
+	# UNOBSERVED so nobody reads them as evidence of what v3 offers.
+	"column": "bar",
+	"area": "line",
+	"pie": "donut",
 }
+
+# "Table" is one of the ten. It is not a gap and must not apologise for
+# itself: a chart whose type IS a table is correctly shown as a table, and
+# calling that "not supported yet" would be false.
+TABLE_TYPES = ("table",)
 
 # Chosen to resemble what Insights shows today. NOT read from Insights -- see
 # the module docstring and ADR-015. Ten, because a legend past ten series is
@@ -229,10 +277,16 @@ def presentation_for(query, columns=None, palette=None):
 
 	config = _config(frappe._dict(record))
 	raw_type = _text(record.get("chart_type")) or _text(config.get("chart_type"))
+	if raw_type.lower() in TABLE_TYPES:
+		blank["chart_type"] = raw_type
+		blank["reason"] = "This Insights chart is a table."
+		return blank
+
 	supported = SUPPORTED_TYPES.get(raw_type.lower())
 	if not supported:
 		blank["chart_type"] = raw_type
-		blank["reason"] = ("Chart type %r is not supported here yet." % raw_type
+		blank["reason"] = ("Chart type %r is not drawn here yet, so its rows are "
+			"shown instead." % raw_type
 			if raw_type else "This Insights chart has no chart type set.")
 		return blank
 
