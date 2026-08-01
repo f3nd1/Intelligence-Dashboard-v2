@@ -203,7 +203,8 @@ report("get_chart_definitions" not in api_source and "get_chart_data" not in api
 # --- WHAT REPLACED THEM ----------------------------------------------------
 report(TAB_CHARTS.exists(), "analytics/tab_charts.py holds the whole per-tab chart layer")
 for method in ("search_insights_charts", "get_tab_charts", "add_tab_chart",
-		"remove_tab_chart", "get_tab_chart_data"):
+		"remove_tab_chart", "get_tab_chart_data", "set_tab_chart_size", "set_tab_intro",
+		"set_tab_question"):
 	report("def %s(" % method in api_source and "ucc_intelligence.api.%s" % method in page_source,
 		"%s is whitelisted and called by the page" % method)
 report('data-add-chart' in page_source and "+ Add chart" in page_source,
@@ -238,8 +239,8 @@ report('doc.check_permission("read")' in tab_charts_source,
 add_body = tab_charts_source[tab_charts_source.index("def add("):tab_charts_source.index("def remove(")]
 report("readable([chart])" in add_body and add_body.index("readable([chart])") < add_body.index("_stored("),
 	"a chart is permission-checked BEFORE it is stored, not after")
-get_body = tab_charts_source[tab_charts_source.index("def get_charts("):tab_charts_source.index("def add(")]
-report("readable(_stored(" in get_body,
+get_body = tab_charts_source[tab_charts_source.index("def get_tab("):tab_charts_source.index("def add(")]
+report("readable([item[\"chart\"] for item in config[\"charts\"]])" in get_body,
 	"stored ids are re-filtered through permissions on every read -- an id is a preference, not a grant")
 report("is_public" not in tab_charts_source,
 	"the public-dashboard mechanism is never used -- it applies no permissions at all")
@@ -257,15 +258,43 @@ report("MAX_PER_TAB" in tab_charts_source, "a tab is bounded, so one person cann
 for kept, what in [
 	("renderQa", "Management Questions and Data-Based Answers"),
 	("extendedQuestionRows", "the Q&A row builder"),
-	("renderKpis", "the KPI strip"),
-	("admission_intelligence.kpis", "the Criterion 4.1.1 admission KPIs"),
 	("renderSources", "Source Availability"),
 	("renderQuality", "Data Quality Checks"),
-	("renderReadiness", "the readiness strip"),
 ]:
 	report(kept in page_source, "untouched: %s" % what)
 report("Management Questions and Data-Based Answers" in page_source,
 	"the Q&A panel markup is unchanged")
+
+# --- WHAT THE MOVE TO INSIGHTS MADE OBSOLETE (2026-08-01, Felix) ------------
+# Three surfaces on every criterion tab read the criterion engine's own
+# catalogue and could not survive charts moving to Insights. Two assertions
+# above used to require the opposite; they are deliberately reversed, and the
+# reason is here rather than in a commit nobody will read.
+#
+#   the page-level filter bar -- an embedded chart is a live view of a SAVED
+#       Insights query. This page cannot re-filter it, and pretending to
+#       (a control that changes nothing) is worse than not offering it. A
+#       filtered view is a second Insights chart, built in Insights.
+#   the readiness strip -- "Criterion N live analytics active · X of X sources
+#       available". The ELEMENT stays because renderError() reports failures
+#       through it; the readiness MESSAGE is gone.
+#   the KPI number cards.
+for gone, what in [
+	("renderKpis", "the KPI card renderer"),
+	("renderReadiness", "the readiness banner renderer"),
+	("openReadiness", "the readiness modal"),
+	("filterMarkup", "the page-level filter controls"),
+	("normaliseFilterDefinition", "the filter definition parser"),
+	("selectedFilterObject", "the filter collector"),
+	("data-demo-kpis", "the KPI mount point"),
+	("data-demo-filter", "the filter inputs"),
+	("dismiss-readiness", "the readiness dismiss action"),
+]:
+	report(gone not in page_source, "removed from every criterion tab: %s" % what)
+report("filters:{}" in page_source,
+	"the criterion payload carries no filters -- nothing on the page can set one")
+report("data-demo-readiness" in page_source and "renderError" in page_source,
+	"the notice element stays as the ERROR surface, so a failed load is still reported")
 
 
 # ===========================================================================

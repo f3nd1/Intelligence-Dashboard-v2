@@ -160,19 +160,19 @@ report({row["chart"] for row in tab_charts.search("agent")["charts"]} == {"q-age
 reset()
 tab_charts.add("criterion_3", "overview", "q-open")
 tab_charts.add("criterion_3", "3.1.1", "q-agents")
-report([c["chart"] for c in tab_charts.get_charts("criterion_3", "overview")["charts"]] == ["q-open"],
+report([c["chart"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]] == ["q-open"],
 	"a chart added to one tab appears on that tab")
-report([c["chart"] for c in tab_charts.get_charts("criterion_3", "3.1.1")["charts"]] == ["q-agents"],
+report([c["chart"] for c in tab_charts.get_tab("criterion_3", "3.1.1")["charts"]] == ["q-agents"],
 	"and NOT on another tab of the same criterion")
-report(tab_charts.get_charts("criterion_6", "overview")["charts"] == [],
+report(tab_charts.get_tab("criterion_6", "overview")["charts"] == [],
 	"and not on another criterion")
-report(len(State.defaults) == 2 and all(json.loads(v) for v in State.defaults.values()),
+report(len(State.defaults) == 2 and all(json.loads(v)["charts"] for v in State.defaults.values()),
 	"the selection is written to the per-user store, one key per tab")
 
 # A fresh module-level cache would hide a broken read; go back through get.
-report([c["chart"] for c in tab_charts.get_charts("criterion_3", "overview")["charts"]] == ["q-open"],
+report([c["chart"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]] == ["q-open"],
 	"the selection survives a re-read -- it is stored, not held in memory")
-report(tab_charts.get_charts("criterion_3", "overview")["charts"][0]["title"] == "Open Actions",
+report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["title"] == "Open Actions",
 	"the title is resolved live, so a renamed chart does not show a stale name")
 
 # --- adding is permission-checked ------------------------------------------
@@ -187,33 +187,33 @@ report(raises(PermissionError_, tab_charts.add, "criterion_3", "overview", "q-no
 reset()
 tab_charts.add("criterion_3", "overview", "q-open")
 State.readable.discard("q-open")          # access revoked after it was added
-report(tab_charts.get_charts("criterion_3", "overview")["charts"] == [],
+report(tab_charts.get_tab("criterion_3", "overview")["charts"] == [],
 	"a chart you may no longer read stops appearing, even though it is still stored")
 report(tab_charts.chart_data("q-open")["status"] == "permission_denied",
 	"and executing it is refused")
 report(State.executed == [], "the query never ran")
 # ...and you can still get rid of it, or it would be stuck there forever.
 tab_charts.remove("criterion_3", "overview", "q-open")
-report(json.loads(State.defaults[tab_charts._key("criterion_3", "overview")]) == [],
+report(json.loads(State.defaults[tab_charts._key("criterion_3", "overview")])["charts"] == [],
 	"removing works even for a chart you can no longer read")
 
 # --- the criterion gate -----------------------------------------------------
 reset()
 State.criteria["criterion_5"] = False
-report(raises(PermissionError_, tab_charts.get_charts, "criterion_5", "overview"),
+report(raises(PermissionError_, tab_charts.get_tab, "criterion_5", "overview"),
 	"a criterion hidden by ucc_dashboard_access cannot be read")
 report(raises(PermissionError_, tab_charts.add, "criterion_5", "overview", "q-open"),
 	"and cannot be added to")
-report(tab_charts.get_charts("criterion_3", "overview")["ok"] is True,
+report(tab_charts.get_tab("criterion_3", "overview")["ok"] is True,
 	"a visible criterion still works")
 
 # --- input validation -------------------------------------------------------
 reset()
-report(raises(ValidationError_, tab_charts.get_charts, "criterion_99", "overview"),
+report(raises(ValidationError_, tab_charts.get_tab, "criterion_99", "overview"),
 	"an invented criterion is rejected")
-report(raises(ValidationError_, tab_charts.get_charts, "criterion_3", "../../etc/passwd"),
+report(raises(ValidationError_, tab_charts.get_tab, "criterion_3", "../../etc/passwd"),
 	"a tab key cannot contain path characters -- it becomes part of a stored key")
-report(raises(ValidationError_, tab_charts.get_charts, "criterion_3", "x" * 60),
+report(raises(ValidationError_, tab_charts.get_tab, "criterion_3", "x" * 60),
 	"an over-long tab key is rejected")
 
 # --- bounded ----------------------------------------------------------------
@@ -222,7 +222,7 @@ State.charts = {"q-%d" % i: "Chart %d" % i for i in range(20)}
 State.readable = set(State.charts)
 for index in range(tab_charts.MAX_PER_TAB):
 	tab_charts.add("criterion_3", "overview", "q-%d" % index)
-report(len(tab_charts.get_charts("criterion_3", "overview")["charts"]) == tab_charts.MAX_PER_TAB,
+report(len(tab_charts.get_tab("criterion_3", "overview")["charts"]) == tab_charts.MAX_PER_TAB,
 	"a tab holds up to MAX_PER_TAB charts (%d)" % tab_charts.MAX_PER_TAB)
 report(raises(Exception, tab_charts.add, "criterion_3", "overview", "q-19"),
 	"and refuses the next one rather than growing without limit")
@@ -246,8 +246,96 @@ report(tab_charts.chart_data("q-missing")["status"] == "unavailable",
 # --- corrupt stored value ---------------------------------------------------
 reset()
 State.defaults[tab_charts._key("criterion_3", "overview")] = "{not json"
-report(tab_charts.get_charts("criterion_3", "overview")["charts"] == [],
+report(tab_charts.get_tab("criterion_3", "overview")["charts"] == [],
 	"a corrupt stored value costs the layout, not the page")
+
+# --- the ORIGINAL stored shape still reads -----------------------------------
+# The first version stored a bare list of chart ids, before sizes, intros and
+# question choices existed. Anyone who used the feature before this round has
+# one of those, and it must not read as an empty tab.
+reset()
+State.defaults[tab_charts._key("criterion_3", "overview")] = json.dumps(["q-open", "q-agents"])
+legacy = tab_charts.get_tab("criterion_3", "overview")
+report([c["chart"] for c in legacy["charts"]] == ["q-open", "q-agents"],
+	"a tab stored in the original list-of-ids shape still loads its charts")
+report(all(c["size"] == tab_charts.DEFAULT_SIZE for c in legacy["charts"]),
+	"...at the default size, rather than being discarded for having none")
+
+# --- card size (#5) ----------------------------------------------------------
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["size"] == "medium",
+	"a new card starts at the default size")
+sized = tab_charts.set_size("criterion_3", "overview", "q-open", "full")
+report(sized["charts"][0]["size"] == "full" and sized["charts"][0]["span"] == 12,
+	"a resized card stores its size and reports the grid span the page needs")
+report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["size"] == "full",
+	"and the size persists")
+report(raises(ValidationError_, tab_charts.set_size, "criterion_3", "overview", "q-open", "enormous"),
+	"an invented size is rejected -- the page cannot write arbitrary CSS through this")
+
+# --- the tab intro (#4) ------------------------------------------------------
+reset()
+report(tab_charts.get_tab("criterion_3", "overview")["intro"] == "",
+	"a tab has NO intro by default -- no forced default text")
+tab_charts.set_intro("criterion_3", "overview", "**Scope.** Agents only.")
+report(tab_charts.get_tab("criterion_3", "overview")["intro"] == "**Scope.** Agents only.",
+	"an intro is stored as written, markdown and all")
+report(tab_charts.get_tab("criterion_3", "3.1.1")["intro"] == "",
+	"and it is per tab, not per criterion")
+tab_charts.set_intro("criterion_3", "overview", "x" * (tab_charts.MAX_INTRO_LENGTH + 500))
+report(len(tab_charts.get_tab("criterion_3", "overview")["intro"]) == tab_charts.MAX_INTRO_LENGTH,
+	"an over-long intro is truncated, not stored whole")
+
+# --- the intro shares the chart record, it does not replace it ---------------
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+tab_charts.set_intro("criterion_3", "overview", "Notes.")
+both = tab_charts.get_tab("criterion_3", "overview")
+report(both["intro"] == "Notes." and [c["chart"] for c in both["charts"]] == ["q-open"],
+	"intro and charts live in ONE stored record -- writing one does not drop the other")
+report(len(State.defaults) == 1, "and it really is one key, not a second store alongside")
+
+# --- hidden management questions (#6) ---------------------------------------
+reset()
+report(tab_charts.get_tab("criterion_3", "overview")["questions"]["hidden"] == [],
+	"nothing is hidden by default, so every criterion that answers questions keeps doing so")
+tab_charts.set_question("criterion_3", "overview", "metric-7", False)
+report(tab_charts.get_tab("criterion_3", "overview")["questions"]["hidden"] == ["metric-7"],
+	"hiding a question stores WHICH question, and nothing else")
+tab_charts.set_question("criterion_3", "overview", "metric-7", False)
+report(tab_charts.get_tab("criterion_3", "overview")["questions"]["hidden"] == ["metric-7"],
+	"hiding it twice does not duplicate it")
+tab_charts.set_question("criterion_3", "overview", "metric-7", True)
+report(tab_charts.get_tab("criterion_3", "overview")["questions"]["hidden"] == [],
+	"showing it again removes it from the hidden list")
+report(tab_charts.get_tab("criterion_3", "3.1.1")["questions"]["hidden"] == [],
+	"hiding is per tab")
+report(raises(ValidationError_, tab_charts.set_question, "criterion_3", "overview", "", False),
+	"an empty question id is rejected")
+report(raises(ValidationError_, tab_charts.set_question, "criterion_3", "overview", "x" * 400, False),
+	"and an absurdly long one is too")
+
+# --- the table view shares the chart's ONE execute ---------------------------
+reset()
+State.rows = [{"status": "Open", "count": 3}, {"status": "Closed", "count": 5}]
+data = tab_charts.chart_data("q-open")
+report(data["columns"] == ["status", "count"], "the table gets the query's own columns")
+report(data["rows"] == State.rows, "and its own rows, unmodified")
+report([item["value"] for item in data["series"]] == [3, 5],
+	"the diagram series comes from those same rows")
+report(len(State.executed) == 1,
+	"ONE execute feeds both views -- the table cannot disagree with the bar")
+
+# --- the criterion gate covers the new endpoints too -------------------------
+reset()
+State.criteria["criterion_5"] = False
+for call in [
+	lambda: tab_charts.set_intro("criterion_5", "overview", "x"),
+	lambda: tab_charts.set_size("criterion_5", "overview", "q-open", "full"),
+	lambda: tab_charts.set_question("criterion_5", "overview", "m", False),
+]:
+	report(raises(PermissionError_, call), "a hidden criterion refuses the new write endpoints too")
 
 print(("PASS" if all(checks) else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
 sys.exit(0 if all(checks) else 1)

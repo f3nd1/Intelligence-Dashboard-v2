@@ -195,32 +195,18 @@ platform.dataset.liveFoundationReady="1";
 const CONFIG={"criterion_1":{"number":"1","title":"Leadership and Strategic Planning","description":"Live, permission-aware analytics foundation for leadership, governance and strategic planning. Source and metric availability is resolved from ERPNext permissions.","subcriteria":[["1.1.1","Leadership and Corporate Governance"],["1.2.1","Strategic Planning"]],"sections":{"overview":{"title":"Overview","charts":[]},"1.1":{"title":"Leadership and Corporate Governance","charts":[]},"1.2":{"title":"Strategic Planning","charts":[]},"1.1.1":{"title":"Leadership and Corporate Governance","charts":[]},"1.2.1":{"title":"Strategic Planning","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_1","defaultSection":"1.1.1","apiSections":{"overview":"1.1.1","1.1.1":"1.1.1","1.2.1":"1.2.1","quality":"1.1.1","sources":"1.1.1"},"panelMap":{"overview":"overview","1.1.1":"1.1.1","1.2.1":"1.2.1","sources":"sources","quality":"sources"},"filters":[["academic_year","Academic Year",["All Academic Years","2026","2025"]],["student_group","Module Class Details",["All Module Classes"]],["program","Course",["All Courses"]],{"key":"month","label":"Month","type":"month"}]},"criterion_2":{"number":"2","title":"Corporate Administration","description":"Live, permission-aware analytics foundation for human resources, communication, knowledge management and feedback. Unsupported fields are shown explicitly.","subcriteria":[["2.1.1","Staff Selection and Management"],["2.1.2","Staff Training and Development"],["2.2.1","Internal and External Communication"],["2.3.1","Data and Information Management"],["2.3.2","Knowledge Management"],["2.4.1","Feedback Management"],["2.4.2","Student Satisfaction Survey"],["2.4.3","Staff Satisfaction Survey"]],"sections":{"overview":{"title":"Overview","charts":[]},"2.1":{"title":"Human Resource","charts":[]},"2.2":{"title":"Communication","charts":[]},"2.3":{"title":"Data, Information and Knowledge Management","charts":[]},"2.4":{"title":"Feedback Management","charts":[]},"2.1.1":{"title":"Human Resource","charts":[]},"2.1.2":{"title":"Staff Training and Development","charts":[]},"2.2.1":{"title":"Communication","charts":[]},"2.3.1":{"title":"Data, Information and Knowledge Management","charts":[]},"2.3.2":{"title":"Knowledge Management","charts":[]},"2.4.1":{"title":"Feedback Management","charts":[]},"2.4.2":{"title":"Student Satisfaction Survey","charts":[]},"2.4.3":{"title":"Staff Satisfaction Survey","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_2","defaultSection":"2.1.1","apiSections":{"overview":"2.1.1","2.1.1":"2.1.1","2.1.2":"2.1.2","2.2.1":"2.2.1","2.3.1":"2.3.1","2.3.2":"2.3.2","2.4.1":"2.4.1","2.4.2":"2.4.2","2.4.3":"2.4.3","quality":"2.1.1","sources":"2.1.1"},"panelMap":{"overview":"overview","2.1.1":"2.1.1","2.1.2":"2.1.2","2.2.1":"2.2.1","2.3.1":"2.3.1","2.3.2":"2.3.2","2.4.1":"2.4.1","2.4.2":"2.4.2","2.4.3":"2.4.3","sources":"sources","quality":"sources"},"filters":[["academic_year","Academic Year",["All Academic Years","2026","2025"]],["student_group","Module Class Details",["All Module Classes"]],["program","Course",["All Courses"]],{"key":"month","label":"Month","type":"month"}]},"criterion_3":{"number":"3","title":"External Recruitment Agents","description":"Policy-aligned live analytics foundation for agent selection, appointment, onboarding, performance evaluation, renewal and offboarding. Unsupported fields are shown explicitly.","policy_set":[{"code":"PPD-SES-SL-3.1.1","version":"1.2","title":"Selection and Appointment of External Recruitment Agents","updated":"15 January 2026"},{"code":"PPD-SES-SL-3.2.1","version":"1.2","title":"Management and Evaluation of Recruitment Agents","updated":"15 January 2026"}],"subcriteria":[["3.1.1","Selection and Appointment"],["3.2.1","Management and Evaluation"]],"filters":[["review_year","Review Year",["All Review Years","2026","2025"]],["agent_status","Agent Status",["All Agent Statuses","Active","Pending","Inactive"]],["market","Market / Region",["All Markets","Southeast Asia","South Asia","Greater China","Other"]],["renewal_cycle","Renewal Cycle",["All Renewal Cycles","June","December"]]],"sections":{"overview":{"title":"Criterion 3 Overview","charts":[]},"3.1.1":{"title":"Selection and Appointment of External Recruitment Agents","charts":[]},"3.2.1":{"title":"Management and Evaluation of Recruitment Agents","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_3","defaultSection":"3.1.1","apiSections":{"overview":"3.1.1","3.1.1":"3.1.1","3.2.1":"3.2.1","quality":"3.1.1","sources":"3.1.1"},"panelMap":{"overview":"overview","3.1.1":"3.1.1","3.2.1":"3.2.1","sources":"sources","quality":"sources"}},"criterion_4":{"number":"4","title":"Student Protection and Support Services","description":"Live, permission-aware analytics for admissions, contracts, fees, student movement, refunds, student support, conduct and attendance.","subcriteria":[["4.1.1","Pre-Course Counselling, Selection and Admissions"],["4.2.1","Student Contract"],["4.2.2","Fee Collection and Fee Protection Scheme"],["4.3.1","Course Transfer, Deferment and Withdrawal"],["4.4.1","Refund"],["4.5.1","Student Support Services"],["4.6.1","Student Conduct and Attendance"]],"filters":[["academic_year","Academic Year",["All Academic Years"]],["program","Programme",["All Programmes"]],["intake","Intake",["All Intakes"]],["status","Status",["All Statuses"]],["nationality","Country / Nationality",["All Countries"]],["agent","Recruitment Agent",["All Agents"]]],"sections":{"overview":{"title":"Overview","charts":[]},"4.1.1":{"title":"Pre-Course Counselling, Selection and Admissions","charts":[]},"4.2.1":{"title":"Student Contract","charts":[]},"4.2.2":{"title":"Fee Collection and Fee Protection Scheme","charts":[]},"4.3.1":{"title":"Course Transfer, Deferment and Withdrawal","charts":[]},"4.4.1":{"title":"Refund","charts":[]},"4.5.1":{"title":"Student Support Services","charts":[]},"4.6.1":{"title":"Student Conduct and Attendance","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_4","defaultSection":"4.1.1","apiSections":{"overview":"4.1.1","4.1.1":"4.1.1","4.2.1":"4.2.1","4.2.2":"4.2.2","4.3.1":"4.3.1","4.4.1":"4.4.1","4.5.1":"4.5.1","4.6.1":"4.6.1","quality":"4.1.1","sources":"4.1.1"},"panelMap":{"overview":"overview","4.1.1":"4.1.1","4.2.1":"4.2.1","4.2.2":"4.2.2","4.3.1":"4.3.1","4.4.1":"4.4.1","4.5.1":"4.5.1","4.6.1":"4.6.1","sources":"sources","quality":"sources"}},"criterion_5":{"number":"5","title":"Academic Systems and Processes","description":"Live, permission-aware analytics for course design, review, planning, delivery, partnerships, student feedback, learning support and assessment.","subcriteria":[["5.1.1","Course Design and Development"],["5.1.2","Course Review"],["5.2.1","Course Planning"],["5.2.2","Course Delivery"],["5.3.1","Partnership Management"],["5.4","Student Feedback and Learning Support"],["5.5","Assessment"]],"sections":{"overview":{"title":"Overview","charts":[]},"5.1.1":{"title":"Course Design and Development","charts":[]},"5.1.2":{"title":"Course Review","charts":[]},"5.2.1":{"title":"Course Planning","charts":[]},"5.2.2":{"title":"Course Delivery","charts":[]},"5.3.1":{"title":"Partnerships","charts":[]},"5.4":{"title":"Student Feedback and Learning Support","charts":[]},"5.5":{"title":"Assessment","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_5","defaultSection":"5.1.1","apiSections":{"overview":"5.1.1","5.1.1":"5.1.1","5.1.2":"5.1.2","5.2.1":"5.2.1","5.2.2":"5.2.2","5.3.1":"5.3.1","5.4":"5.4","5.5":"5.5","quality":"5.1.1","sources":"5.1.1"},"panelMap":{"overview":"overview","5.1.1":"5.1.1","5.1.2":"5.1.2","5.2.1":"5.2.1","5.2.2":"5.2.2","5.3.1":"5.3.1","5.4":"5.4","5.5":"5.5","sources":"sources","quality":"sources"},"filters":[["year","Academic Year",["All Academic Years"]],["student_group","Module Class Details",["All Module Classes"]],["program","Course",["All Courses"]],["status","Status",["All Statuses"]]]},"criterion_6":{"number":"6","title":"Quality Assurance, Innovation and Continual Improvement","description":"Policy-aligned live analytics foundation for audits, management review, innovation, providers, risk and business continuity. Unsupported fields are shown explicitly.","policy_set":[{"code":"PPD-SGL-SQ-6.1.1","version":"1.2","title":"Internal Assessment and Quality Audits","updated":"15 January 2026"},{"code":"PPD-SGL-SQ-6.2.1","version":"1.3","title":"Management Review","updated":"10 April 2026"},{"code":"PPD-SGL-SQ-6.3.1","version":"1.2","title":"Innovation and Continual Improvement","updated":"15 January 2026"},{"code":"PPD-OE-FN-6.4.1","version":"1.2","title":"Provider's Accreditation and Evaluation","updated":"15 January 2026"},{"code":"PPD-SGL-SQ-6.5.3","version":"1.2","title":"Hazard Identification and Risk Assessment","updated":"15 January 2026"}],"subcriteria":[["6.1.1","Internal Assessment and Quality Audits"],["6.2.1","Management Review"],["6.3.1","Innovation and Continual Improvement"],["6.4.1","Provider Accreditation and Evaluation"],["6.5.3","Hazard Identification and Risk Assessment"]],"filters":[["review_year","Review Year",["All Review Years","2026","2025"]],["department","Department",["All Departments","SGL / SQ","Academic","Student Services","Finance"]],["quality_area","Quality Area",["All Quality Areas","Audit","Management Review","Innovation","Providers","Risk"]],["month","Month",["All Months","January 2026","April 2026","July 2026","December 2026"]]],"sections":{"overview":{"title":"Criterion 6 Overview","charts":[]},"6.1.1":{"title":"Internal Assessment and Quality Audits","charts":[]},"6.2.1":{"title":"Management Review","charts":[]},"6.3.1":{"title":"Innovation and Continual Improvement","charts":[]},"6.4.1":{"title":"Provider's Accreditation and Evaluation","charts":[]},"6.5.3":{"title":"Hazard Identification and Risk Assessment","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_6","defaultSection":"6.1.1","apiSections":{"overview":"6.1.1","6.1.1":"6.1.1","6.2.1":"6.2.1","6.3.1":"6.3.1","6.4.1":"6.4.1","6.5.3":"6.5.3","quality":"6.1.1","sources":"6.1.1"},"panelMap":{"overview":"overview","6.1.1":"6.1.1","6.2.1":"6.2.1","6.3.1":"6.3.1","6.4.1":"6.4.1","6.5.3":"6.5.3","sources":"sources","quality":"sources"}},"criterion_7":{"number":"7","title":"Performance Outcomes","description":"Live, permission-aware analytics foundation for outcome measurement, target achievement and stakeholder performance. Unsupported fields are shown explicitly.","subcriteria":[["7.1.1","Measurement of Outcomes"]],"sections":{"overview":{"title":"Overview","charts":[]},"7.1":{"title":"Measurement of Outcomes","charts":[]},"7.1.1":{"title":"Measurement of Outcomes","charts":[]},"sources":{"title":"Sources and Data Quality","charts":[]},"quality":{"title":"Sources and Data Quality","charts":[]}},"apiMethod":"ucc_intelligence.api.get_criterion_7","defaultSection":"7.1.1","apiSections":{"overview":"7.1.1","7.1.1":"7.1.1","quality":"7.1.1","sources":"7.1.1"},"panelMap":{"overview":"overview","7.1.1":"7.1.1","sources":"sources","quality":"sources"},"filters":[["academic_year","Academic Year",["All Academic Years","2026","2025"]],["student_group","Module Class Details",["All Module Classes"]],["program","Course",["All Courses"]],{"key":"month","label":"Month","type":"month"}]}};
 function esc(value){return String(value==null?"":value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");}
 
-function normaliseFilterDefinition(raw){
-if(Array.isArray(raw))return{key:raw[0],label:raw[1],options:Array.isArray(raw[2])?raw[2]:[],type:raw[0]==="month"?"month":"select"};
-return{key:raw?.key||"filter",label:raw?.label||raw?.key||"Filter",options:Array.isArray(raw?.options)?raw.options:[],type:raw?.type||"text",placeholder:raw?.placeholder||""};
-}
-function filterMarkup(raw,index,criterionId){
-const filter=normaliseFilterDefinition(raw),id=`ucc-${criterionId}-${filter.key}-${index}`;
-if(filter.type==="month")return`<div><label for="${esc(id)}">${esc(filter.label)}</label><input id="${esc(id)}" data-demo-filter="${esc(filter.key)}" type="month"></div>`;
-if(filter.type==="select"&&filter.options.length){
-const options=filter.options.map((option,optionIndex)=>{const label=Array.isArray(option)?option[1]:option;const value=Array.isArray(option)?option[0]:(optionIndex===0?"":option);return`<option value="${esc(value)}">${esc(label)}</option>`;}).join("");
-return`<div><label for="${esc(id)}">${esc(filter.label)}</label><select id="${esc(id)}" data-demo-filter="${esc(filter.key)}">${options}</select></div>`;
-}
-return`<div><label for="${esc(id)}">${esc(filter.label)}</label><input id="${esc(id)}" data-demo-filter="${esc(filter.key)}" type="text" placeholder="${esc(filter.placeholder||`All ${filter.label}`)}"></div>`;
-}
 function analyticsPanelMarkup(criterionId,key,title){
-const isOverview=key==="overview",code=isOverview?"OVERVIEW":key;
-return`<section class="panel-view${isOverview?"":" hidden"}" data-demo-panel="${esc(key)}"><div class="section-heading"><div><div class="section-code">${esc(code)}</div><h2>${esc(title)}</h2><p>Permission-aware live evidence, visual analysis and management questions.</p></div></div><div class="ucc-section-visual-anchor" data-live-anchor="${esc(key)}"></div><article class="panel ucc-shared-panel ucc-management-panel"><div class="panel-head"><h2>Management Questions and Data-Based Answers</h2></div><div class="table-wrap"><table class="qa-table"><thead><tr><th>Criterion</th><th>Question</th><th>Answer</th><th>Source / Calculation</th><th>Status</th></tr></thead><tbody data-demo-qa="${esc(criterionId+":"+key)}"></tbody></table></div></article></section>`;
+const isOverview=key==="overview";
+return`<section class="panel-view${isOverview?"":" hidden"}" data-demo-panel="${esc(key)}"><div class="ucc-tab-intro" data-tab-intro="${esc(key)}"></div><div class="ucc-section-visual-anchor" data-live-anchor="${esc(key)}"></div><article class="panel ucc-shared-panel ucc-management-panel"><div class="panel-head"><h2>Management Questions and Data-Based Answers</h2></div><div class="table-wrap"><table class="qa-table"><thead><tr><th>Criterion</th><th>Question</th><th>Answer</th><th>Source / Calculation</th><th>Status</th></tr></thead><tbody data-demo-qa="${esc(criterionId+":"+key)}"></tbody></table></div></article></section>`;
 }
 function sourcesQualityPanelMarkup(criterionId){
 return`<section class="panel-view hidden ucc-sources-quality-panel" data-demo-panel="sources"><div class="ucc-sources-quality-grid"><article class="panel ucc-shared-panel"><div class="panel-head"><div><h2>Source Availability</h2><p class="panel-subtitle">Resolved against the signed-in user's permissions.</p></div></div><div class="table-wrap"><table><thead><tr><th>Resolved DocType</th><th>Source key</th><th>Status</th><th>Records</th></tr></thead><tbody data-demo-sources="${esc(criterionId)}"></tbody></table></div></article><article class="panel ucc-shared-panel"><div class="panel-head"><div><h2>Data Quality Checks</h2><p class="panel-subtitle">Unavailable sources, permissions and unsupported fields are shown explicitly.</p></div></div><div class="table-wrap"><table><thead><tr><th>Check</th><th>Source</th><th>Status</th><th>Detail</th></tr></thead><tbody data-demo-quality="${esc(criterionId)}"></tbody></table></div></article></div></section>`;
 }
 function dashboardShellMarkup(criterionId,config){
-const filters=(config.filters||[]).map((filter,index)=>filterMarkup(filter,index,criterionId)).join("");
 const tabs=[['overview','Overview']].concat(config.subcriteria||[]).concat([['sources','Sources & Data Quality']]);
 const tabMarkup=tabs.map((item,index)=>`<button type="button" class="${index===0?"active":""}" data-demo-tab="${esc(item[0])}">${esc(item[0]==="overview"||item[0]==="sources"?item[1]:item[0]+" "+item[1])}</button>`).join("");
 const panels=[analyticsPanelMarkup(criterionId,'overview',config.sections?.overview?.title||'Overview')].concat((config.subcriteria||[]).map(item=>analyticsPanelMarkup(criterionId,item[0],item[1]))).join("")+sourcesQualityPanelMarkup(criterionId);
-return`<div class="ucc-unified-dashboard"><div class="loading-overlay hidden" data-demo-loading-overlay><div class="loading-card"><div class="spinner"></div><strong data-demo-loading-title>Loading Criterion ${esc(config.number)}</strong><div class="progress-track"><div class="progress-fill" data-demo-progress-fill></div></div><div class="progress-text"><span data-demo-progress-value>0%</span> · <span>Permission-aware sources</span></div></div></div><header class="hero ucc-shared-hero ucc-standard-criterion-hero"><div class="hero-copy"><span class="ucc-criterion-kicker">EDUTRUST CRITERION ${esc(config.number)}</span><h1>Criterion ${esc(config.number)} · ${esc(config.title)}</h1><p>${esc(config.description)}</p></div><div class="hero-action-card ucc-shared-action-card ucc-standard-hero-actions" aria-label="Criterion ${esc(config.number)} analytics actions"><button type="button" class="primary-btn" data-demo-action="refresh">Refresh</button><button type="button" data-demo-action="export-qa">Export Q&amp;A CSV</button><button type="button" data-demo-action="export-exceptions">Export Exceptions CSV</button><button type="button" data-demo-action="diagnostics">Diagnostics Log (<span data-demo-log-count>0</span>)</button></div></header><div class="sticky-navigation"><section class="controls ucc-shared-controls"><div class="control-grid">${filters}</div></section><nav class="tabs ucc-shared-tabs" data-demo-tabs aria-label="Criterion ${esc(config.number)} sections">${tabMarkup}</nav></div><div class="ucc-criterion-notice ucc-readiness-strip" data-demo-readiness data-status="loading"><div class="ucc-criterion-notice-copy"><strong data-demo-readiness-title>Loading Criterion ${esc(config.number)} analytics…</strong><span data-demo-readiness-copy>Current-user permissions and live sources are being checked.</span></div><div class="ucc-readiness-actions"><button type="button" class="ucc-readiness-detail" data-demo-action="readiness">View readiness</button><button type="button" class="ucc-notice-dismiss" data-demo-action="dismiss-readiness" aria-label="Dismiss Criterion ${esc(config.number)} readiness notification" title="Dismiss">×</button></div></div><section class="kpis ucc-shared-kpis" data-demo-kpis></section><div class="ucc-unified-panel-stack">${panels}</div></div>`;
+return`<div class="ucc-unified-dashboard"><div class="loading-overlay hidden" data-demo-loading-overlay><div class="loading-card"><div class="spinner"></div><strong data-demo-loading-title>Loading Criterion ${esc(config.number)}</strong><div class="progress-track"><div class="progress-fill" data-demo-progress-fill></div></div><div class="progress-text"><span data-demo-progress-value>0%</span> · <span>Permission-aware sources</span></div></div></div><header class="hero ucc-shared-hero ucc-standard-criterion-hero"><div class="hero-copy"><span class="ucc-criterion-kicker">EDUTRUST CRITERION ${esc(config.number)}</span><h1>Criterion ${esc(config.number)} · ${esc(config.title)}</h1><p>${esc(config.description)}</p></div><div class="hero-action-card ucc-shared-action-card ucc-standard-hero-actions" aria-label="Criterion ${esc(config.number)} analytics actions"><button type="button" class="primary-btn" data-demo-action="refresh">Refresh</button><button type="button" data-demo-action="export-qa">Export Q&amp;A CSV</button><button type="button" data-demo-action="export-exceptions">Export Exceptions CSV</button><button type="button" data-demo-action="diagnostics">Diagnostics Log (<span data-demo-log-count>0</span>)</button></div></header><div class="sticky-navigation"><nav class="tabs ucc-shared-tabs" data-demo-tabs aria-label="Criterion ${esc(config.number)} sections">${tabMarkup}</nav></div><div class="ucc-criterion-notice ucc-readiness-strip" data-demo-readiness data-status="loading" hidden><div class="ucc-criterion-notice-copy"><strong data-demo-readiness-title></strong><span data-demo-readiness-copy></span></div></div><div class="ucc-unified-panel-stack">${panels}</div></div>`;
 }
 function mountUnifiedDashboards(){
 platform.querySelectorAll('[data-dashboard-panel]').forEach(function(dashboard){
@@ -274,32 +260,45 @@ function download(name,content,type="text/csv;charset=utf-8"){const blob=new Blo
 function statusBadge(status){const raw=String(status||"available"),label=raw.replaceAll("_"," ");const cls=/risk|error|denied|unavailable|failed/i.test(raw)?"risk":/warn|unsupported|partial|pending|overdue/i.test(raw)?"warning":"good";const tip=/denied|not permitted/i.test(raw)?' title="Your account does not have read access to this. Ask an administrator to grant access if you need to see this."':"";return`<span class="ucc-demo-status ${cls}"${tip}>${esc(label)}</span>`;}
 function activeSection(dashboard){return dashboard.dataset.demoActiveTab||"overview";}
 // ---------------------------------------------------------------------------
-// PER-TAB INSIGHTS CHARTS -- the area, and where it goes
+// PER-TAB INSIGHTS CHARTS, TAB INTRO, AND THE QUESTION SELECTION
 //
 // A tab starts with NO charts and one "+ Add chart" button. Whatever a person
-// adds is theirs, on that tab, and is stored server-side (see
-// analytics/tab_charts.py -- frappe.defaults, per user).
+// adds is theirs, on that tab, at the size they chose, and is stored
+// server-side (analytics/tab_charts.py -- frappe.defaults, per user). The same
+// record holds the tab's intro text and which management questions it hides,
+// because they are all "what this tab looks like to me".
 //
 // This replaced 222 fixed chart boxes declared in this file: 16 had a real
-// Insights query behind them, 206 were blank. Boxes nobody chose, mostly
-// showing nothing. Nothing is declared here now, so nothing can be declared
-// and then not exist.
+// Insights query behind them, 206 were blank. Nothing is declared here now, so
+// nothing can be declared and then not exist.
+//
+// It also replaced three things that pre-dated the move to Insights and could
+// not survive it:
+//   - the page-level filter bar. An embedded chart is a live view of a SAVED
+//     Insights query; this page cannot re-filter it. A filtered view is a
+//     second Insights chart, built in Insights and added here like any other.
+//   - the "Criterion N live analytics active · X of X sources" readiness strip
+//   - the KPI number cards
+// All three read the criterion engine's own catalogue, which no longer answers
+// anything on screen.
 // ---------------------------------------------------------------------------
 const tabChartState={};
 
 function tabChartKey(criterionId,tab){return criterionId+"::"+tab;}
+function tabConfig(dashboard,tab){
+return tabChartState[tabChartKey(dashboard.dataset.demoDashboard,tab)]||null;
+}
 
 function tabChartAreaMarkup(tab){
 return`<section class="ucc-tab-charts" data-tab-charts="${esc(tab)}">`
 +`<div class="ucc-tab-charts-head"><h2>Charts</h2>`
 +`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button></div>`
-+`<div class="ucc-live-expanded-grid ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
++`<div class="ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
 }
 
 // analyticsPanelMarkup() already emits an empty [data-live-anchor] between the
-// section heading and the Management Questions panel. Mounting there puts the
-// charts above the tables without this function needing to know anything about
-// the tables -- which is also why the Q&A markup is untouched by any of this.
+// tab intro and the Management Questions panel. Mounting there puts the charts
+// between the two without this function needing to know about either.
 function ensureTabChartArea(dashboard,config,tab){
 const panelKey=(config.panelMap&&config.panelMap[tab])||tab;
 if(panelKey==="quality"||panelKey==="sources")return null;
@@ -336,12 +335,11 @@ const STATE=new Map();
 const SAFE_COMPLEX_TYPES=new Set(["donut","funnel","trend"]);
 function dashboardState(dashboard){if(!STATE.has(dashboard))STATE.set(dashboard,{loading:false,result:null,error:null,logs:[],lastSection:""});return STATE.get(dashboard);}
 function logEvent(dashboard,level,event,detail){const state=dashboardState(dashboard);state.logs.push({time:new Date().toISOString(),level,event,detail:String(detail||"")});if(state.logs.length>500)state.logs.shift();const count=dashboard.querySelector("[data-demo-log-count]");if(count)count.textContent=String(state.logs.length);}
-function selectedFilterObject(dashboard){const output={};dashboard.querySelectorAll("[data-demo-filter]").forEach(input=>{if(input.value)output[input.dataset.demoFilter]=input.value;});return output;}
 function apiSection(config,dashboard,tab){const state=dashboardState(dashboard);if(tab==="quality"||tab==="sources")return state.lastSection||config.defaultSection;const mapped=config.apiSections&&config.apiSections[tab];if(mapped&&tab!=="overview")state.lastSection=mapped;return mapped||state.lastSection||config.defaultSection;}
 function callApi(config,dashboard,action="summary",extra={}){
 return new Promise((resolve,reject)=>{
 if(!(window.frappe&&frappe.call)){reject(new Error("Frappe API client is unavailable."));return;}
-const payload={action,subcriterion:apiSection(config,dashboard,activeSection(dashboard)),filters:selectedFilterObject(dashboard),page_size:100};
+const payload={action,subcriterion:apiSection(config,dashboard,activeSection(dashboard)),filters:{},page_size:100};
 Object.keys(extra||{}).forEach(key=>payload[key]=extra[key]);
 logEvent(dashboard,"INFO","api_request",`${config.apiMethod} · ${payload.subcriterion} · ${action}`);
 frappe.call({
@@ -404,7 +402,7 @@ record_count:count
 return base;
 }
 // ---------------------------------------------------------------------------
-// PER-TAB INSIGHTS CHARTS -- loading, rendering, picking, removing
+// PER-TAB CHARTS -- loading, rendering, sizing, picking, removing
 //
 // Every chart here is a real Frappe Insights Query v3, executed server-side
 // with check_permission("read") -- the mechanism proved on the bench for the
@@ -420,20 +418,35 @@ function tabChartNotice(message){
 return'<div class="ucc-tab-charts-notice">'+esc(message)+"</div>";
 }
 
-function embeddedChartMarkup(chart){
-return`<article class="panel ucc-shared-panel ucc-live-generated-card ucc-embedded-chart" data-embedded-chart="${esc(chart.chart)}">`
-+`<div class="panel-head ucc-card-header"><div class="ucc-card-heading-copy"><h2>${esc(chart.title)}</h2>`
-+`<p class="ucc-card-description">Live from Frappe Insights.</p></div>`
+// ONE execute per chart feeds BOTH views, so the number in the table is by
+// construction the number in the bar. See tab_charts.chart_data().
+function embeddedChartMarkup(chart,sizes){
+const options=(sizes||["small","medium","large","full"]).map(function(size){
+return'<option value="'+esc(size)+'"'+(size===chart.size?" selected":"")+">"
++esc(size.charAt(0).toUpperCase()+size.slice(1))+"</option>";
+}).join("");
+return`<article class="ucc-embedded-chart" data-embedded-chart="${esc(chart.chart)}" `
++`data-demo-card="${esc(chart.chart)}" style="grid-column:span ${Number(chart.span)||6}">`
++`<div class="ucc-embedded-chart-head"><h3>${esc(chart.title)}</h3>`
++`<div class="ucc-embedded-chart-tools">`
++`<div class="ucc-embedded-views" role="group" aria-label="View">`
++`<button type="button" data-demo-view="diagram" class="is-active" aria-pressed="true">Diagram</button>`
++`<button type="button" data-demo-view="table" aria-pressed="false">Table</button></div>`
++`<select class="ucc-embedded-size" data-chart-size="${esc(chart.chart)}" `
++`aria-label="Size of ${esc(chart.title)}">${options}</select>`
 +`<button type="button" class="ucc-remove-chart" data-remove-chart="${esc(chart.chart)}" `
-+`title="Remove this chart from the tab" aria-label="Remove ${esc(chart.title)} from this tab">&times;</button></div>`
-+`<div class="ucc-embedded-chart-body" data-embedded-chart-body>${tabChartNotice("Loading…")}</div></article>`;
++`title="Remove this chart from the tab" aria-label="Remove ${esc(chart.title)} from this tab">&times;</button>`
++`</div></div>`
++`<div class="ucc-embedded-chart-body" data-demo-chart="${esc(chart.chart)}" data-embedded-chart-body>`
++tabChartNotice("Loading…")+"</div>"
++`<div class="ucc-embedded-chart-table hidden" data-embedded-chart-table></div></article>`;
 }
 
 function renderTabCharts(dashboard,config,tab){
 const area=ensureTabChartArea(dashboard,config,tab);
 if(!area)return;
 const grid=area.querySelector("[data-tab-charts-grid]");
-const state=tabChartState[tabChartKey(dashboard.dataset.demoDashboard,tab)];
+const state=tabConfig(dashboard,tab);
 if(!state){grid.innerHTML=tabChartNotice("Loading your charts…");loadTabCharts(dashboard,config,tab);return;}
 if(state.loading){grid.innerHTML=tabChartNotice("Loading your charts…");return;}
 if(state.error){grid.innerHTML=tabChartNotice(state.error);return;}
@@ -441,36 +454,42 @@ if(!state.charts.length){
 grid.innerHTML=tabChartNotice("No charts on this tab yet. Use “+ Add chart” to embed one from Frappe Insights.");
 return;
 }
-grid.innerHTML=state.charts.map(embeddedChartMarkup).join("");
+grid.innerHTML=state.charts.map(function(chart){return embeddedChartMarkup(chart,state.sizes);}).join("");
 state.charts.forEach(function(chart){paintEmbeddedChart(grid,chart);});
 }
 
-function setTabCharts(dashboard,config,tab,response){
+function applyTabConfig(dashboard,config,tab,response){
 tabChartState[tabChartKey(dashboard.dataset.demoDashboard,tab)]={
-charts:(response&&response.charts)||[],loading:false,error:null};
+charts:(response&&response.charts)||[],
+intro:(response&&response.intro)||"",
+hiddenQuestions:((response&&response.questions)||{}).hidden||[],
+sizes:(response&&response.sizes)||["small","medium","large","full"],
+loading:false,error:null};
 renderTabCharts(dashboard,config,tab);
+renderTabIntro(dashboard,config,tab);
+renderQa(dashboard,dashboardState(dashboard).result,tab);
+syncExploreCatalogue();
 }
 
 function loadTabCharts(dashboard,config,tab){
 const key=tabChartKey(dashboard.dataset.demoDashboard,tab);
 if(tabChartState[key])return;
 if(!(window.frappe&&frappe.call)){
-tabChartState[key]={charts:[],loading:false,error:"Frappe API client unavailable."};return;}
-tabChartState[key]={charts:[],loading:true,error:null};
+tabChartState[key]={charts:[],intro:"",hiddenQuestions:[],loading:false,error:"Frappe API client unavailable."};return;}
+tabChartState[key]={charts:[],intro:"",hiddenQuestions:[],loading:true,error:null};
 frappe.call({
 method:"ucc_intelligence.api.get_tab_charts",
 args:{criterion:dashboard.dataset.demoDashboard,tab:tab},
-callback(response){setTabCharts(dashboard,config,tab,(response&&response.message)||{});},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
 error(error){
-tabChartState[key]={charts:[],loading:false,error:apiErrorMessage(error)};
+tabChartState[key]={charts:[],intro:"",hiddenQuestions:[],loading:false,error:apiErrorMessage(error)};
 renderTabCharts(dashboard,config,tab);
 },
 });
 }
 
 // One embedded chart. A failure is SHOWN as a failure -- there is no second
-// data source to quietly fall back to, and pretending otherwise is what made
-// the old chart boxes unreadable.
+// data source to quietly fall back to.
 function paintEmbeddedChart(grid,chart){
 const card=grid.querySelector(`[data-embedded-chart="${CSS.escape(chart.chart)}"]`);
 const body=card&&card.querySelector("[data-embedded-chart-body]");
@@ -481,7 +500,12 @@ method:"ucc_intelligence.api.get_tab_chart_data",
 args:{chart:chart.chart},
 callback(response){
 const data=(response&&response.message)||{};
-if(data.status==="available"&&(data.series||[]).length){paintChartSeries(body,data.series);return;}
+card._chartData=data;
+if(data.status==="available"&&(data.series||[]).length){
+paintChartSeries(body,data.series);
+renderChartTable(card,null);
+return;
+}
 // Worth saying out loud: the chart exists and this user may not read it.
 // That is not the same as the query returning nothing.
 if(data.status==="permission_denied"){
@@ -497,17 +521,187 @@ error(error){body.innerHTML=tabChartNotice(apiErrorMessage(error));},
 
 // ONE renderer, a horizontal bar list, for every embedded chart. Deliberately
 // one shape: an Insights query returns label/value rows, and inventing a radar
-// or a funnel from two columns is decoration, not information. A chart that
-// genuinely needs a different shape should say so in its Insights definition.
+// or a funnel from two columns is decoration, not information.
+//
+// Each bar carries its own label so the Table view can be filtered to it --
+// see selectChartSegment().
 function paintChartSeries(node,series){
 const max=Math.max.apply(null,series.map(row=>Number(row.value)||0).concat([1]));
 node.innerHTML='<div class="ucc-insights-series">'+series.map(row=>{
 const value=Number(row.value)||0;
 const width=Math.max(1,Math.round((value/max)*100));
-return'<div class="ucc-insights-bar"><span class="ucc-insights-bar-label">'+esc(row.label)+"</span>"
+return'<button type="button" class="ucc-insights-bar" data-chart-segment="'+esc(row.label)+'" '
++'title="Show the rows behind '+esc(row.label)+'">'
++'<span class="ucc-insights-bar-label">'+esc(row.label)+"</span>"
 +'<span class="ucc-insights-bar-track"><span class="ucc-insights-bar-fill" style="width:'+width+'%"></span></span>'
-+'<span class="ucc-insights-bar-value">'+esc(value.toLocaleString())+"</span></div>";
++'<span class="ucc-insights-bar-value">'+esc(value.toLocaleString())+"</span></button>";
 }).join("")+"</div>";
+}
+
+// --- Table view and drill-down ---------------------------------------------
+// The table is the query's OWN result rows, from the same single execute() the
+// diagram used. Nothing is recomputed here.
+//
+// WHAT DRILL-DOWN CAN AND CANNOT DO TODAY, stated plainly rather than
+// implied: an Insights Query v3's execute() returns the SUMMARISED rows -- one
+// row per dimension value, with its measure. Clicking "Consultative" filters
+// this table to the Consultative row. It does NOT yet expand to the 40
+// underlying records, because that needs a second query against the source
+// table and no Insights API for it has been confirmed on this bench.
+// docs/migration/scripts/probe_insights_drilldown.py is the probe that settles
+// it; until it has been run, building a source-table query here would be
+// exactly the "write it from memory instead of copying what was proven"
+// mistake that produced 13 TableNotFound errors earlier in this migration.
+function renderChartTable(card,segment){
+const table=card.querySelector("[data-embedded-chart-table]");
+const data=card._chartData;
+if(!table)return;
+if(!data||data.status!=="available"||!(data.rows||[]).length){
+table.innerHTML=tabChartNotice((data&&data.message)||"No rows to show.");
+return;
+}
+const columns=data.columns||[];
+const rows=segment
+?data.rows.filter(function(row){
+return columns.some(function(column){return String(row[column])===String(segment);});
+})
+:data.rows;
+table.innerHTML=(segment
+?'<div class="ucc-embedded-chart-filter">Showing rows for <strong>'+esc(segment)+"</strong>"
++'<button type="button" data-clear-segment>Clear</button></div>'
+:"")
++'<div class="table-wrap"><table><thead><tr>'
++columns.map(function(column){return"<th>"+esc(humaniseColumn(column))+"</th>";}).join("")
++"</tr></thead><tbody>"
++(rows.length?rows.map(function(row){
+return"<tr>"+columns.map(function(column){
+const value=row[column];
+return"<td>"+esc(value==null||value===""?"—":value)+"</td>";
+}).join("")+"</tr>";
+}).join(""):'<tr><td colspan="'+columns.length+'">No rows matched.</td></tr>')
++"</tbody></table></div>";
+}
+
+function humaniseColumn(key){
+return String(key).replace(/_/g," ").replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+
+// Clicking a bar switches the card to Table view already filtered to it, which
+// is what "drill down" means to the person clicking.
+function selectChartSegment(card,segment){
+setChartView(card,"table");
+renderChartTable(card,segment);
+}
+
+function setChartView(card,view){
+const body=card.querySelector("[data-embedded-chart-body]");
+const table=card.querySelector("[data-embedded-chart-table]");
+if(body)body.classList.toggle("hidden",view==="table");
+if(table)table.classList.toggle("hidden",view!=="table");
+card.querySelectorAll("[data-demo-view]").forEach(function(button){
+const active=button.dataset.demoView===view;
+button.classList.toggle("is-active",active);
+button.setAttribute("aria-pressed",active?"true":"false");
+});
+}
+
+// --- the tab intro (#4) -----------------------------------------------------
+// Replaces the hard-coded "OVERVIEW / Permission-aware live evidence, visual
+// analysis and management questions" every tab used to carry. Empty by
+// default: a tab with nothing to say says nothing.
+function renderIntroMarkdown(text){
+// A deliberately small Markdown subset, applied AFTER escaping, so this can
+// never become an HTML injection point however the text was stored. Link
+// hrefs are restricted to http(s) for the same reason.
+let html=esc(text);
+html=html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+'<a href="$2" target="_blank" rel="noopener">$1</a>');
+html=html.replace(/\*\*([^*\n]+)\*\*/g,"<strong>$1</strong>");
+html=html.replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<em>$2</em>");
+html=html.replace(/`([^`\n]+)`/g,"<code>$1</code>");
+const lines=html.split("\n");
+const out=[];
+let list=null;
+lines.forEach(function(line){
+const bullet=/^\s*[-*]\s+(.*)$/.exec(line);
+if(bullet){
+if(!list){list=[];}
+list.push("<li>"+bullet[1]+"</li>");
+return;
+}
+if(list){out.push("<ul>"+list.join("")+"</ul>");list=null;}
+if(line.trim())out.push("<p>"+line+"</p>");
+});
+if(list)out.push("<ul>"+list.join("")+"</ul>");
+return out.join("");
+}
+
+function renderTabIntro(dashboard,config,tab){
+const panelKey=(config.panelMap&&config.panelMap[tab])||tab;
+const mount=dashboard.querySelector(`[data-tab-intro="${CSS.escape(panelKey)}"]`);
+if(!mount)return;
+const state=tabConfig(dashboard,tab);
+const text=(state&&state.intro)||"";
+if(mount.dataset.editing==="1")return;
+mount.innerHTML=(text
+?'<div class="ucc-tab-intro-text">'+renderIntroMarkdown(text)+"</div>"
+:'<p class="ucc-tab-intro-empty">No introduction for this tab yet.</p>')
++'<button type="button" class="ucc-tab-intro-edit" data-edit-intro="'+esc(tab)+'">'
++(text?"Edit intro":"Add an introduction")+"</button>";
+}
+
+function openIntroEditor(dashboard,config,tab){
+const panelKey=(config.panelMap&&config.panelMap[tab])||tab;
+const mount=dashboard.querySelector(`[data-tab-intro="${CSS.escape(panelKey)}"]`);
+if(!mount)return;
+const state=tabConfig(dashboard,tab);
+mount.dataset.editing="1";
+mount.innerHTML='<label class="ucc-tab-intro-editor"><span class="ucc-visually-hidden">Tab introduction</span>'
++'<textarea data-intro-text rows="4" placeholder="Introduce this tab. **bold**, *italic*, `code`, [links](https://…) and - bullets work.">'
++esc((state&&state.intro)||"")+"</textarea></label>"
++'<div class="ucc-tab-intro-actions">'
++'<button type="button" class="ucc-intro-save" data-save-intro="'+esc(tab)+'">Save</button>'
++'<button type="button" class="ucc-intro-cancel" data-cancel-intro="'+esc(tab)+'">Cancel</button></div>';
+const box=mount.querySelector("[data-intro-text]");
+if(box)box.focus();
+}
+
+function saveTabIntro(dashboard,config,tab){
+const panelKey=(config.panelMap&&config.panelMap[tab])||tab;
+const mount=dashboard.querySelector(`[data-tab-intro="${CSS.escape(panelKey)}"]`);
+const box=mount&&mount.querySelector("[data-intro-text]");
+if(!box||!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_intro",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,intro:box.value},
+callback(response){
+mount.dataset.editing="";
+applyTabConfig(dashboard,config,tab,(response&&response.message)||{});
+},
+error(error){logEvent(dashboard,"ERROR","tab_intro_save_failed",apiErrorMessage(error));},
+});
+}
+
+// --- Explore auto-population (#7) -------------------------------------------
+// Explore already reads window.UCCLiveVisualDefinitions and already exposes
+// UCCExplore.rebuild(). Publishing the added charts into that global is the
+// whole feature: Explore becomes a live catalogue of what people have
+// embedded, with no separate list to maintain and no change to the ported
+// Explore code at all.
+function syncExploreCatalogue(){
+const catalogue={};
+Object.keys(tabChartState).forEach(function(key){
+const parts=key.split("::");
+const state=tabChartState[key];
+if(!state||!state.charts||!state.charts.length)return;
+catalogue[parts[0]]=catalogue[parts[0]]||{};
+catalogue[parts[0]][parts[1]]=state.charts.map(function(chart){
+return{id:chart.chart,title:chart.title,type:"insights",
+description:"Embedded Frappe Insights chart"};
+});
+});
+window.UCCLiveVisualDefinitions=catalogue;
+if(window.UCCExplore&&window.UCCExplore.rebuild)window.UCCExplore.rebuild();
 }
 
 // The picker. A search box over Insights queries THIS user can read, and one
@@ -555,7 +749,7 @@ frappe.call({
 method:"ucc_intelligence.api.add_tab_chart",
 args:{criterion:dashboard.dataset.demoDashboard,tab:tab,chart:pick.dataset.pickChart},
 callback(response){
-setTabCharts(dashboard,config,tab,(response&&response.message)||{});
+applyTabConfig(dashboard,config,tab,(response&&response.message)||{});
 modal.hidden=true;
 },
 error(error){pick.disabled=false;results.innerHTML=tabChartNotice(apiErrorMessage(error));},
@@ -572,7 +766,7 @@ if(!(window.frappe&&frappe.call))return;
 frappe.call({
 method:"ucc_intelligence.api.remove_tab_chart",
 args:{criterion:dashboard.dataset.demoDashboard,tab:tab,chart:chart},
-callback(response){setTabCharts(dashboard,config,tab,(response&&response.message)||{});},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
 error(error){logEvent(dashboard,"ERROR","tab_chart_remove_failed",apiErrorMessage(error));},
 });
 }
@@ -586,40 +780,102 @@ style.textContent=`
 .ucc-tab-charts{margin:0 0 18px}
 .ucc-tab-charts-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
 .ucc-tab-charts-head h2{margin:0;font-size:15px}
-.ucc-add-chart{border:1px solid var(--border-color,#d1d8dd);background:var(--fg-color,#fff);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
-.ucc-add-chart:hover{background:var(--bg-light-gray,#f4f5f6)}
-.ucc-tab-charts-notice{padding:14px 2px;font-size:12px;color:var(--text-muted,#8d99a6)}
-.ucc-embedded-chart .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.ucc-remove-chart{border:0;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:var(--text-muted,#8d99a6);padding:0 2px}
-.ucc-remove-chart:hover{color:var(--text-color,#1f272e)}
+.ucc-add-chart{border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:36px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}
+.ucc-add-chart:hover{background:#F1F5F9}
+.ucc-tab-charts-notice{padding:14px 2px;font-size:12px;color:#64748B}
+/* Twelve columns, so a card can be a quarter, a half, three quarters or the
+   full width. The legacy .ucc-live-expanded-grid is a hard 2-column
+   !important rule and .ucc-live-generated-card forces min-height:500px, which
+   is why neither is reused here -- a "Small" card that is still half the row
+   and 500px tall is not a size. */
+.ucc-tab-charts-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start}
+.ucc-embedded-chart{grid-column:span 6;min-width:0;background:#fff;border:1px solid #D8E0EC;border-radius:10px;padding:12px 14px}
+.ucc-embedded-chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ucc-embedded-chart-head h3{margin:0;font-size:13px;font-weight:600;color:#1E293B;min-width:0;word-break:break-word}
+.ucc-embedded-chart-tools{display:flex;align-items:center;gap:6px;flex:none}
+.ucc-embedded-views{display:inline-flex;border:1px solid #D8E0EC;border-radius:8px;overflow:hidden}
+.ucc-embedded-views>button{border:0;background:#fff;min-height:30px;padding:0 10px;font-size:11px;font-weight:600;color:#64748B;cursor:pointer}
+.ucc-embedded-views>button.is-active{background:#172554;color:#fff}
+.ucc-embedded-size{min-height:30px;border:1px solid #D8E0EC;border-radius:8px;background:#fff;font:inherit;font-size:11px;padding:0 6px;color:#334155}
+.ucc-remove-chart{border:0;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:#64748B;padding:0 4px;min-height:30px}
+.ucc-remove-chart:hover{color:#B91C1C}
 .ucc-embedded-chart-body{padding:6px 0 2px}
-.ucc-chart-picker-search{width:100%;padding:8px 10px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;font-size:13px}
-.ucc-chart-picker-note{margin:8px 0 4px;font-size:11px;color:var(--text-muted,#8d99a6)}
+.ucc-embedded-chart-table{padding:6px 0 2px;font-size:12px}
+.ucc-embedded-chart-table table{width:100%;border-collapse:collapse}
+.ucc-embedded-chart-table th,.ucc-embedded-chart-table td{border:1px solid #E6EBF3;padding:5px 8px;text-align:left}
+.ucc-embedded-chart-table th{font-weight:600;color:#64748B}
+.ucc-embedded-chart-filter{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:12px;color:#334155}
+.ucc-embedded-chart-filter button{border:1px solid #D8E0EC;background:#fff;border-radius:6px;min-height:28px;padding:0 8px;font-size:11px;cursor:pointer}
+.ucc-tab-charts .hidden{display:none}
+/* The tab intro (#4): editable, empty by default. */
+.ucc-tab-intro{margin:0 0 14px;font-size:13px;line-height:1.6;color:#334155}
+.ucc-tab-intro-text p{margin:0 0 8px}
+.ucc-tab-intro-text ul{margin:0 0 8px;padding-left:20px}
+.ucc-tab-intro-text code{background:#F1F5F9;padding:1px 4px;border-radius:4px;font-size:12px}
+.ucc-tab-intro-empty{margin:0;color:#94A3B8;font-style:italic}
+.ucc-tab-intro-edit,.ucc-intro-save,.ucc-intro-cancel{border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:34px;padding:0 12px;font-size:12px;cursor:pointer;margin-top:6px}
+.ucc-intro-save{background:#172554;color:#fff;border-color:#172554;font-weight:600}
+.ucc-tab-intro-editor textarea{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid #D8E0EC;border-radius:8px;font:inherit;font-size:13px;line-height:1.5;resize:vertical}
+.ucc-tab-intro-actions{display:flex;gap:8px}
+/* The management-question controls (#6). */
+.ucc-qa-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:10px 0 0}
+.ucc-qa-add{border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:34px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}
+.ucc-qa-add:hover{background:#F1F5F9}
+.ucc-qa-hide{border:0;background:transparent;color:#64748B;font-size:16px;line-height:1;cursor:pointer;padding:0 4px;min-height:30px}
+.ucc-qa-hide:hover{color:#B91C1C}
+.ucc-qa-hidden-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto}
+.ucc-qa-hidden-item{text-align:left;border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:38px;padding:8px 10px;font-size:13px;cursor:pointer}
+.ucc-qa-hidden-item:hover{background:#F1F5F9}
+.ucc-chart-picker-search{box-sizing:border-box;width:100%;padding:8px 10px;border:1px solid #D8E0EC;border-radius:8px;font-size:13px}
+.ucc-chart-picker-note{margin:8px 0 4px;font-size:11px;color:#64748B}
 .ucc-chart-picker-results{display:flex;flex-direction:column;gap:4px;max-height:340px;overflow-y:auto}
-.ucc-chart-picker-result{text-align:left;border:1px solid var(--border-color,#d1d8dd);background:var(--fg-color,#fff);border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer}
-.ucc-chart-picker-result:hover{background:var(--bg-light-gray,#f4f5f6)}
+.ucc-chart-picker-result{text-align:left;border:1px solid #D8E0EC;background:#fff;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
+.ucc-chart-picker-result:hover{background:#F1F5F9}
 .ucc-chart-picker-result[disabled]{opacity:.5;cursor:default}
 .ucc-insights-series{display:flex;flex-direction:column;gap:6px;padding:8px 0}
-.ucc-insights-bar{display:grid;grid-template-columns:minmax(90px,32%) 1fr auto;gap:8px;align-items:center;font-size:12px}
+/* Each bar is a button: clicking it is the drill-down. */
+.ucc-insights-bar{display:grid;width:100%;grid-template-columns:minmax(90px,32%) 1fr auto;gap:8px;align-items:center;
+ font:inherit;font-size:12px;text-align:left;border:0;background:transparent;padding:2px 0;cursor:pointer;color:inherit}
+.ucc-insights-bar:hover .ucc-insights-bar-fill{background:#172554}
+.ucc-insights-bar:focus-visible{outline:2px solid #2563EB;outline-offset:2px}
 .ucc-insights-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ucc-insights-bar-track{background:var(--bg-light-gray,#f4f5f6);border-radius:3px;height:14px;overflow:hidden}
+.ucc-insights-bar-track{background:#F1F5F9;border-radius:3px;height:14px;overflow:hidden}
 .ucc-insights-bar-fill{display:block;height:100%;background:#2c5aa0;border-radius:3px}
 .ucc-insights-bar-value{font-variant-numeric:tabular-nums;font-weight:600}
+@media(max-width:1000px){.ucc-embedded-chart{grid-column:span 12!important}}
 `;
 document.head.appendChild(style);
 }
-function renderKpis(dashboard,config,result){const mount=dashboard.querySelector("[data-demo-kpis]");if(!mount)return;
-if(dashboard.dataset.demoDashboard==="criterion_4"&&result?.meta?.subcriterion==="4.1.1"&&Array.isArray(result?.admission_intelligence?.kpis)){
-const kpis=result.admission_intelligence.kpis;
-mount.innerHTML=kpis.map(item=>{const suffix=item.unit==="percent"?"%":"";return`<article class="ucc-admission-kpi"><span>${esc(item.label)}</span><strong>${Number(item.value||0).toLocaleString(undefined,{maximumFractionDigits:2})}${suffix}</strong><small>Student Applicant · live calculation</small></article>`;}).join("");
-return;
+// --- MANAGEMENT QUESTIONS AND DATA-BASED ANSWERS (#6) ----------------------
+// The table itself is unchanged: every answer is computed live by the
+// criterion engine, permission-checked, with its real status and its real
+// record links. What is new is WHICH of them a tab shows.
+//
+// One stored list, of what is HIDDEN. The default therefore stays "everything
+// this criterion can answer" -- storing what to SHOW instead would have
+// emptied this table on all six criteria that already work, the moment this
+// shipped. The x on a row hides it; "+ Add question" offers exactly the rows
+// currently hidden. Never free text: the catalogue is the criterion engine's
+// own answerable set, the same allowlist-not-free-text rule Ask UCC follows.
+//
+// CRITERION 4 IS EMPTY FOR A DIFFERENT REASON, and this table cannot fix it:
+// analytics/criterion_4.py returns no metrics and no questions at all -- only
+// admission_intelligence. That was the agreed scope when it was written, and
+// its own docstring says so. Nothing deleted it. Until Criterion 4's ~40
+// metrics are ported like the other six criteria, there is nothing to ask, so
+// the table says that instead of pretending otherwise.
+function qaQuestionId(row,index){
+return String(row.metric_id||row.id||row.question||("row-"+index));
 }
-const metrics=(result?.metrics||[]),rows=metrics.slice(0,6);while(rows.length<6)rows.push(null);mount.innerHTML=rows.map((metric,index)=>{if(metric)return`<article><span>${esc(metric.label)}</span><strong>${esc(metricValue(metric))}</strong><small>${esc(metric.doctype||metric.source||"Live metric")} · ${esc(metric.status.replaceAll("_"," "))}</small></article>`;const summary=index%2===0?result?.source_summary:result?.metric_summary;return`<article><span>${index%2===0?"Sources available":"Metrics available"}</span><strong>${summary?summary.available+"/"+summary.total:"—"}</strong><small>Permission-aware readiness</small></article>`;}).join("");}
+
 function renderQa(dashboard,result,tab){
 const target=dashboard.querySelector(`[data-demo-qa="${CSS.escape(dashboard.dataset.demoDashboard+":"+((dashboardState(dashboard).lastPanel)||tab))}"]`)||dashboard.querySelector("[data-demo-panel]:not(.hidden) [data-demo-qa]");
 if(!target)return;
-const rows=extendedQuestionRows(result,tab);
-target.innerHTML=rows.length?rows.map(row=>{
+const state=tabConfig(dashboard,tab);
+const hidden=(state&&state.hiddenQuestions)||[];
+const all=extendedQuestionRows(result,tab);
+const rows=all.filter(function(row,index){return hidden.indexOf(qaQuestionId(row,index))===-1;});
+target.innerHTML=rows.length?rows.map((row,index)=>{
 const metric=metricById(result,row.metric_id);
 const available=(metric?.status||row.status)==="available";
 const count=Number(metric?.record_count??metric?.total??row.record_count??0);
@@ -630,9 +886,73 @@ const answerAction=available&&row.metric_id
 const sourceAction=doctype
 ?`<button type="button" class="source-doctype-link ucc-qa-action" data-live-source-doctype="${esc(doctype)}">Open ${esc(displayDoctypeName(doctype))} list ↗</button>`
 :'<span class="source-unavailable">No readable source list</span>';
-return`<tr><td>${esc(row.criterion||result?.meta?.subcriterion||result?.policy?.policy||tab)}</td><td>${esc(row.question)}</td><td><div>${esc(row.answer)}</div>${answerAction}</td><td><div>${esc(sourceCalculation(row,metric))}</div>${sourceAction}</td><td>${statusBadge(row.status)}</td></tr>`;
-}).join(""):'<tr><td colspan="5">No management questions are configured for this section.</td></tr>';
+const hideAction=`<button type="button" class="ucc-qa-hide" data-hide-question="${esc(qaQuestionId(row,all.indexOf(row)))}" title="Hide this question on this tab" aria-label="Hide: ${esc(row.question||"")}">&times;</button>`;
+return`<tr><td>${esc(row.criterion||result?.meta?.subcriterion||result?.policy?.policy||tab)}</td><td>${esc(row.question)}</td><td><div>${esc(row.answer)}</div>${answerAction}</td><td><div>${esc(sourceCalculation(row,metric))}</div>${sourceAction}</td><td>${statusBadge(metric?.status||row.status)}${hideAction}</td></tr>`;
+}).join(""):`<tr><td colspan="5">${esc(all.length
+?"Every management question for this section is hidden. Use “+ Add question” to bring one back."
+:"This criterion does not answer any management questions yet. Its metric catalogue has not been built, so there is nothing to ask.")}</td></tr>`;
+renderQaTools(dashboard,target,all.length,hidden.length);
 }
+
+// The controls live directly under the table, in the same panel, so adding and
+// removing a question happens where the questions are.
+function renderQaTools(dashboard,tbody,total,hiddenCount){
+const panel=tbody.closest(".ucc-management-panel");
+if(!panel)return;
+let tools=panel.querySelector("[data-qa-tools]");
+if(!tools){
+tools=document.createElement("div");
+tools.className="ucc-qa-tools";
+tools.dataset.qaTools="1";
+panel.appendChild(tools);
+}
+tools.innerHTML=`<button type="button" class="ucc-qa-add" data-add-question>+ Add question</button>`
++`<span class="ucc-tab-charts-notice">${esc(hiddenCount
+?hiddenCount+" of "+total+" hidden on this tab"
+:total+" question"+(total===1?"":"s")+" available")}</span>`;
+}
+
+function setTabQuestion(dashboard,config,tab,question,visible){
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_question",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,question:question,visible:visible?1:0},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
+error(error){logEvent(dashboard,"ERROR","tab_question_failed",apiErrorMessage(error));},
+});
+}
+
+// The picker lists exactly what this tab is currently hiding -- which is the
+// whole catalogue minus what is on screen. Nothing here can invent a question
+// the criterion engine cannot answer.
+function openQuestionPicker(dashboard,config,tab){
+const state=tabConfig(dashboard,tab);
+const hidden=(state&&state.hiddenQuestions)||[];
+const all=extendedQuestionRows(dashboardState(dashboard).result,tab);
+const choices=all.filter(function(row,index){return hidden.indexOf(qaQuestionId(row,index))!==-1;});
+openModal("Add a management question",
+choices.length
+?'<p class="ucc-chart-picker-note">Questions this criterion can answer that are hidden on this tab.</p>'
++'<div class="ucc-qa-hidden-list">'+choices.map(function(row){
+return'<button type="button" class="ucc-qa-hidden-item" data-restore-question="'
++esc(qaQuestionId(row,all.indexOf(row)))+'">'+esc(row.question)+"</button>";
+}).join("")+"</div>"
+:'<p class="ucc-chart-picker-note">'+esc(all.length
+?"Every question this criterion can answer is already on this tab."
+:"This criterion does not answer any management questions yet, so there is nothing to add. Its metric catalogue has not been built.")
++"</p>");
+const modal=ensureModal();
+const list=modal.querySelector(".ucc-qa-hidden-list");
+if(!list)return;
+list.addEventListener("click",function(event){
+const choice=event.target.closest("[data-restore-question]");
+if(!choice)return;
+event.preventDefault();
+setTabQuestion(dashboard,config,tab,choice.dataset.restoreQuestion,true);
+modal.hidden=true;
+});
+}
+
 function renderSources(dashboard,result){
 const target=dashboard.querySelector(`[data-demo-sources="${CSS.escape(dashboard.dataset.demoDashboard)}"]`);
 if(!target)return;
@@ -645,7 +965,6 @@ return`<tr><td><div>${esc(sourceName)}</div>${action}</td><td>${esc(row.key||"So
 }).join(""):'<tr><td colspan="4">No source definitions returned.</td></tr>';
 }
 function renderQuality(dashboard,result){const target=dashboard.querySelector(`[data-demo-quality="${CSS.escape(dashboard.dataset.demoDashboard)}"]`);if(!target)return;const rows=result?.data_quality||[];target.innerHTML=rows.length?rows.map(row=>`<tr><td>${esc(row.check)}</td><td>${esc(row.source)}</td><td>${statusBadge(row.status)}</td><td>${esc(row.detail)}</td></tr>`).join(""):'<tr><td>Live source and metric checks</td><td>0</td><td>'+statusBadge("available")+'</td><td>No readiness issue returned.</td></tr>';}
-function renderReadiness(dashboard,config,result){const notice=dashboard.querySelector("[data-demo-readiness]"),title=dashboard.querySelector("[data-demo-readiness-title]"),copy=dashboard.querySelector("[data-demo-readiness-copy]");if(!result){if(notice)notice.dataset.status="loading";if(title)title.textContent=`Loading Criterion ${config.number} analytics…`;if(copy)copy.textContent="Waiting for the live data connection and current-user permission checks.";return;}const ss=result.source_summary||{},ms=result.metric_summary||{},sA=ss.available||0,sT=ss.total||0,mA=ms.available||0,mT=ms.total||0,issues=Math.max(0,sT-sA)+Math.max(0,mT-mA);if(notice)notice.dataset.status=issues?"warning":"available";if(title)title.textContent=`Criterion ${config.number} live analytics active${issues?" with limitations":""}.`;if(copy)copy.textContent=`Live data connected · ${sA} of ${sT} sources available · ${mA} of ${mT} metrics available${issues?` · ${issues} item${issues===1?"":"s"} need review`:""}`;}
 function renderError(dashboard,config,error){
 const notice=dashboard.querySelector("[data-demo-readiness]"),title=dashboard.querySelector("[data-demo-readiness-title]"),copy=dashboard.querySelector("[data-demo-readiness-copy]");
 const detail=error&&error.message?error.message:String(error);
@@ -657,15 +976,13 @@ const source=UCCShared.permissionSource(detail);
 if(notice)notice.dataset.status="blocked";
 if(title)title.textContent=`${viewName} is not available to your account.`;
 if(copy)copy.textContent=`Blocked data source: ${source}. Your account doesn't have read access to this. Ask an administrator to grant access if you need to see this.`;
-const pmount=dashboard.querySelector("[data-demo-kpis]");
-if(pmount)pmount.innerHTML=UCCShared.permissionNoticeHtml({view:viewName,source:source,detail:detail});
+if(notice)notice.hidden=false;
 return;
 }
 if(notice)notice.dataset.status="error";
 if(title)title.textContent=`Criterion ${config.number} live API unavailable.`;
 if(copy)copy.textContent=detail;
-const mount=dashboard.querySelector("[data-demo-kpis]");
-if(mount)mount.innerHTML=`<article><span>API status</span><strong>Unavailable</strong><small>${esc(detail)}</small></article>`;
+if(notice)notice.hidden=false;
 }
 function updateDashboardIdentity(dashboard,config,tab){
 const isAdmission=dashboard.dataset.demoDashboard==="criterion_4"&&tab==="4.1.1";
@@ -676,7 +993,7 @@ else{if(kicker)kicker.textContent=`EDUTRUST CRITERION ${config.number}`;if(headi
 const panelHeading=dashboard.querySelector(`[data-demo-panel="${CSS.escape((config.panelMap&&config.panelMap[tab])||tab)}"] .ucc-management-panel .panel-head h2`);
 if(panelHeading)panelHeading.textContent=isAdmission?"Admissions Insights and Data-Based Answers":"Management Questions and Data-Based Answers";
 }
-function renderDashboard(dashboard){const config=CONFIG[dashboard.dataset.demoDashboard],state=dashboardState(dashboard),result=state.result;if(!config)return;const tab=activeSection(dashboard);updateDashboardIdentity(dashboard,config,tab);if(state.error&&!result){renderError(dashboard,config,state.error);return;}renderKpis(dashboard,config,result);renderTabCharts(dashboard,config,tab);renderQa(dashboard,result,tab);renderSources(dashboard,result);renderQuality(dashboard,result);renderReadiness(dashboard,config,result);}
+function renderDashboard(dashboard){const config=CONFIG[dashboard.dataset.demoDashboard],state=dashboardState(dashboard),result=state.result;if(!config)return;const tab=activeSection(dashboard);updateDashboardIdentity(dashboard,config,tab);if(state.error&&!result){renderError(dashboard,config,state.error);return;}renderTabCharts(dashboard,config,tab);renderQa(dashboard,result,tab);renderSources(dashboard,result);renderQuality(dashboard,result);}
 // Option B: admission_intelligence's 6 chart series + 4 KPIs are served live
 // from Frappe Insights (real Query v3 execute(), permission-checked per
 // request -- see ucc_intelligence/ucc_intelligence/analytics/
@@ -709,14 +1026,8 @@ const response=await callApi(config,dashboard,"drilldown",{metric_id:metric.id,p
 openModal(title||metric.label,`<div class="ucc-demo-modal-note"><strong>${esc(response.drilldown?.total||0)} matching record(s)</strong><br>${esc(response.drilldown?.doctype||metric.doctype||"")}</div>${tableFromRows(response.drilldown?.rows||[])}`);
 }catch(error){openModal("Drill-down unavailable",esc(error.message||error));}
 }
-function openReadiness(config,dashboard){
-const result=dashboardState(dashboard).result;
-if(!result){openModal("Readiness","The live API has not returned a result.");return;}
-const policy=result.policy||{},sources=result.sources||[],metrics=result.metrics||[];
-openModal(`Criterion ${config.number} readiness`,`<div class="ucc-demo-modal-note"><strong>Criterion ${config.number} data readiness</strong><br>Source and metric status reflects the current user's permissions.</div><div class="grid2"><section><h3>Sources</h3><div class="table-wrap"><table><thead><tr><th>Source</th><th>Records</th><th>Status</th></tr></thead><tbody>${sources.map(row=>{const doctype=row.doctype||"";const action=doctype?`<button type="button" class="source-doctype-link ucc-qa-action" data-live-source-doctype="${esc(doctype)}">Open ${esc(displayDoctypeName(doctype))} list ↗</button>`:"";return`<tr><td><div>${esc(doctype||row.candidates?.join(" / ")||row.key)}</div>${action}</td><td>${row.count||0}</td><td>${statusBadge(row.status)}</td></tr>`;}).join("")}</tbody></table></div></section><section><h3>Metrics</h3><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Value</th><th>Status</th></tr></thead><tbody>${metrics.map(item=>`<tr><td>${esc(item.label)}</td><td>${esc(metricValue(item))}</td><td>${statusBadge(item.status)}</td></tr>`).join("")}</tbody></table></div></section></div>`);
-}
 function showDiagnostics(config,dashboard){const state=dashboardState(dashboard),result=state.result,logs=state.logs;openModal(`Criterion ${config.number} diagnostics`,`<div class="table-wrap"><table><thead><tr><th>Time</th><th>Level</th><th>Event</th><th>Detail</th></tr></thead><tbody>${logs.map(row=>`<tr><td>${esc(row.time)}</td><td>${statusBadge(row.level)}</td><td>${esc(row.event)}</td><td>${esc(row.detail)}</td></tr>`).join("")||'<tr><td colspan="4">No diagnostic events.</td></tr>'}</tbody></table></div><div class="ucc-demo-modal-note">API: ${esc(config.apiMethod)} · Section: ${esc(result?.meta?.subcriterion||apiSection(config,dashboard,activeSection(dashboard)))}</div>`);}
-async function handleAction(dashboard,action){const config=CONFIG[dashboard.dataset.demoDashboard],state=dashboardState(dashboard),result=state.result;if(action==="dismiss-readiness"){const notice=dashboard.querySelector("[data-demo-readiness]");if(notice){notice.dataset.dismissed="1";notice.hidden=true;}return;}if(action==="refresh")await loadLive(dashboard,true);if(action==="export-qa"){const rows=[["Section","Question","Answer","Source","Status"],...allQaRows(result)];download(`criterion_${config.number}_live_qa.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="export-exceptions"){const rows=[["Metric","Label","Value","Status","Source"],...allExceptionRows(result)];download(`criterion_${config.number}_live_exceptions.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="export-table"){const rows=[["Metric","Value","Unit","Status","Source"],...(result?.metrics||[]).map(item=>[item.label,item.value,item.unit,item.status,item.doctype||item.source])];download(`criterion_${config.number}_${result?.meta?.subcriterion||"section"}_live_metrics.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="copy-link"){const url=new URL(location.href);url.searchParams.set("dashboard",dashboard.dataset.demoDashboard);url.searchParams.set("live_tab",activeSection(dashboard));navigator.clipboard?.writeText(url.toString()).catch(()=>{});}if(action==="diagnostics")showDiagnostics(config,dashboard);if(action==="readiness")openReadiness(config,dashboard);}
+async function handleAction(dashboard,action){const config=CONFIG[dashboard.dataset.demoDashboard],state=dashboardState(dashboard),result=state.result;if(action==="refresh")await loadLive(dashboard,true);if(action==="export-qa"){const rows=[["Section","Question","Answer","Source","Status"],...allQaRows(result)];download(`criterion_${config.number}_live_qa.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="export-exceptions"){const rows=[["Metric","Label","Value","Status","Source"],...allExceptionRows(result)];download(`criterion_${config.number}_live_exceptions.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="export-table"){const rows=[["Metric","Value","Unit","Status","Source"],...(result?.metrics||[]).map(item=>[item.label,item.value,item.unit,item.status,item.doctype||item.source])];download(`criterion_${config.number}_${result?.meta?.subcriterion||"section"}_live_metrics.csv`,rows.map(row=>row.map(csvCell).join(",")).join("\n"));}if(action==="copy-link"){const url=new URL(location.href);url.searchParams.set("dashboard",dashboard.dataset.demoDashboard);url.searchParams.set("live_tab",activeSection(dashboard));navigator.clipboard?.writeText(url.toString()).catch(()=>{});}if(action==="diagnostics")showDiagnostics(config,dashboard);}
 // ---- Dashboard visibility (interface composition only) ---------------------
 // Decides which workspaces and criteria are BUILT. It never changes what data
 // a user may read: every data call keeps its own Frappe permission check, and a
@@ -784,7 +1095,7 @@ mountUnifiedDashboards();
 // they are picked per tab from Insights and fetched when the tab renders.
 injectTabChartStyles();
 
-platform.querySelectorAll("[data-demo-dashboard]").forEach(function(dashboard){const config=CONFIG[dashboard.dataset.demoDashboard];if(!config)return;ensureTabChartArea(dashboard,config,"overview");syncTabChartVisibility(dashboard,"overview");dashboard.dataset.liveApi="1";dashboard.querySelectorAll("[data-demo-tab]").forEach(button=>button.addEventListener("click",()=>showTab(dashboard,button.dataset.demoTab)));dashboard.querySelectorAll("[data-demo-filter]").forEach(input=>input.addEventListener("change",()=>loadLive(dashboard,true)));dashboard.addEventListener("ucc:live-tool-action",function(event){const action=event.detail&&event.detail.action;const mapped=action==="export-current"?"export-table":action;if(mapped)handleAction(dashboard,mapped);});dashboard.addEventListener("click",function(event){
+platform.querySelectorAll("[data-demo-dashboard]").forEach(function(dashboard){const config=CONFIG[dashboard.dataset.demoDashboard];if(!config)return;ensureTabChartArea(dashboard,config,"overview");syncTabChartVisibility(dashboard,"overview");dashboard.dataset.liveApi="1";dashboard.querySelectorAll("[data-demo-tab]").forEach(button=>button.addEventListener("click",()=>showTab(dashboard,button.dataset.demoTab)));dashboard.addEventListener("ucc:live-tool-action",function(event){const action=event.detail&&event.detail.action;const mapped=action==="export-current"?"export-table":action;if(mapped)handleAction(dashboard,mapped);});dashboard.addEventListener("click",function(event){
 const sourceButton=event.target.closest("[data-live-source-doctype]");
 if(sourceButton){
 event.preventDefault();
@@ -805,9 +1116,54 @@ const addChart=event.target.closest("[data-add-chart]");
 if(addChart){event.preventDefault();event.stopPropagation();openChartPicker(dashboard,config,addChart.dataset.addChart);return;}
 const removeChart=event.target.closest("[data-remove-chart]");
 if(removeChart){event.preventDefault();event.stopPropagation();removeTabChart(dashboard,config,activeSection(dashboard),removeChart.dataset.removeChart);return;}
+// --- Diagram/Table toggle and drill-down (#8) --------------------------
+const viewButton=event.target.closest("[data-demo-view]");
+if(viewButton){
+event.preventDefault();event.stopPropagation();
+const card=viewButton.closest("[data-embedded-chart]");
+if(card){setChartView(card,viewButton.dataset.demoView);if(viewButton.dataset.demoView==="table")renderChartTable(card,null);}
+return;
+}
+const segment=event.target.closest("[data-chart-segment]");
+if(segment){
+event.preventDefault();event.stopPropagation();
+const card=segment.closest("[data-embedded-chart]");
+if(card)selectChartSegment(card,segment.dataset.chartSegment);
+return;
+}
+const clearSegment=event.target.closest("[data-clear-segment]");
+if(clearSegment){
+event.preventDefault();event.stopPropagation();
+const card=clearSegment.closest("[data-embedded-chart]");
+if(card)renderChartTable(card,null);
+return;
+}
+// --- the tab intro (#4) ------------------------------------------------
+const editIntro=event.target.closest("[data-edit-intro]");
+if(editIntro){event.preventDefault();event.stopPropagation();openIntroEditor(dashboard,config,editIntro.dataset.editIntro);return;}
+const saveIntro=event.target.closest("[data-save-intro]");
+if(saveIntro){event.preventDefault();event.stopPropagation();saveTabIntro(dashboard,config,saveIntro.dataset.saveIntro);return;}
+const cancelIntro=event.target.closest("[data-cancel-intro]");
+if(cancelIntro){
+event.preventDefault();event.stopPropagation();
+const panelKey=(config.panelMap&&config.panelMap[cancelIntro.dataset.cancelIntro])||cancelIntro.dataset.cancelIntro;
+const mount=dashboard.querySelector(`[data-tab-intro="${CSS.escape(panelKey)}"]`);
+if(mount)mount.dataset.editing="";
+renderTabIntro(dashboard,config,cancelIntro.dataset.cancelIntro);
+return;
+}
+// --- management questions (#6) -----------------------------------------
+const hideQuestion=event.target.closest("[data-hide-question]");
+if(hideQuestion){
+event.preventDefault();event.stopPropagation();
+setTabQuestion(dashboard,config,activeSection(dashboard),hideQuestion.dataset.hideQuestion,false);
+return;
+}
+const addQuestion=event.target.closest("[data-add-question]");
+if(addQuestion){event.preventDefault();event.stopPropagation();openQuestionPicker(dashboard,config,activeSection(dashboard));return;}
 const actionButton=event.target.closest("[data-demo-action]");
 if(actionButton){event.preventDefault();event.stopPropagation();handleAction(dashboard,actionButton.dataset.demoAction);return;}
-});dashboard.dataset.demoActiveTab="overview";dashboard.querySelectorAll("[data-demo-panel]").forEach(panel=>panel.classList.toggle("hidden",panel.dataset.demoPanel!=="overview"));if(!dashboard.classList.contains("ucc-hidden"))loadLive(dashboard);else renderReadiness(dashboard,config,null);});platform.addEventListener("ucc:dashboard-change",event=>{const id=event.detail&&event.detail.dashboard;if(!id)return;const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(id)}"]`);if(dashboard)loadLive(dashboard);});
+});dashboard.dataset.demoActiveTab="overview";dashboard.querySelectorAll("[data-demo-panel]").forEach(panel=>panel.classList.toggle("hidden",panel.dataset.demoPanel!=="overview"));if(!dashboard.classList.contains("ucc-hidden"))loadLive(dashboard);});platform.addEventListener("ucc:dashboard-change",event=>{const id=event.detail&&event.detail.dashboard;if(!id)return;const dashboard=platform.querySelector(`[data-demo-dashboard="${CSS.escape(id)}"]`);if(dashboard)loadLive(dashboard);});
 }
 fetchDashboardAccess().then(function(access){
 const outcome=applyDashboardAccess(access);
@@ -815,6 +1171,21 @@ platform.dataset.uccAccessApplied=outcome.applied;
 if(outcome.hiddenCriteria.length)platform.dataset.uccHiddenCriteria=outcome.hiddenCriteria.join(",");
 if(outcome.hiddenWorkspaces.length)platform.dataset.uccHiddenWorkspaces=outcome.hiddenWorkspaces.join(",");
 bootstrapDashboards();
+});
+
+platform.addEventListener("change",function(event){
+const sizeSelect=event.target.closest("[data-chart-size]");
+if(!sizeSelect)return;
+const dashboard=sizeSelect.closest("[data-demo-dashboard]");
+const config=dashboard&&CONFIG[dashboard.dataset.demoDashboard];
+if(!config||!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_chart_size",
+args:{criterion:dashboard.dataset.demoDashboard,tab:activeSection(dashboard),
+chart:sizeSelect.dataset.chartSize,size:sizeSelect.value},
+callback(response){applyTabConfig(dashboard,config,activeSection(dashboard),(response&&response.message)||{});},
+error(error){logEvent(dashboard,"ERROR","tab_chart_size_failed",apiErrorMessage(error));},
+});
 });
 
 platform.addEventListener("click",function(event){

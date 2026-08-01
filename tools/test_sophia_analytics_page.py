@@ -130,12 +130,12 @@ def line(text, prefix, label):
 	return text[first:text.index("\n", first) + 1]
 
 
-AREA_BLOCK = "# " * 0 + (
+AREA_BLOCK = (
 	"// ---------------------------------------------------------------------------\n"
-	"// PER-TAB INSIGHTS CHARTS -- the area")
+	"// PER-TAB INSIGHTS CHARTS, TAB INTRO, AND THE QUESTION SELECTION")
 EMBED_BLOCK = (
 	"// ---------------------------------------------------------------------------\n"
-	"// PER-TAB INSIGHTS CHARTS -- loading")
+	"// PER-TAB CHARTS -- loading, rendering, sizing, picking, removing")
 
 # 1. The box table itself, its global, and the loop that applied it.
 engine_transformed = engine_transformed.replace(
@@ -151,11 +151,15 @@ engine_transformed = engine_transformed.replace(
 
 # 3. metricRows/blockedSourceNames/chartForLive and both card renderers -> the
 #    embed, picker and remove control.
-_embed = region(ported, EMBED_BLOCK, "function renderKpis(dashboard,config,result){", "chart embed + picker (ported)")
+# The same region also swallows the legacy renderKpis() and renderQa(): the KPI
+# cards are gone (#3) and the questions table gained its show/hide controls
+# (#6). One region, one swap, both declared.
+_embed = region(ported, EMBED_BLOCK, "function renderSources(dashboard,result){", "chart embed + picker + questions (ported)")
 engine_transformed = engine_transformed.replace(
 	region(engine_transformed, "function metricRows(result,chartIndex,chart){",
-		"function renderKpis(dashboard,config,result){",
-		"criterion-API row extractor + hand-rolled renderers"), _embed, 1)
+		"function renderSources(dashboard,result){",
+		"criterion-API row extractor, hand-rolled renderers, KPI cards and the old questions table"),
+	_embed, 1)
 
 # 4. The old cards' drill-down, and its trigger.
 engine_transformed = engine_transformed.replace(
@@ -228,6 +232,95 @@ for _old, _new, _label in [
 		"the add/remove chart handlers"),
 ]:
 	checks.append(report(engine_transformed.count(_old) == 1, "legacy site found exactly once: %s" % _label))
+	engine_transformed = engine_transformed.replace(_old, _new, 1)
+
+# --- WHAT THE MOVE TO INSIGHTS MADE OBSOLETE (2026-08-01) -------------------
+# Three things on every criterion tab read the criterion engine's own
+# catalogue and could not survive charts moving to Insights:
+#   the page-level filter bar   -- an embedded chart is a live view of a SAVED
+#       Insights query; this page cannot re-filter it. A filtered view is a
+#       second Insights chart, built in Insights and added like any other.
+#   the readiness strip         -- "Criterion N live analytics active ·
+#       X of X sources available". The ELEMENT stays, because renderError()
+#       reports a failed or permission-blocked load through it; only the
+#       readiness message is gone, and it is hidden until something breaks.
+#   the KPI number cards        -- same era, same source.
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "function normaliseFilterDefinition(raw){", "function analyticsPanelMarkup(",
+		"page-level filter markup"), "", 1)
+engine_transformed = engine_transformed.replace(
+	line(engine_transformed, "function selectedFilterObject(dashboard){", "filter collector"), "", 1)
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "function openReadiness(config,dashboard){", "function showDiagnostics(",
+		"readiness modal"), "", 1)
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "function renderReadiness(dashboard,config,result){",
+		"function renderError(dashboard,config,error){", "the readiness banner renderer"), "", 1)
+for _old, _label in [
+	('if(action==="readiness")openReadiness(config,dashboard);', "the readiness action"),
+	('dashboard.querySelectorAll("[data-demo-filter]").forEach(input=>input.addEventListener("change",()=>loadLive(dashboard,true)));',
+		"the filter change listener"),
+]:
+	checks.append(report(engine_transformed.count(_old) == 1, "legacy site found exactly once: %s" % _label))
+	engine_transformed = engine_transformed.replace(_old, "", 1)
+
+# The card controls added in this round -- Diagram/Table, drill-down, the size
+# picker's clear control, the intro editor and the question show/hide -- all
+# hang off the SAME delegated listener the add/remove chart handlers use, so
+# they are declared as one insertion at that point.
+_card_controls = region(ported,
+	"// --- Diagram/Table toggle and drill-down (#8) --------------------------",
+	'const actionButton=event.target.closest("[data-demo-action]");', "the card and question controls (ported)")
+engine_transformed = engine_transformed.replace(
+	'const actionButton=event.target.closest("[data-demo-action]");',
+	_card_controls + 'const actionButton=event.target.closest("[data-demo-action]");', 1)
+
+# The size <select> fires `change`, not `click`, so it needs its own listener
+# rather than a branch in the click one.
+_size_listener = region(ported, 'platform.addEventListener("change",function(event){',
+	'platform.addEventListener("click",function(event){\nconst sourceButton=', "the size listener (ported)")
+engine_transformed = engine_transformed.replace(
+	'platform.addEventListener("click",function(event){\nconst sourceButton=',
+	_size_listener + 'platform.addEventListener("click",function(event){\nconst sourceButton=', 1)
+
+_intro = region(ported, "function analyticsPanelMarkup(criterionId,key,title){",
+	"function sourcesQualityPanelMarkup(", "editable tab intro (ported)")
+engine_transformed = engine_transformed.replace(
+	region(engine_transformed, "function analyticsPanelMarkup(criterionId,key,title){",
+		"function sourcesQualityPanelMarkup(", "hard-coded OVERVIEW heading"), _intro, 1)
+
+for _old, _new, _label in [
+	('const filters=(config.filters||[]).map((filter,index)=>filterMarkup(filter,index,criterionId)).join("");\n',
+		"", "the filter build in the shell markup"),
+	('<div class="sticky-navigation"><section class="controls ucc-shared-controls"><div class="control-grid">${filters}</div></section><nav',
+		'<div class="sticky-navigation"><nav', "the filter bar in the shell markup"),
+	('<div class="ucc-criterion-notice ucc-readiness-strip" data-demo-readiness data-status="loading">'
+		'<div class="ucc-criterion-notice-copy"><strong data-demo-readiness-title>Loading Criterion ${esc(config.number)} analytics…</strong>'
+		'<span data-demo-readiness-copy>Current-user permissions and live sources are being checked.</span></div>'
+		'<div class="ucc-readiness-actions"><button type="button" class="ucc-readiness-detail" data-demo-action="readiness">View readiness</button>'
+		'<button type="button" class="ucc-notice-dismiss" data-demo-action="dismiss-readiness" aria-label="Dismiss Criterion ${esc(config.number)} readiness notification" title="Dismiss">×</button></div></div>',
+		'<div class="ucc-criterion-notice ucc-readiness-strip" data-demo-readiness data-status="loading" hidden>'
+		'<div class="ucc-criterion-notice-copy"><strong data-demo-readiness-title></strong>'
+		'<span data-demo-readiness-copy></span></div></div>', "the readiness strip"),
+	('<section class="kpis ucc-shared-kpis" data-demo-kpis></section>', "", "the KPI card strip"),
+	("filters:selectedFilterObject(dashboard),", "filters:{},", "the filter payload"),
+	('const pmount=dashboard.querySelector("[data-demo-kpis]");\n'
+		"if(pmount)pmount.innerHTML=UCCShared.permissionNoticeHtml({view:viewName,source:source,detail:detail});\n"
+		"return;", "if(notice)notice.hidden=false;\nreturn;", "renderError's permission branch"),
+	('const mount=dashboard.querySelector("[data-demo-kpis]");\n'
+		'if(mount)mount.innerHTML=`<article><span>API status</span><strong>Unavailable</strong><small>${esc(detail)}</small></article>`;',
+		"if(notice)notice.hidden=false;", "renderError's failure branch"),
+	('if(action==="dismiss-readiness"){const notice=dashboard.querySelector("[data-demo-readiness]");'
+		'if(notice){notice.dataset.dismissed="1";notice.hidden=true;}return;}', "", "the dismiss-readiness action"),
+	("renderKpis(dashboard,config,result);renderTabCharts(dashboard,config,tab);renderQa(dashboard,result,tab);"
+		"renderSources(dashboard,result);renderQuality(dashboard,result);renderReadiness(dashboard,config,result);}",
+		"renderTabCharts(dashboard,config,tab);renderQa(dashboard,result,tab);"
+		"renderSources(dashboard,result);renderQuality(dashboard,result);}", "renderDashboard's render list"),
+	('if(!dashboard.classList.contains("ucc-hidden"))loadLive(dashboard);else renderReadiness(dashboard,config,null);',
+		'if(!dashboard.classList.contains("ucc-hidden"))loadLive(dashboard);', "the bootstrap readiness call"),
+]:
+	checks.append(report(engine_transformed.count(_old) == 1,
+		"legacy site found exactly once: %s" % _label))
 	engine_transformed = engine_transformed.replace(_old, _new, 1)
 
 engine_transformed = engine_transformed.replace(

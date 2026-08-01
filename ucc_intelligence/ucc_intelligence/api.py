@@ -207,8 +207,30 @@ def search_insights_charts(term=None, limit=20):
 
 @frappe.whitelist()
 def get_tab_charts(criterion, tab):
-	"""The charts this user has added to one criterion tab."""
-	return _tab_charts.get_charts(criterion, tab)
+	"""Everything one criterion tab holds for this user: its charts and their
+	sizes, its intro text, and which management questions it hides."""
+	return _tab_charts.get_tab(criterion, tab)
+
+
+@frappe.whitelist()
+def set_tab_chart_size(criterion, tab, chart, size):
+	"""Resize one card. One of the four named sizes, never a pixel value."""
+	return _tab_charts.set_size(criterion, tab, chart, size)
+
+
+@frappe.whitelist()
+def set_tab_intro(criterion, tab, intro):
+	"""The tab's own intro text. Stored as written; the page renders a small
+	escaped Markdown subset, so it can never become an injection point."""
+	return _tab_charts.set_intro(criterion, tab, intro)
+
+
+@frappe.whitelist()
+def set_tab_question(criterion, tab, question, visible):
+	"""Show or hide one management question on this tab. Stores WHICH question,
+	never an answer -- every answer is still computed live and
+	permission-checked on each request."""
+	return _tab_charts.set_question(criterion, tab, question, visible)
 
 
 @frappe.whitelist()
