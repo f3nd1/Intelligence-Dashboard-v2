@@ -3,6 +3,7 @@ import frappe
 from ucc_intelligence.ai import client as _ai_client
 from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_5, criterion_6, criterion_7
+from ucc_intelligence.analytics import drilldown as _drilldown
 from ucc_intelligence.analytics import tab_charts as _tab_charts
 from ucc_intelligence.analytics.contracts import is_permission_error as _is_permission_error
 from ucc_intelligence.analytics.request import parse_payload
@@ -273,6 +274,34 @@ def get_tab_chart_data(chart):
 	it applies no permissions at all.
 	"""
 	return _tab_charts.chart_data(chart)
+
+
+@frappe.whitelist()
+def get_chart_drilldown(chart):
+	"""Whether a chart's segments can be opened, and on which columns.
+
+	Asked once when a chart renders, so the page only offers the drill-down on
+	charts that actually have one -- rather than offering it everywhere and
+	explaining the refusal after the click.
+	"""
+	return _drilldown.resolve(chart)
+
+
+@frappe.whitelist()
+def get_chart_records(chart, column, value, page=1, page_size=20):
+	"""The records behind one chart segment.
+
+	The permission story is deliberately different from get_tab_chart_data().
+	That one checks read permission on the Insights Query, which is right for a
+	count. This returns records, so it additionally requires read permission on
+	the underlying DocType and fetches through frappe.get_list, which applies
+	user permissions and the DocType's own query conditions. A reader who may
+	see the bar but not the rows gets an empty list, never a leak.
+
+	Paged, and capped -- see drilldown.MAX_PAGE_SIZE. A segment with 4,000
+	records behind it is not sent to a browser in one response.
+	"""
+	return _drilldown.records(chart, column, value, page=page, page_size=page_size)
 
 
 # ---------------------------------------------------------------------------
