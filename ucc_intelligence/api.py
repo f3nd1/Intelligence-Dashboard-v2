@@ -3,7 +3,7 @@ import frappe
 from ucc_intelligence.ai import client as _ai_client
 from ucc_intelligence.ai import orchestration as _ask_ucc_orchestration
 from ucc_intelligence.analytics import admission_intelligence_embed, criterion_1, criterion_2, criterion_3, criterion_4, criterion_5, criterion_6, criterion_7
-from ucc_intelligence.analytics import chart_service as _chart_service
+from ucc_intelligence.analytics import tab_charts as _tab_charts
 from ucc_intelligence.analytics.contracts import is_permission_error as _is_permission_error
 from ucc_intelligence.analytics.request import parse_payload
 from ucc_intelligence.ask_ucc import contracts as _ask_ucc_contracts
@@ -195,38 +195,45 @@ def get_monitoring_findings(status="Open", limit=100):
 
 
 @frappe.whitelist()
-def get_chart_definitions(criterion=None):
-	"""The chart layer's own manifest: every chart, its Insights query, and
-	whether that query is real yet.
+def search_insights_charts(term=None, limit=20):
+	"""The "+ Add chart" picker: Insights queries this user can read.
 
-	No only_for -- this is chart METADATA (ids, titles, types, migration
-	status), not data. It contains no institutional figures, and the data
-	behind each chart is separately permission-checked when fetched.
+	No only_for -- what comes back is exactly what frappe.get_list allows this
+	user to see, so the endpoint cannot show anyone a chart they could not
+	already open in Insights itself.
 	"""
-	criterion = frappe.utils.cstr(criterion).strip() or None
-	return _chart_service.get_definitions(criterion)
+	return _tab_charts.search(term, limit)
 
 
 @frappe.whitelist()
-def get_chart_data(chart_id=None, chart_ids=None):
-	"""One chart, or a batch, executed through Insights.
+def get_tab_charts(criterion, tab):
+	"""The charts this user has added to one criterion tab."""
+	return _tab_charts.get_charts(criterion, tab)
 
-	Permissions are unchanged from the mechanism proved on the bench: the
-	Insights Query v3 is private, executed server-side with
-	check_permission("read") and row-level filtering via
-	Insights Settings.apply_user_permissions. The public-dashboard
-	mechanism is never used -- it applies no permissions at all.
 
-	The chart id is resolved against the fixed registry; a caller can never
-	name an arbitrary Insights query to execute.
+@frappe.whitelist()
+def add_tab_chart(criterion, tab, chart):
+	"""Add one Insights chart to one tab, for this user."""
+	return _tab_charts.add(criterion, tab, chart)
+
+
+@frappe.whitelist()
+def remove_tab_chart(criterion, tab, chart):
+	"""Remove one chart from one tab, for this user."""
+	return _tab_charts.remove(criterion, tab, chart)
+
+
+@frappe.whitelist()
+def get_tab_chart_data(chart):
+	"""Execute one embedded chart.
+
+	The id is checked against what this user may read at THIS moment, not
+	against what was true when they added it: chart_data() calls
+	check_permission("read") before execute(), so a revoked permission takes
+	effect on the next refresh. The public-dashboard mechanism is never used --
+	it applies no permissions at all.
 	"""
-	if chart_ids:
-		return _chart_service.get_charts(chart_ids)
-	chart_id = frappe.utils.cstr(chart_id).strip()
-	if not chart_id:
-		frappe.throw(frappe._("A chart id is required."))
-	return _chart_service.get_chart(chart_id)
-
+	return _tab_charts.chart_data(chart)
 
 
 # ---------------------------------------------------------------------------

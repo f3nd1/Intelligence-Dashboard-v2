@@ -94,13 +94,25 @@ def get_ai_prompt_status():
 
 
 def get_chart_layer_status():
-	"""How much of the chart layer is genuinely on Insights. Reported as a
-	count rather than a claim, so migration progress is readable."""
+	"""Whether the chart layer can offer anything at all.
+
+	There is no longer a registry to count: charts are not declared by this
+	app, they are picked from Frappe Insights per tab, per person. So the only
+	thing worth reporting is whether Insights is installed and how many queries
+	the SIGNED-IN user can actually choose from -- a count of what someone else
+	can see would be a permission leak dressed up as a statistic.
+	"""
 	try:
-		from ucc_intelligence.analytics import chart_registry
-		return chart_registry.counts()
+		from ucc_intelligence.analytics import tab_charts
+		available = tab_charts.search(limit=50)
+		return {
+			"source": tab_charts.CHART_DOCTYPE,
+			"insights_installed": bool(available.get("ok")),
+			"selectable_by_you": len(available.get("charts") or []),
+			"max_per_tab": tab_charts.MAX_PER_TAB,
+		}
 	except Exception:
-		return {"total": None, "real": None, "placeholder": None}
+		return {"source": None, "insights_installed": None, "selectable_by_you": None}
 
 
 def get_action_status():
