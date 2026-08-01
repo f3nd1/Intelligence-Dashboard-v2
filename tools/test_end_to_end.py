@@ -282,6 +282,29 @@ report("is_public" not in tab_charts_source,
 report('CHART_DOCTYPE = "Insights Query v3"' in tab_charts_source,
 	"only the record type we can execute AND permission-check is offered")
 
+# --- DRILL-DOWN: the count is one number, the records are many --------------
+# Structural checks, because this is the one endpoint that turns an aggregate
+# into a list of records. tools/test_drilldown.py proves the behaviour; these
+# prove the shape cannot drift back towards a permission-blind fetch.
+DRILLDOWN = APP / "analytics" / "drilldown.py"
+report(DRILLDOWN.exists(), "analytics/drilldown.py holds the segment-to-records layer")
+drilldown_source = DRILLDOWN.read_text(encoding="utf-8")
+report("frappe.get_list(" in drilldown_source and "frappe.get_all(" not in drilldown_source,
+	"records are fetched through get_list, which applies permissions -- never get_all")
+report(".execute(" not in drilldown_source,
+	"records never come from Insights' own SQL, which applies no Frappe permissions")
+report('frappe.has_permission(doctype, "read")' in drilldown_source,
+	"read permission on the underlying DocType is required before any record is fetched")
+report('doc.check_permission("read")' in drilldown_source,
+	"and the chart itself is still permission-checked, as it is for the count")
+report("MAX_PAGE_SIZE" in drilldown_source and "limit_page_length=page_size + 1" in drilldown_source,
+	"paged and capped -- a segment with thousands of records is not sent in one response")
+records_body = drilldown_source[drilldown_source.index("def records("):]
+report('if column not in resolved["columns"]' in records_body,
+	"only a column the chart actually grouped by can be filtered on")
+report('SITE_DATA_SOURCES' in drilldown_source and "SUPPORTED_OPERATIONS" in drilldown_source,
+	"an external data source or an untranslatable pipeline is refused, not approximated")
+
 # Input validation: a tab key becomes part of a defaults key, so it cannot be
 # free text, and a criterion cannot be invented.
 report("access.CRITERION_KEYS" in tab_charts_source, "the criterion is checked against the real list")

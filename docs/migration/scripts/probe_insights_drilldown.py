@@ -32,13 +32,13 @@ nothing. Two fixes:
 RUN -- pick the query yourself (preferred)
     bench --site <site> console
     >>> UCC_PROBE_QUERY = "Stakeholder engagement by status"
-    >>> exec(open("/home/felix/Intelligence-Dashboard-v2/docs/migration/scripts/probe_insights_drilldown.py").read(), globals())
+    >>> exec(open("/home/felixoking/Intelligence-Dashboard-v2/docs/migration/scripts/probe_insights_drilldown.py").read(), globals())
 
 The value matches on record name OR title, case-insensitively, as a fragment.
 
 RUN -- let it choose
     bench --site <site> console
-    >>> exec(open("/home/felix/Intelligence-Dashboard-v2/docs/migration/scripts/probe_insights_drilldown.py").read(), globals())
+    >>> exec(open("/home/felixoking/Intelligence-Dashboard-v2/docs/migration/scripts/probe_insights_drilldown.py").read(), globals())
 
 With no override it takes the first chart on a Sophia tab that has operations
 and executes, and says which it took and why.

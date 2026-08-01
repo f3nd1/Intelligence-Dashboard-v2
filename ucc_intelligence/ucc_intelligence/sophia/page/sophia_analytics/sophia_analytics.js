@@ -554,6 +554,7 @@ card._chartData=data;
 if(data.status==="available"&&(data.series||[]).length){
 paintChartSeries(body,data.series);
 renderChartTable(card,null);
+loadDrilldown(card,chart.chart);
 return;
 }
 // Worth saying out loud: the chart exists and this user may not read it.
@@ -592,16 +593,14 @@ return'<button type="button" class="ucc-insights-bar" data-chart-segment="'+esc(
 // The table is the query's OWN result rows, from the same single execute() the
 // diagram used. Nothing is recomputed here.
 //
-// WHAT DRILL-DOWN CAN AND CANNOT DO TODAY, stated plainly rather than
-// implied: an Insights Query v3's execute() returns the SUMMARISED rows -- one
-// row per dimension value, with its measure. Clicking "Consultative" filters
-// this table to the Consultative row. It does NOT yet expand to the 40
-// underlying records, because that needs a second query against the source
-// table and no Insights API for it has been confirmed on this bench.
-// docs/migration/scripts/probe_insights_drilldown.py is the probe that settles
-// it; until it has been run, building a source-table query here would be
-// exactly the "write it from memory instead of copying what was proven"
-// mistake that produced 13 TableNotFound errors earlier in this migration.
+// An Insights Query v3's execute() returns the SUMMARISED rows -- one row per
+// dimension value, with its measure. Clicking "Consultative" filters this
+// table to the Consultative row. Opening the 40 records BEHIND that row is a
+// second, permission-applying fetch: see analytics/drilldown.py, which was
+// written from the live probe output rather than from memory.
+//
+// The button only appears on charts the server says are drillable, so a chart
+// whose records cannot be resolved never offers a click that will fail.
 function renderChartTable(card,segment){
 const table=card.querySelector("[data-embedded-chart-table]");
 const data=card._chartData;
@@ -616,8 +615,13 @@ const rows=segment
 return columns.some(function(column){return String(row[column])===String(segment);});
 })
 :data.rows;
+const drill=card._drilldown;
 table.innerHTML=(segment
 ?'<div class="ucc-embedded-chart-filter">Showing rows for <strong>'+esc(segment)+"</strong>"
++(drill&&drill.status==="available"
+?'<button type="button" class="ucc-open-records" data-drill-records="'+esc(segment)+'">'
++"Open the "+esc(drill.doctype)+" records</button>"
+:"")
 +'<button type="button" data-clear-segment>Clear</button></div>'
 :"")
 +'<div class="table-wrap"><table><thead><tr>'
@@ -641,6 +645,85 @@ return String(key).replace(/_/g," ").replace(/\b\w/g,function(c){return c.toUppe
 function selectChartSegment(card,segment){
 setChartView(card,"table");
 renderChartTable(card,segment);
+}
+
+// Asked once per chart, when it renders. The answer decides whether the
+// "Open the records" button is offered at all -- a chart the server cannot
+// resolve to a DocType never shows a click that would then explain itself.
+function loadDrilldown(card,chart){
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.get_chart_drilldown",
+args:{chart:chart},
+callback(response){card._drilldown=(response&&response.message)||null;},
+error(){card._drilldown=null;},
+});
+}
+
+function recordRoute(doctype,name){
+return doctypeListRoute(doctype)+"/"+encodeURIComponent(name);
+}
+
+// The records behind one segment. Paged, because a segment counting 4,000
+// records is not something to put in a modal in one go, and permission-applied
+// on the server -- this renders whatever came back and never filters it here.
+let activeDrill=null;
+
+function openDrilldown(card,segment,page){
+const drill=card._drilldown;
+if(!drill||drill.status!=="available")return;
+activeDrill={card:card,segment:segment};
+const column=(drill.columns||[])[0];
+const title=drill.doctype+" · "+(segment||"(blank)");
+openModal(title,tabChartNotice("Loading…"));
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.get_chart_records",
+args:{chart:drill.chart,column:column,value:segment,page:page||1,page_size:20},
+callback(response){
+const data=(response&&response.message)||{};
+if(data.status==="permission_denied"){
+openModal(title,window.UCCShared.permissionNoticeHtml({
+view:drill.doctype+" records",source:"ERPNext",detail:data.message,compact:true}));
+return;
+}
+if(data.status!=="available"){
+openModal(title,tabChartNotice(data.message||"These records cannot be opened."));
+return;
+}
+const rows=data.records||[];
+if(!rows.length){
+openModal(title,tabChartNotice(data.page>1
+?"No further records."
+:"No records here that you have permission to see."));
+return;
+}
+const fields=data.fields||["name"];
+card._drilldownPage=data.page;
+openModal(title,
+'<p class="ucc-chart-picker-note">Live '+esc(drill.doctype)+" records, filtered to "
++"<strong>"+esc(segment||"(blank)")+"</strong>. Only records you have permission to "
++"see are listed, so this may be fewer than the chart's count.</p>"
++'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
++fields.map(function(field){return"<th>"+esc(humaniseColumn(field))+"</th>";}).join("")
++"</tr></thead><tbody>"
++rows.map(function(row){
+return"<tr>"+fields.map(function(field){
+const value=row[field];
+if(field==="name"){
+return'<td><a href="'+esc(recordRoute(drill.doctype,row.name))+'">'+esc(row.name)+"</a></td>";
+}
+return"<td>"+esc(value==null||value===""?"—":value)+"</td>";
+}).join("")+"</tr>";
+}).join("")+"</tbody></table></div>"
++'<div class="ucc-drilldown-paging">'
++(data.page>1?'<button type="button" data-drill-page="'+(data.page-1)+'">&#8249; Previous</button>':"")
++"<span>Page "+data.page+"</span>"
++(data.has_more?'<button type="button" data-drill-page="'+(data.page+1)+'">Next &#8250;</button>':"")
++"</div>");
+},
+error(error){openModal(title,tabChartNotice(apiErrorMessage(error)));},
+});
 }
 
 function setChartView(card,view){
@@ -1127,6 +1210,14 @@ style.textContent=`
 .ucc-history-table{width:100%;border-collapse:collapse;font-size:12px}
 .ucc-history-table th,.ucc-history-table td{border:1px solid #E6EBF3;padding:5px 8px;text-align:left;vertical-align:top}
 .ucc-history-table th{font-weight:600;color:#64748B}
+.ucc-open-records{border:1px solid #2563EB;background:#2563EB;color:#fff;border-radius:6px;
+ min-height:26px;padding:0 10px;font-size:11px;font-weight:600;cursor:pointer;margin-left:8px}
+.ucc-open-records:hover{background:#1D4ED8}
+.ucc-drilldown-paging{display:flex;align-items:center;justify-content:flex-end;gap:10px;
+ margin-top:10px;font-size:12px;color:#64748B}
+.ucc-drilldown-paging button{border:1px solid #D8E0EC;background:#fff;border-radius:6px;
+ min-height:28px;padding:0 10px;font-size:12px;cursor:pointer;color:#334155}
+.ucc-drilldown-paging button:hover{background:#F1F5F9}
 /* #4: the intro renders Markdown, so it needs the elements Markdown makes. */
 .ucc-tab-intro-text h3{margin:10px 0 6px;font-size:15px;font-weight:600;color:#172554}
 .ucc-tab-intro-text h4,.ucc-tab-intro-text h5,.ucc-tab-intro-text h6{margin:8px 0 4px;font-size:13px;font-weight:600;color:#334155}
@@ -1527,6 +1618,21 @@ if(clearSegment){
 event.preventDefault();event.stopPropagation();
 const card=clearSegment.closest("[data-embedded-chart]");
 if(card)renderChartTable(card,null);
+return;
+}
+const drillRecords=event.target.closest("[data-drill-records]");
+if(drillRecords){
+event.preventDefault();event.stopPropagation();
+const card=drillRecords.closest("[data-embedded-chart]");
+if(card)openDrilldown(card,drillRecords.dataset.drillRecords,1);
+return;
+}
+// The paging buttons live in the modal, outside the card, so the card and
+// segment that opened it are remembered rather than looked up from the DOM.
+const drillPage=event.target.closest("[data-drill-page]");
+if(drillPage&&activeDrill){
+event.preventDefault();event.stopPropagation();
+openDrilldown(activeDrill.card,activeDrill.segment,Number(drillPage.dataset.drillPage)||1);
 return;
 }
 // --- the tab intro (#4) ------------------------------------------------
