@@ -178,7 +178,6 @@ for key, row in per.items():
 
 report(counts["placeholder"] == 0,
 	"no chart is left as a bare placeholder -- every one is real, authored or computed")
-report(counts["computed"] > 0, "composite charts render from the criterion API (%d)" % counts["computed"])
 
 # An authored chart must carry a runnable spec, not just a promise.
 for chart_id, spec in chart_registry.CHARTS.items():
@@ -235,15 +234,13 @@ report('"measure_name": "count"' in builder and '"dimension_name": dimension_fie
 report("is_builder_query" in builder and "use_live_connection" in builder,
 	"the builder sets is_builder_query and use_live_connection, as the proven pilot does")
 
-# A composite chart must say WHY, so an empty card is explained rather than
-# looking like an oversight.
+# A composite chart still records WHY it cannot be a single query -- that is
+# the migration record. It just no longer RENDERS anything (see below).
 computed_charts = [c for c, s in chart_registry.CHARTS.items() if s["status"] == "computed"]
 report(all(chart_registry.CHARTS[c].get("composite_reason", "").startswith("COMPOSITE:") for c in computed_charts),
 	"every computed chart records why it is not an Insights chart (%d)" % len(computed_charts))
 report(all(not chart_registry.CHARTS[c]["insights_query_title"] for c in computed_charts),
 	"a computed chart claims NO Insights query -- it must not look like one that failed")
-report('badge.textContent = "Computed live"' in page_source,
-	"computed charts are labelled 'Computed live', visibly distinct from 'Insights'")
 
 # "real" means the runtime WILL execute the query. A chart promoted without
 # anyone seeing it return data produces an error card on a live dashboard.
@@ -262,6 +259,21 @@ report("is_public" not in chart_service_source,
 report("run_chart_query" in chart_service_source,
 	"real charts execute through the bench-proved permission-checked path")
 
+# --- INSIGHTS OR BLANK -----------------------------------------------------
+# The rule, in the one place a chart's data is decided. Everything that is not
+# a verified Insights query collapses to a single wordless empty status: an
+# unknown id, an authored-but-unverified query, and a composite alike.
+service_body = chart_service_source[chart_service_source.index("def get_chart("):]
+service_body = service_body[:service_body.index("def get_definitions(")]
+report('status="computed"' not in service_body and '"unknown_chart"' not in service_body,
+	"the chart endpoint has no computed and no unknown-chart status left")
+report("No chart is registered" not in chart_service_source,
+	"the 'No chart is registered under that id' message is gone -- it read as a broken lookup")
+report(service_body.count('status="empty"') + service_body.count('"status": "empty"') == 2,
+	"both non-real paths (unregistered id, unverified definition) return the SAME empty status")
+report('status="placeholder"' not in service_body,
+	"nothing returns a placeholder status the card would have to explain")
+
 # --- THE SINGLE RENDERING PATH ---------------------------------------------
 # The hand-rolled SVG renderers must be unreachable: charts come from
 # Insights or they come up empty, with nothing in between.
@@ -273,27 +285,102 @@ render_block = render_block[:render_block.index("function renderKpis(")]
 # must never run again.
 report("chartForLive(" not in render_block,
 	"the hand-rolled SVG renderer is unreachable (chartForLive never called)")
-report("paintComputedChart" in render_block,
-	"computed charts have their own explicit path, not a silent fallback")
+report("paintComputedChart" not in page_source,
+	"the computed rendering path is GONE, not merely unreachable")
 report(render_block.count("paintChartSeries(") >= 2,
-	"Insights and computed charts share ONE renderer -- paintChartSeries")
+	"Insights charts and admission charts share ONE table painter -- paintChartSeries")
+
+# The whole rule lives in this one function, so this is where it is proved.
+# Strip comment lines first: the block explains the removed path in prose, and
+# a mention of metricRows in a comment is documentation, not a call.
 insights_branch = render_block[render_block.index("function renderInsightsChartInto("):]
-insights_branch = insights_branch[:insights_branch.index("function paintComputedChart(")]
-# Strip comment lines: the block EXPLAINS the computed path in prose, and a
-# mention of metricRows in a comment is documentation, not a call.
+insights_branch = insights_branch[:insights_branch.index("function paintChartEmpty(")]
 insights_code = "\n".join(
 	line for line in insights_branch.splitlines() if not line.strip().startswith("//"))
 report("metricRows(" not in insights_code,
-	"an INSIGHTS chart never falls back to criterion-API rows -- no third case where the rule applies")
+	"NO chart box reads criterion-engine rows -- the second data engine is out of the render path")
+report('definition.definition_status!=="real"' in insights_code
+	and "paintChartEmpty" in insights_code,
+	"anything not marked real renders the empty state, with no other branch")
+report(insights_code.count("paintChartEmpty(") >= 4,
+	"every non-Insights outcome -- no definition, unverified, no data, error -- lands on the empty state")
+# Scoped to renderInsightsChartInto's OWN body: the wider slice also contains
+# paintAdmissionChart's definition, so deleting the CALL and leaving the dead
+# function behind passed an earlier version of this check.
+dispatch = insights_code[:insights_code.index("function paintAdmissionChart(")]
+report("chart.dataKey" in dispatch and "paintAdmissionChart(" in dispatch,
+	"the 6 admission charts keep their Insights source (get_admission_intelligence)")
+report("admission_intelligence" in insights_code,
+	"admission chart data is read from the Insights-backed embed, not recomputed")
 report("ucc_intelligence.api.get_chart_data" in page_source,
 	"charts are fetched from Insights through the app's own endpoint")
 report("renderInsightsChartInto" in page_source, "there is exactly one chart renderer, and it is the Insights one")
-report("paintChartPlaceholder" in page_source, "a chart with no Insights definition paints a labelled placeholder")
+
+# An empty box must be genuinely empty. These strings put words in it -- and
+# they are checked against CODE only, since the comments legitimately name the
+# statuses that were removed in order to explain why.
+page_code = "\n".join(l for l in page_source.splitlines() if not l.strip().startswith("//"))
+report("paintChartPlaceholder" not in page_code,
+	"the labelled 'pending' placeholder is gone from the page")
+report("Insights definition pending" not in page_code,
+	"no box announces a pending Insights definition")
+report('badge.textContent = "Computed live"' not in page_code,
+	"no box is badged 'Computed live' -- that classification no longer reaches the screen")
+report("ucc-chart-empty" in page_source, "the empty state has its own quiet style, not a warning style")
+
+# --- NO VERIFIED CHART IS ORPHANED -----------------------------------------
+# LIVE_VISUAL_EXPANSION REPLACES a tab's CONFIG charts, and every visible tab
+# has an expansion entry -- so 9 of the 16 bench-verified charts had no box at
+# all. Verifying a chart and then not showing it is silent lost work, and once
+# every other box is blank there is nothing left to notice it by. This walks
+# the tabs the page actually builds (overview + subcriteria) and checks each
+# real chart lands on one.
+def _js_object(name):
+	start = page_source.index("const %s=" % name) + len("const %s=" % name)
+	depth = 0
+	for end in range(start, len(page_source)):
+		if page_source[end] == "{":
+			depth += 1
+		elif page_source[end] == "}":
+			depth -= 1
+			if depth == 0:
+				break
+	return json.loads(page_source[start:end + 1])
+
+dash_config, expansion = _js_object("CONFIG"), _js_object("LIVE_VISUAL_EXPANSION")
+real_ids = {c for c, s in chart_registry.CHARTS.items() if s["status"] == "real"}
+placed, box_total, box_real = set(), 0, 0
+for criterion, criterion_config in dash_config.items():
+	for tab in ["overview"] + [row[0] for row in criterion_config.get("subcriteria") or []]:
+		tab_section = criterion_config["sections"].get(tab) or {}
+		expanded = expansion.get(criterion, {}).get(tab)
+		# chartsForTab(): the expansion list, plus this tab's own CONFIG charts
+		# that are verified and not already in it.
+		boxes = list(expanded or tab_section.get("charts") or [])
+		if expanded:
+			shown = {b["id"] for b in expanded}
+			boxes += [b for b in (tab_section.get("charts") or []) if b["id"] not in shown and b["id"] in real_ids]
+		box_total += len(boxes)
+		for box in boxes:
+			if box.get("dataKey") or box["id"] in real_ids:
+				box_real += 1
+				placed.add(box["id"])
+
+# The 6 admission charts are placed by dataKey, under ids of their own.
+orphans = sorted(real_ids - placed - {c for c in real_ids if c.startswith("criterion_4-admission-")})
+report(not orphans, "every bench-verified Insights chart appears on a visible tab",
+	"verified but rendered nowhere: %s" % orphans)
+report("configCharts" in page_source,
+	"the pre-expansion CONFIG charts are preserved, which is what makes that possible")
+print("        %d chart boxes across all 7 criteria: %d Insights, %d blank"
+	% (box_total, box_real, box_total - box_real))
 
 page_has_badge = "ucc-insights-badge" in page_source
 report(page_has_badge, "the dashboard badges each chart with its Insights status")
-report("Insights definition pending" in page_source,
-	"placeholder charts say so on screen, in words")
+badge_fn = page_source[page_source.index("function applyInsightsBadge("):]
+badge_fn = badge_fn[:badge_fn.index("const INSIGHTS_BADGE_STYLE_ID")]
+report(badge_fn.count("badge.textContent") == 1 and 'badge.textContent = "Insights"' in badge_fn,
+	"exactly ONE badge exists, and it means 'this came from Insights'")
 
 
 # ===========================================================================

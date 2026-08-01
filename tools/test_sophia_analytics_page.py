@@ -137,6 +137,53 @@ if _LEGACY_RENDER_NOW:
 	if _new_render:
 		engine_transformed = engine_transformed.replace(
 			_LEGACY_RENDER_NOW.group(0), _new_render.group(0), 1)
+# --- VERIFIED CHARTS REACH A TAB -------------------------------------------
+# LIVE_VISUAL_EXPANSION overwrites a section's CONFIG charts, so 9 of the 16
+# bench-verified Insights charts had no box on any visible tab. Four sites
+# change: the seeding loop keeps the pre-expansion list, and the three readers
+# go through one chartsForTab() helper. Applied as explicit swaps, same as
+# every other documented divergence, so drift elsewhere still fails.
+_CHART_TAB_SWAPS = [
+	(
+		"config.sections[section]=config.sections[section]||{title:section,charts:[]};"
+		"config.sections[section].charts=LIVE_VISUAL_EXPANSION[criterion][section];",
+		"config.sections[section]=config.sections[section]||{title:section,charts:[]};"
+		"config.sections[section].configCharts=config.sections[section].charts;"
+		"config.sections[section].charts=LIVE_VISUAL_EXPANSION[criterion][section];",
+	),
+	(
+		'grid.innerHTML=(definitions[sectionKey]||[]).filter(function(chart){return chart.enabled!==false;})'
+		'.map(liveChartCardMarkup).join("");\ngrid.dataset.liveCardsMounted="1";',
+		'grid.innerHTML=chartsForTab(dashboard.dataset.demoDashboard,config,sectionKey)'
+		'.filter(function(chart){return chart.enabled!==false;}).map(liveChartCardMarkup).join("");\n'
+		"// Cards mount synchronously; the chart manifest arrives over the wire. Stay\n"
+		"// unmounted until it lands, or the verified charts chartsForTab() appends\n"
+		"// would be missing from this grid for the rest of the session.\n"
+		'if(chartDefinitions.loaded)grid.dataset.liveCardsMounted="1";',
+	),
+	(
+		"const section=sectionDefinition(config,tab),liveDefinitions="
+		"(LIVE_VISUAL_EXPANSION[dashboard.dataset.demoDashboard]?.[tab]||section?.charts||[]);",
+		"const liveDefinitions=chartsForTab(dashboard.dataset.demoDashboard,config,tab);",
+	),
+	(
+		"tab=activeSection(dashboard),section=sectionDefinition(config,tab),definitions="
+		"(LIVE_VISUAL_EXPANSION[dashboard.dataset.demoDashboard]?.[tab]||section?.charts||[])",
+		"tab=activeSection(dashboard),definitions=chartsForTab(dashboard.dataset.demoDashboard,config,tab)",
+	),
+]
+for _old, _new in _CHART_TAB_SWAPS:
+	checks.append(report(engine_transformed.count(_old) == 1,
+		"legacy chart-placement site found exactly once: %r" % _old[:48]))
+	engine_transformed = engine_transformed.replace(_old, _new, 1)
+
+_charts_for_tab = re.search(r"// The chart boxes for one tab[\s\S]*?\n\}(?=\nfunction ensureLiveSectionCards\()", ported)
+checks.append(report(bool(_charts_for_tab), "chartsForTab() is present in the ported page"))
+if _charts_for_tab:
+	engine_transformed = engine_transformed.replace(
+		"function ensureLiveSectionCards(dashboard,config,sectionKey){",
+		_charts_for_tab.group(0) + "\nfunction ensureLiveSectionCards(dashboard,config,sectionKey){", 1)
+
 engine_transformed = engine_transformed.replace(
 	"function bootstrapDashboards(){\nmountUnifiedDashboards();",
 	"function bootstrapDashboards(){\nmountUnifiedDashboards();\n"

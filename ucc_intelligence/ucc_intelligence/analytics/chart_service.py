@@ -8,11 +8,16 @@ permission behaviour was proved on a real bench (a restricted user got a
 hard refusal, the same user with access got real rows), and a second copy
 would be a second thing to prove.
 
-A placeholder chart returns `status: "placeholder"` and NO data. It does
-not invent rows. The frontend keeps rendering that card from the criterion
-API's own real numbers and badges it as awaiting its Insights definition --
-so nothing on screen is fabricated, and the badge says exactly what is
-outstanding.
+THE RULE (2026-08-01, Felix): a chart box shows Frappe Insights data or it
+shows nothing. There is no second data engine. A chart whose Insights query
+has not been authored and bench-verified returns `status: "empty"` with no
+data, no explanation and no error -- the card renders blank.
+
+That replaces three earlier statuses, all of which put words in a box that
+should simply have been empty: "computed" (criterion-engine numbers),
+"placeholder" ("Insights definition pending") and "unknown_chart" ("No chart
+is registered under that id", which read as a broken lookup when it only ever
+meant "not built yet"). An unbuilt chart is an empty box.
 """
 
 import frappe
@@ -27,17 +32,16 @@ from ucc_intelligence.analytics.admission_intelligence_embed import (
 def get_chart(chart_id):
 	"""One chart's data and provenance. Never raises: an unknown id, an
 	unbuilt query or a denied permission all come back as a status the card
-	can render, because a chart failing must degrade to an explained empty
-	card, never a broken dashboard (CLAUDE.md §14.3)."""
+	can render, because a chart failing must degrade to an empty card, never a
+	broken dashboard (CLAUDE.md §14.3)."""
 	spec = chart_registry.get(chart_id)
 	if not spec:
-		return {
-			"ok": False,
-			"chart_id": chart_id,
-			"status": "unknown_chart",
-			"message": "No chart is registered under that id.",
-			"series": [],
-		}
+		# The dashboard has ~223 chart boxes and this registry has 113 entries,
+		# so most ids arriving here have no entry at all. That is not an error
+		# -- it is a box whose Insights query has not been authored. Same empty
+		# state as an unbuilt one, and deliberately no message: "No chart is
+		# registered under that id" read as a bug to everyone who saw it.
+		return {"ok": True, "chart_id": chart_id, "status": "empty", "series": []}
 
 	base = {
 		"ok": True,
@@ -49,18 +53,13 @@ def get_chart(chart_id):
 		"insights_query_title": spec["insights_query_title"],
 	}
 
-	if spec["status"] == "computed":
-		# Decision A: not an Insights chart. The frontend answers it from the
-		# criterion API response it already holds, so this endpoint returns the
-		# classification and no data -- fetching it here would be a second
-		# round trip for numbers the page already has.
-		return dict(base, status="computed", series=[], message=spec.get("composite_reason") or "")
-
 	if spec["status"] != "real":
-		return dict(base, status="placeholder", series=[], message=(
-			"An Insights query is authored for this chart but has not been built "
-			"and verified on this site yet."
-		))
+		# "authored" (query designed, never verified on a site) and "computed"
+		# (composite -- no single query can express it) both mean the same
+		# thing to a viewer: there is no Insights chart behind this box yet.
+		# The registry keeps the distinction for the migration status page;
+		# the dashboard just renders blank.
+		return dict(base, status="empty", series=[])
 
 	result = run_chart_query(spec["insights_query_title"])
 	if result["status"] != "available":
