@@ -29,11 +29,14 @@ CRITERION_2_ALLOWED_ACTIONS = [
 	"question_registry", "drilldown",
 ]
 
-# Criterion 4 is a partial, Insights-informed implementation (admission_intelligence
-# only, see analytics/criterion_4.py's module docstring) -- only "summary" does
-# anything meaningful right now, so that's all that's allowed rather than
-# claiming support for actions with no real data behind them yet.
-CRITERION_4_ALLOWED_ACTIONS = ["summary"]
+# Criterion 4 was "summary" only while the module held admission_intelligence
+# and nothing else. The verbatim port on 2026-08-02 brought the other six
+# actions with it -- the registries and the drilldown now have real data
+# behind them -- so it takes the same list as every other ported criterion.
+CRITERION_4_ALLOWED_ACTIONS = [
+	"summary", "source_status", "policy_registry", "requirement_registry",
+	"question_registry", "drilldown",
+]
 
 CRITERION_3_ALLOWED_ACTIONS = [
 	"summary", "source_status", "policy_registry", "requirement_registry",
@@ -455,21 +458,23 @@ def get_admission_intelligence():
 	ucc_intelligence/ucc_intelligence/analytics/admission_intelligence_embed.py's
 	module docstring for the full architecture and the
 	Insights Settings.apply_user_permissions dependency. This IS wired into
-	sophia_analytics.js (unlike every other method in this file) -- Criterion
-	4's other ~40 metrics still come from the legacy Server Script via
-	ucc_analytics_criterion_4, untouched."""
+	sophia_analytics.js. Criterion 4's other metrics and its 40 management
+	questions are no longer the legacy Server Script's -- they are ported in
+	analytics/criterion_4.py and served by get_criterion_4()."""
 	return admission_intelligence_embed.run()
 
 
 @frappe.whitelist()
 def get_criterion_4():
-	"""Partial, Insights-informed Criterion 4 implementation --
-	admission_intelligence only (4 KPIs + 6 chart series). Not a port of
-	server-scripts/UCC Analytics - Criterion 4.py -- see
-	ucc_intelligence/ucc_intelligence/analytics/criterion_4.py's module
-	docstring for the architecture and what's still open. Not yet called by
-	the frontend -- sophia_analytics.js still calls the legacy Server Script
-	directly."""
+	"""Criterion 4 -- the full verbatim port of
+	server-scripts/UCC Analytics - Criterion 4.py: 40 management questions
+	across 8 sections, 81 metrics, the requirement registry and the 33 engine
+	functions.
+
+	One declared divergence: admission_intelligence comes from
+	analytics/criterion_4_admission.py, the Insights-informed implementation
+	that was already live, rather than from the legacy
+	build_admission_intelligence(). See criterion_4.py's module docstring."""
 	parsed = parse_payload(
 		frappe.form_dict.get("payload"),
 		default_subcriterion="4.1.1",
