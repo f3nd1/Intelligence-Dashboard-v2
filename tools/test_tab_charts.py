@@ -48,7 +48,8 @@ class State:
 	charts = {}        # name -> title, everything that exists in Insights
 	readable = set()   # of those, what THIS user may read
 	criteria = {}      # criterion -> visible?
-	defaults = {}
+	tabs = {}          # "<criterion>::<tab>" -> the shared config record
+	may_write = True   # write permission on UCC Analytics Tab
 	rows = [{"status": "Open", "count": 3}]
 	executed = []
 
@@ -70,6 +71,31 @@ class FakeDoc:
 		return {"rows": list(State.rows)}
 
 
+class FakeTab:
+	"""One UCC Analytics Tab record. save()/insert() re-check write permission
+	the way a real Document does, so a missing _require_edit() still fails."""
+
+	def __init__(self, name=None):
+		self.name = name
+		self.data = dict(State.tabs.get(name) or {})
+
+	def get(self, key):
+		return self.data.get(key)
+
+	def update(self, values):
+		self.data.update(values)
+
+	def _write(self):
+		if not State.may_write:
+			raise PermissionError_("No write permission on UCC Analytics Tab")
+		name = self.name or "%s::%s" % (self.data.get("criterion"), self.data.get("tab"))
+		self.name = name
+		State.tabs[name] = dict(self.data)
+
+	save = _write
+	insert = _write
+
+
 def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_length=None):
 	names = sorted(State.readable)
 	wanted = (filters or {}).get("name")
@@ -83,9 +109,18 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 
 
 def fake_get_doc(doctype, name):
+	if doctype == "UCC Analytics Tab":
+		if name not in State.tabs:
+			raise DoesNotExistError_(name)
+		return FakeTab(name)
 	if name not in State.charts:
 		raise DoesNotExistError_(name)
 	return FakeDoc(name)
+
+
+def fake_new_doc(doctype):
+	assert doctype == "UCC Analytics Tab"
+	return FakeTab()
 
 
 def install_fake_frappe():
@@ -102,11 +137,19 @@ def install_fake_frappe():
 		raise (exc or ValidationError_)(message)
 
 	frappe.throw = throw
-	frappe.db = types.SimpleNamespace(exists=lambda doctype, name=None: name in ("Insights Query v3",))
-	frappe.defaults = types.SimpleNamespace(
-		get_user_default=lambda key: State.defaults.get(key),
-		set_user_default=lambda key, value: State.defaults.__setitem__(key, value),
-	)
+	frappe.get_doc = fake_get_doc
+	frappe.new_doc = fake_new_doc
+	frappe.has_permission = lambda doctype, ptype=None: (
+		State.may_write if doctype == "UCC Analytics Tab" else True)
+
+	def exists(doctype, name=None):
+		if doctype == "DocType":
+			return name in ("Insights Query v3", "UCC Analytics Tab")
+		if doctype == "UCC Analytics Tab":
+			return name in State.tabs
+		return name in State.charts
+
+	frappe.db = types.SimpleNamespace(exists=exists)
 	frappe.utils = types.SimpleNamespace(now=lambda: "2026-08-01 00:00:00")
 	frappe.logger = lambda *a, **k: types.SimpleNamespace(
 		info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
@@ -133,8 +176,19 @@ def reset():
 	State.charts = {"q-open": "Open Actions", "q-secret": "Payroll by Band", "q-agents": "Agents"}
 	State.readable = {"q-open", "q-agents"}
 	State.criteria = {key: True for key in access.CRITERION_KEYS}
-	State.defaults = {}
+	State.tabs = {}
+	State.may_write = True
 	State.executed = []
+
+
+def source_of(function_name):
+	"""One function's source text, from the real module."""
+	text = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "analytics" / "tab_charts.py",
+		encoding="utf-8").read()
+	start = text.index("def %s(" % function_name)
+	rest = text[start + 1:]
+	end = rest.index("\ndef ") if "\ndef " in rest else len(rest)
+	return rest[:end]
 
 
 def raises(exc, fn, *args):
@@ -166,8 +220,8 @@ report([c["chart"] for c in tab_charts.get_tab("criterion_3", "3.1.1")["charts"]
 	"and NOT on another tab of the same criterion")
 report(tab_charts.get_tab("criterion_6", "overview")["charts"] == [],
 	"and not on another criterion")
-report(len(State.defaults) == 2 and all(json.loads(v)["charts"] for v in State.defaults.values()),
-	"the selection is written to the per-user store, one key per tab")
+report(len(State.tabs) == 2 and all(json.loads(v["charts"]) for v in State.tabs.values()),
+	"the selection is written to ONE shared record per tab")
 
 # A fresh module-level cache would hide a broken read; go back through get.
 report([c["chart"] for c in tab_charts.get_tab("criterion_3", "overview")["charts"]] == ["q-open"],
@@ -179,7 +233,7 @@ report(tab_charts.get_tab("criterion_3", "overview")["charts"][0]["title"] == "O
 reset()
 report(raises(PermissionError_, tab_charts.add, "criterion_3", "overview", "q-secret"),
 	"a chart the user cannot read CANNOT be added")
-report(State.defaults == {}, "and nothing is written when the add is refused")
+report(State.tabs == {}, "and nothing is written when the add is refused")
 report(raises(PermissionError_, tab_charts.add, "criterion_3", "overview", "q-nonexistent"),
 	"an id that does not exist is refused the same way, so errors leak no ids")
 
@@ -194,7 +248,7 @@ report(tab_charts.chart_data("q-open")["status"] == "permission_denied",
 report(State.executed == [], "the query never ran")
 # ...and you can still get rid of it, or it would be stuck there forever.
 tab_charts.remove("criterion_3", "overview", "q-open")
-report(json.loads(State.defaults[tab_charts._key("criterion_3", "overview")])["charts"] == [],
+report(json.loads(State.tabs[tab_charts._key("criterion_3", "overview")]["charts"]) == [],
 	"removing works even for a chart you can no longer read")
 
 # --- the criterion gate -----------------------------------------------------
@@ -245,7 +299,7 @@ report(tab_charts.chart_data("q-missing")["status"] == "unavailable",
 
 # --- corrupt stored value ---------------------------------------------------
 reset()
-State.defaults[tab_charts._key("criterion_3", "overview")] = "{not json"
+State.tabs[tab_charts._key("criterion_3", "overview")] = {"charts": "{not json", "intro": "", "hidden_questions": "[]"}
 report(tab_charts.get_tab("criterion_3", "overview")["charts"] == [],
 	"a corrupt stored value costs the layout, not the page")
 
@@ -254,7 +308,7 @@ report(tab_charts.get_tab("criterion_3", "overview")["charts"] == [],
 # question choices existed. Anyone who used the feature before this round has
 # one of those, and it must not read as an empty tab.
 reset()
-State.defaults[tab_charts._key("criterion_3", "overview")] = json.dumps(["q-open", "q-agents"])
+State.tabs[tab_charts._key("criterion_3", "overview")] = {"charts": json.dumps(["q-open", "q-agents"]), "intro": "", "hidden_questions": "[]"}
 legacy = tab_charts.get_tab("criterion_3", "overview")
 report([c["chart"] for c in legacy["charts"]] == ["q-open", "q-agents"],
 	"a tab stored in the original list-of-ids shape still loads its charts")
@@ -294,7 +348,7 @@ tab_charts.set_intro("criterion_3", "overview", "Notes.")
 both = tab_charts.get_tab("criterion_3", "overview")
 report(both["intro"] == "Notes." and [c["chart"] for c in both["charts"]] == ["q-open"],
 	"intro and charts live in ONE stored record -- writing one does not drop the other")
-report(len(State.defaults) == 1, "and it really is one key, not a second store alongside")
+report(len(State.tabs) == 1, "and it really is one record, not a second store alongside")
 
 # --- hidden management questions (#6) ---------------------------------------
 reset()
@@ -336,6 +390,96 @@ for call in [
 	lambda: tab_charts.set_question("criterion_5", "overview", "m", False),
 ]:
 	report(raises(PermissionError_, call), "a hidden criterion refuses the new write endpoints too")
+
+# --- INSTITUTION-WIDE, NOT PER USER -----------------------------------------
+# The whole point of the 2026-08-02 change: Sophia is EduTrust evidence, not a
+# personal workspace. What one person configures is what the auditor sees.
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+tab_charts.set_intro("criterion_3", "overview", "Agents only.")
+tab_charts.set_question("criterion_3", "overview", "metric-7", False)
+report(list(State.tabs) == ["criterion_3::overview"],
+	"charts, intro and hidden questions all land in ONE record, named <criterion>::<tab>")
+record = State.tabs["criterion_3::overview"]
+report(sorted(k for k in record if k in ("charts", "intro", "hidden_questions"))
+	== ["charts", "hidden_questions", "intro"],
+	"and in the three fields they are documented to be in")
+report(record["criterion"] == "criterion_3" and record["tab"] == "overview",
+	"the record carries its own criterion and tab, so it is readable in Desk")
+
+# Nothing is keyed by user. A second person reading the same tab gets the same
+# thing -- which is only provable by there being no user in the key at all.
+report("::" in tab_charts._key("criterion_3", "overview")
+	and "tester@ucc" not in tab_charts._key("criterion_3", "overview"),
+	"the storage key contains NO user -- one tab, one configuration, everyone")
+report("frappe.defaults" not in open(
+	ROOT / "ucc_intelligence" / "ucc_intelligence" / "analytics" / "tab_charts.py",
+	encoding="utf-8").read().split("LEGACY_DEFAULTS_PREFIX")[-1],
+	"the per-user store is not written to any more")
+
+# --- ONLY AN EDITOR MAY CHANGE IT -------------------------------------------
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+tab_charts.set_intro("criterion_3", "overview", "Set by an editor.")
+State.may_write = False
+for call, what in [
+	(lambda: tab_charts.add("criterion_3", "overview", "q-agents"), "add a chart"),
+	(lambda: tab_charts.remove("criterion_3", "overview", "q-open"), "remove a chart"),
+	(lambda: tab_charts.set_size("criterion_3", "overview", "q-open", "full"), "resize a chart"),
+	(lambda: tab_charts.set_intro("criterion_3", "overview", "hijacked"), "edit the intro"),
+	(lambda: tab_charts.set_question("criterion_3", "overview", "m", False), "hide a question"),
+]:
+	report(raises(PermissionError_, call), "a viewer without write permission cannot %s" % what)
+
+# Each endpoint must ask BEFORE it writes, not rely on the DocType refusing.
+# The loop above cannot tell those apart -- both raise PermissionError -- so
+# the explicit gate is asserted per endpoint by name. Removing one from
+# set_intro() passed the loop and failed here, which is why this exists.
+for endpoint in ("add", "remove", "set_size", "set_intro", "set_question"):
+	body = source_of(endpoint)
+	report("_require_edit()" in body, "%s() asks permission before touching anything" % endpoint,
+		)
+	report(body.index("_require_edit()") < (body.index("_store(") if "_store(" in body else len(body)),
+		"...and asks BEFORE it writes")
+
+viewer = tab_charts.get_tab("criterion_3", "overview")
+report(viewer["can_edit"] is False, "and the response tells the page not to show the controls")
+report([c["chart"] for c in viewer["charts"]] == ["q-open"],
+	"but they still SEE the shared configuration")
+report(viewer["intro"] == "Set by an editor.", "including the intro someone else wrote")
+report(State.tabs["criterion_3::overview"]["intro"] == "Set by an editor.",
+	"and nothing they attempted was written")
+
+State.may_write = True
+report(tab_charts.get_tab("criterion_3", "overview")["can_edit"] is True,
+	"an editor is told they may edit")
+
+# The gate is the DocType's own write permission, so widening it is a Desk
+# change. Asserted here rather than described, because "uses the existing
+# pattern" is a claim about which call is made.
+source = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "analytics" / "tab_charts.py",
+	encoding="utf-8").read()
+report('frappe.has_permission(CONFIG_DOCTYPE, "write")' in source,
+	"the edit gate is write permission on the config DocType, not a hardcoded role")
+store_code = "\n".join(line for line in source.split("def _store(")[1].split("def readable(")[0].splitlines()
+	if not line.strip().startswith("#") and "\"\"\"" not in line and "ignore_permissions is NOT" not in line)
+report("ignore_permissions" not in store_code,
+	"writes go through the DocType's own permission check as well -- the gate holds twice")
+
+# --- reads stay open, writes do not -----------------------------------------
+# A shared configuration nobody can read is not shared. The read is documented
+# as ignore_permissions for exactly the reason access.py already does it.
+reset()
+tab_charts.add("criterion_3", "overview", "q-open")
+State.may_write = False
+report(tab_charts.get_tab("criterion_3", "overview")["charts"] != [],
+	"a viewer can read the shared configuration")
+# ...but sharing the CONFIG never shares the DATA.
+State.readable.discard("q-open")
+report(tab_charts.get_tab("criterion_3", "overview")["charts"] == [],
+	"a chart on the shared tab still disappears for someone who may not read its query")
+report(tab_charts.chart_data("q-open")["status"] == "permission_denied",
+	"and executing it is still refused, per user")
 
 print(("PASS" if all(checks) else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
 sys.exit(0 if all(checks) else 1)

@@ -84,15 +84,42 @@ assert.ok(!quoteBreak.includes("<a ") && !quoteBreak.includes("onmouseover=\"ale
 
 // --- chart sizes (#5) -------------------------------------------------------
 for (const [size, span] of [["small", 3], ["medium", 6], ["large", 9], ["full", 12]]) {
-	const html = embeddedChartMarkup({ chart: "q1", title: "T", size, span }, ["small", "medium", "large", "full"]);
+	const html = embeddedChartMarkup({ chart: "q1", title: "T", size, span }, ["small", "medium", "large", "full"], true);
 	assert.ok(html.includes("grid-column:span " + span),
 		size + " spans " + span + " of the 12-column grid");
 	assert.ok(html.includes('value="' + size + '" selected'), size + " is the selected option");
 }
-const card = embeddedChartMarkup({ chart: "q1", title: "T", size: "medium", span: 6 }, ["medium"]);
+const card = embeddedChartMarkup({ chart: "q1", title: "T", size: "medium", span: 6 }, ["medium"], true);
 assert.ok(!/grid-column:span (NaN|undefined)/.test(card), "a missing span never reaches the style attribute");
-assert.ok(embeddedChartMarkup({ chart: "q1", title: "T", size: "medium" }, ["medium"])
+assert.ok(embeddedChartMarkup({ chart: "q1", title: "T", size: "medium" }, ["medium"], true)
 	.includes("grid-column:span 6"), "a span that did not arrive falls back to a half-width card");
+
+// --- read-only viewers get no controls (#2/#3) -----------------------------
+// The configuration is institution-wide now, so a viewer must not be shown
+// buttons that would be refused. The server still checks -- this only stops
+// the page offering what it knows will fail.
+const readOnly = embeddedChartMarkup({ chart: "q1", title: "T", size: "medium", span: 6 }, ["medium"], false);
+assert.ok(!readOnly.includes("data-remove-chart"), "a viewer sees no remove control");
+assert.ok(!readOnly.includes("data-chart-size"), "and no size picker");
+assert.ok(readOnly.includes('data-demo-view="table"') && readOnly.includes("Stakeholder".slice(0, 0) + "Diagram"),
+	"but keeps both views -- looking at the data is not editing");
+assert.ok(card.includes("data-remove-chart") && card.includes("data-chart-size"),
+	"an editor gets both controls");
+
+// ...and the state must actually carry the server's answer through. Testing
+// embeddedChartMarkup(canEdit) alone passed while applyTabConfig hardcoded
+// canEdit:true, so the wiring is asserted too.
+const applyBlock = SRC.slice(SRC.indexOf("function applyTabConfig("), SRC.indexOf("function loadTabCharts("));
+assert.ok(/canEdit:!!\(response&&response\.can_edit\)/.test(applyBlock),
+	"applyTabConfig takes can_edit from the SERVER response, never a constant");
+for (const [reader, what] of [
+	["embeddedChartMarkup(chart,state.sizes,state.canEdit)", "the chart cards"],
+	["tabChartAreaMarkup(tab,canEdit)", "the + Add chart button"],
+]) {
+	assert.ok(SRC.includes(reader), what + " are rendered from that flag");
+}
+assert.ok(/const canEdit=!!\(state&&state\.canEdit\);/.test(SRC),
+	"the intro and the question controls read the same flag");
 
 // --- the card carries what Explore and the toggle need ---------------------
 assert.ok(card.includes('data-demo-card="q1"') && card.includes('data-demo-chart="q1"'),

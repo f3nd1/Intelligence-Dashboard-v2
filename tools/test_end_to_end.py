@@ -217,16 +217,51 @@ report("openChartPicker" in page_source and "data-chart-picker-search" in page_s
 # --- PER TAB, AND PERSISTED ------------------------------------------------
 report('criterion+"::"+tab' in page_source or 'criterionId+"::"+tab' in page_source,
 	"chart state is keyed by criterion AND tab, so tabs do not share charts")
-report('"%s:%s:%s" % (DEFAULTS_PREFIX, criterion, tab)' in tab_charts_source,
-	"the stored key is per criterion and per tab")
-report("frappe.defaults.set_user_default" in tab_charts_source
-	and "frappe.defaults.get_user_default" in tab_charts_source,
-	"the selection persists in frappe.defaults -- Frappe's own per-user store")
-# No new DocType: the point of using frappe.defaults was to avoid one.
-doctype_dirs = {p.name for p in (APP / "sophia" / "doctype").iterdir() if p.is_dir() and p.name != "__pycache__"}
-report(not any("chart" in name for name in doctype_dirs),
-	"no DocType was invented for this -- an existing store was used",
-	"chart-ish doctypes: %s" % sorted(n for n in doctype_dirs if "chart" in n))
+# --- INSTITUTION-WIDE, NOT PER USER (2026-08-02, Felix) ---------------------
+# Sophia is an institutional dashboard used as EduTrust evidence, not a
+# personal workspace: what one person configures is what the auditor sees. The
+# two assertions that used to be here required the opposite (frappe.defaults,
+# no new DocType) and are deliberately reversed.
+report('"%s::%s" % (criterion, tab)' in tab_charts_source,
+	"the stored key is criterion::tab, with NO user in it")
+report("set_user_default" not in tab_charts_source,
+	"nothing is written to the per-user store any more")
+report((APP / "sophia" / "doctype" / "ucc_analytics_tab" / "ucc_analytics_tab.json").exists(),
+	"UCC Analytics Tab is the shared record -- one per criterion+tab")
+
+tab_doctype = json.loads(
+	(APP / "sophia" / "doctype" / "ucc_analytics_tab" / "ucc_analytics_tab.json").read_text(encoding="utf-8"))
+report(tab_doctype.get("autoname") == "format:{criterion}::{tab}",
+	"autoname makes the name the key, so a duplicate configuration cannot exist")
+fieldnames = [field["fieldname"] for field in tab_doctype["fields"]]
+for fieldname, what in [("charts", "the charts"), ("intro", "the tab intro"),
+		("hidden_questions", "the hidden questions")]:
+	report(fieldname in fieldnames, "%s is stored in UCC Analytics Tab.%s" % (what, fieldname))
+report(tab_doctype.get("issingle") == 0,
+	"it is one record per tab, not a Single holding everything")
+
+# The edit gate is the DocType's own write permission -- the same shape
+# UCC Dashboard Access uses, so widening it is a Desk change.
+report('frappe.has_permission(CONFIG_DOCTYPE, "write")' in tab_charts_source,
+	"editing is gated on write permission on the config DocType, not a hardcoded role")
+report(tab_charts_source.count("_require_edit()") >= 6,
+	"every write endpoint asks first (5 endpoints + the definition)")
+report('"can_edit": can_edit()' in tab_charts_source,
+	"the response tells the page whether to show the edit controls at all")
+report("can_edit" in page_source and "state.canEdit" in page_source,
+	"and the page reads it rather than assuming everyone may edit")
+
+# Nothing already configured may be lost.
+patch = APP / "patches" / "v1_0" / "migrate_tab_config_to_shared.py"
+report(patch.exists(), "a patch migrates the existing per-user records")
+patch_source = patch.read_text(encoding="utf-8")
+report("LEGACY_DEFAULTS_PREFIX" in patch_source,
+	"the patch reads the old per-user keys by their real prefix")
+report("if frappe.db.exists(CONFIG_DOCTYPE, name):" in patch_source and "continue" in patch_source,
+	"and is idempotent -- a re-run never overwrites a shared record someone has since edited")
+report("ucc_intelligence.patches.v1_0.migrate_tab_config_to_shared"
+	in (APP / "patches.txt").read_text(encoding="utf-8"),
+	"the patch is registered in patches.txt, so bench migrate runs it")
 
 # --- PERMISSIONS -----------------------------------------------------------
 # Three gates. Each one is a single line in tab_charts.py, so each is asserted.
