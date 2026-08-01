@@ -52,6 +52,7 @@ class State:
 	may_write = True   # write permission on UCC Analytics Tab
 	audit = []         # UCC Analytics Tab Change records, newest last
 	audit_fails = False
+	messages = []      # anything frappe.throw() put in front of the user
 	rows = [{"status": "Open", "count": 3}]
 	executed = []
 
@@ -164,6 +165,13 @@ def install_fake_frappe():
 	frappe.get_doc = fake_get_doc
 
 	def throw(message, exc=None):
+		# Real frappe.throw() puts the message in front of the user BEFORE it
+		# raises, and the message log reaches the browser whether or not the
+		# exception is later caught. Modelling only the raise is what let the
+		# "Audit records cannot be edited." regression through: tab_audit
+		# swallowed the exception, so the test saw nothing, and Felix saw an
+		# error on every successful edit.
+		State.messages.append(str(message))
 		raise (exc or ValidationError_)(message)
 
 	frappe.throw = throw
@@ -190,7 +198,16 @@ def install_fake_frappe():
 	sys.modules["frappe"] = frappe
 	model = types.ModuleType("frappe.model")
 	document = types.ModuleType("frappe.model.document")
-	document.Document = type("Document", (), {})
+
+	class Flags(dict):
+		__getattr__ = dict.get
+		__setattr__ = dict.__setitem__
+
+	class Document:
+		def __init__(self, *a, **k):
+			self.flags = Flags()
+
+	document.Document = Document
 	sys.modules["frappe.model"] = model
 	sys.modules["frappe.model.document"] = document
 	return frappe
@@ -199,6 +216,36 @@ def install_fake_frappe():
 install_fake_frappe()
 from ucc_intelligence.analytics import tab_charts  # noqa: E402
 from ucc_intelligence.permissions import access  # noqa: E402
+from ucc_intelligence.sophia.doctype.ucc_analytics_tab_change import (  # noqa: E402
+	ucc_analytics_tab_change as audit_controller)
+
+
+class RealAudit(audit_controller.UCCAnalyticsTabChange):
+	"""FakeAudit, but running the REAL controller through the REAL hook order.
+
+	Frappe's insert() is before_insert -> write the row -> on_update, and
+	on_update fires for inserts as well as updates. Stubbing insert() without
+	those hooks is what hid the regression: the controller's own guard was
+	firing against the insert that created the record.
+	"""
+
+	def __init__(self):
+		super().__init__()
+		self.data = {}
+
+	def update(self, values):
+		self.data.update(values)
+
+	def insert(self, ignore_permissions=False):
+		if State.audit_fails:
+			raise RuntimeError("audit backend unavailable")
+		assert ignore_permissions, "an audit record the actor could refuse to write is not an audit record"
+		self.before_insert()
+		State.audit.append(dict(self.data))
+		self.on_update()
+
+
+FakeAudit = RealAudit
 
 # The criterion gate reads access.build_response(); stub it rather than build a
 # whole UCC Dashboard Access fixture -- access.py has its own tests.
@@ -213,6 +260,7 @@ def reset():
 	State.may_write = True
 	State.audit = []
 	State.audit_fails = False
+	State.messages = []
 	State.executed = []
 
 
@@ -590,7 +638,25 @@ order = next(e for e in State.audit if e["action"] == "charts_reordered")
 report("q-open" in order["before_value"] and "q-agents" in order["after_value"],
 	"a reorder records both orders")
 
+# --- #0: a successful change reports success --------------------------------
+# The whole run above wrote seven audit records. Not one of them may have put
+# anything in front of the user. The regression this catches: on_update fires
+# on insert too, so the controller's own immutability guard threw against the
+# insert that created the record -- the row landed, the exception was swallowed
+# by record(), and "Audit records cannot be edited." reached the browser anyway.
+report(State.messages == [],
+	"a successful change shows the user no error (%r)" % State.messages)
+
+# ...and the guard it now skips on insert still refuses a real edit.
+existing = FakeAudit()
+existing.update({"criterion": "criterion_3", "tab": "overview", "action": "chart_added"})
+existing.insert(ignore_permissions=True)
+loaded = FakeAudit()          # as a second save would arrive: no insert flag
+report(raises(PermissionError_, loaded.on_update),
+	"an audit record still cannot be edited after it exists")
+
 # A change that changes nothing is not a change.
+State.messages = []
 before_count = len(State.audit)
 tab_charts.set_size("criterion_3", "overview", "q-agents", 6)
 tab_charts.set_intro("criterion_3", "overview", "Scope note.")
