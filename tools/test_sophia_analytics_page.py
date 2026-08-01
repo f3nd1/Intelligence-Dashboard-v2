@@ -439,7 +439,7 @@ checks.append(report(expected_explore in ported,
 checks.append(report("function initDiagramExplorer(platformRoot) {" in ported,
 	"Explore is a named init function, not a self-invoking IIFE"))
 checks.append(report("initDiagramExplorer(root)" in ported, "initDiagramExplorer is wired into boot()"))
-explore_block_src = ported[ported.index("function initDiagramExplorer"):ported.index("// ASK UCC -- the chat surface")]
+explore_block_src = ported[ported.index("function initDiagramExplorer"):ported.index("// ASK UCC -- the decision-support surface")]
 checks.append(report("global." not in explore_block_src,
 	"no bare `global.` references survive in the ported Explore (its IIFE parameter is gone)"))
 checks.append(report('data-ucc-explore' in ported, "the Explore panel markup is present in the shell"))

@@ -126,6 +126,7 @@ def ask(module_key, question, record_name):
 	if primary_result.get("status") != "available":
 		return {
 			"ai_status": primary_result.get("status"),
+			"answer_kind": "unavailable",
 			"answer": None,
 			"answer_error": primary_result.get("message"),
 			"facts": {primary_tool_name: primary_result},
@@ -151,9 +152,26 @@ def ask(module_key, question, record_name):
 
 	known_record_names = known_names_from(primary_result, record_name)
 
+	# A VERIFIED LOOKUP stops here, whether or not AI is available. The routed
+	# fields ARE the answer; sending them to a model to have them read back
+	# costs money and latency, and puts an "AI generated" label on a value that
+	# came straight out of the record (guided_questions.needs_interpretation).
+	if not guided_questions.needs_interpretation(module_key, question):
+		return {
+			"ai_status": "not_required",
+			"answer_kind": "verified_record",
+			"answer": None,
+			"answer_error": None,
+			"facts": facts,
+			"primary": primary_result,
+			"tools_called": tools_called,
+			"known_record_names": known_record_names,
+		}
+
 	if not ai_client.is_enabled():
 		return {
 			"ai_status": "disabled",
+			"answer_kind": "unavailable",
 			"answer": None,
 			"answer_error": None,
 			"facts": facts,
@@ -168,6 +186,7 @@ def ask(module_key, question, record_name):
 	if not completion.get("ok"):
 		return {
 			"ai_status": completion.get("status") or "error",
+			"answer_kind": "unavailable",
 			"answer": None,
 			"answer_error": completion.get("message"),
 			"facts": facts,
@@ -180,6 +199,7 @@ def ask(module_key, question, record_name):
 	if not valid:
 		return {
 			"ai_status": "guardrail_blocked",
+			"answer_kind": "unavailable",
 			"answer": None,
 			"answer_error": reason,
 			"facts": facts,
@@ -190,6 +210,7 @@ def ask(module_key, question, record_name):
 
 	return {
 		"ai_status": "available",
+		"answer_kind": "ai_analysis",
 		"answer": {
 			"text": completion["text"],
 			"model": completion.get("model"),

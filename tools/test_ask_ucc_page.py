@@ -23,6 +23,7 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PAGE_DIR = ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "page" / "sophia_analytics"
+APP = ROOT / "ucc_intelligence" / "ucc_intelligence"
 
 checks = []
 
@@ -60,12 +61,65 @@ report("ucc_intelligence.api.ask_ucc" in page_js, "the page calls the real white
 report(re.search(r"args:\s*\{\s*module:.*question:.*record:", page_js) is not None,
 	"ask_ucc is called with module/question/record")
 
-# --- the three zones the plan requires must be genuinely distinct ---
-report("ucc-ask-zone-ai" in page_js, "there is a distinct AI-interpretation zone")
-report("ucc-ask-zone-facts" in page_js, "there is a distinct facts zone")
-report("renderSourcesZone" in page_js, "there is a distinct sources zone")
-report("AI interpretation" in page_js and "Facts from live records" in page_js,
-	"the zones are LABELLED, so a reader can tell AI text from retrieved facts")
+# --- two card types, decided server-side, visibly different -----------------
+# The whole labelling requirement rests on this: which card renders is read
+# from `answer_kind`, which ask_ucc/contracts.py sets from what actually
+# happened. Nothing here inspects the answer text to guess.
+report('message.answer_kind === "verified_record"' in page_js
+	and 'message.answer_kind === "ai_analysis"' in page_js,
+	"the card type comes from the server's answer_kind, never inferred from the text")
+report("renderVerifiedCard" in page_js and "renderAiCard" in page_js,
+	"a verified record answer and an AI analysis are two different renderers")
+report("Verified record answer" in page_js and "AI analysis" in page_js,
+	"both cards carry a word label, so colour is never the only signal")
+report("is-verified" in page_js and "is-ai" in page_js,
+	"and the two cards are styled apart, not just worded apart")
+report("ASK_ICON.verified" in page_js and "ASK_ICON.ai" in page_js,
+	"each card label carries its own icon as well as its colour and its words")
+
+# A verified answer must not be able to acquire an AI label by accident: the
+# renderer that draws it never mentions the model, and the server never runs
+# one for it (ai_status "not_required").
+verified_block = page_js[page_js.index("function renderVerifiedCard("):]
+verified_block = verified_block[:verified_block.index("function renderAiCard(")]
+report("answer.model" not in verified_block and "AI" not in verified_block,
+	"the verified card cannot render a model name or an AI label")
+
+# The model belongs in the audit trail, not in the headline.
+ai_block = page_js[page_js.index("function renderAiCard("):]
+ai_block = ai_block[:ai_block.index("function renderUnavailableCard(")]
+head = ai_block[ai_block.index("ucc-ask-card-head"):ai_block.index("ucc-ask-card-body")]
+report("answer.model" not in head, "the model name is NOT in the AI card header")
+report("Technical details" in ai_block and "answer.model" in ai_block,
+	"the model name is in Technical details, which is collapsed")
+
+# --- warnings are neither a fact nor an answer -----------------------------
+report("ucc-ask-warning" in page_js and "Data check" in page_js,
+	"a data-consistency warning is labelled as a data check, not as an answer")
+report("data_checks" in (APP / "ask_ucc" / "contracts.py").read_text(encoding="utf-8"),
+	"warnings come from the deterministic check module, not from a model")
+
+# --- evidence is present and collapsed -------------------------------------
+report("renderCollapse" in page_js, "supporting evidence uses one collapsible control")
+collapse = page_js[page_js.index("function renderCollapse("):]
+collapse = collapse[:collapse.index("function factsTableHtml(")]
+report('(open ? " open" : "")' in collapse,
+	"a collapsible is closed unless explicitly opened")
+report(page_js.count('renderCollapse("View supporting facts"') >= 2
+	and 'renderCollapse("Technical details"' in page_js
+	and 'renderCollapse("Record details"' in page_js,
+	"supporting facts, record details and technical details are all collapsible")
+for opened in ('renderCollapse("View supporting facts", factsTableHtml(message), true)',
+		'renderCollapse("Technical details", technical, true)'):
+	report(opened not in page_js, "nothing is opened by default: %s" % opened[:40])
+
+# --- suggested next questions are system-generated, not model-written ------
+report("suggestionsFor" in page_js and "Suggested next questions" in page_js,
+	"follow-up questions are offered under their own heading")
+suggest = page_js[page_js.index("function suggestionsFor("):]
+suggest = suggest[:suggest.index("submitButton.addEventListener")]
+report("module.categories" in suggest and "frappe.call" not in suggest,
+	"they come from the module's own verified question set, not from a model")
 
 # --- every non-available ai_status is explained, not silently blank ---
 for status in ("disabled", "unavailable", "guardrail_blocked", "error", "not_found"):
@@ -84,7 +138,7 @@ report("UCCShared.escapeHtml" in page_js, "the page escapes via the shared helpe
 # with the analytics engine's existing esc() -- checking for plain "esc("
 # here would now pass on the engine's copy and prove nothing about Ask.
 report("function askEsc(" in page_js, "Ask UCC has its own askEsc() wrapper, distinct from the engine's esc()")
-ask_block = page_js[page_js.index("// ASK UCC -- the chat surface"):page_js.index("frappe.pages['sophia-analytics']")]
+ask_block = page_js[page_js.index("// ASK UCC -- the decision-support surface"):page_js.index("frappe.pages['sophia-analytics']")]
 report(re.search(r"(?<![A-Za-z0-9_.])esc\(", ask_block) is None,
 	"the Ask block never calls the engine's esc() by accident -- every call is askEsc()")
 report(ask_block.count("askEsc(") > 10, "askEsc is used throughout the Ask rendering, not just once")
@@ -191,18 +245,28 @@ report(re.search(r"\.ucc-shell-settings-link\{[^}]*font-size:\s*1[6-9]px", page_
 ask_panel = shell_html[shell_html.index('data-ucc-workspace-panel=\\"ask\\"'):]
 report(ask_panel.count("panel-head") == 0,
 	"the Ask surface no longer stacks full panel-head blocks -- that was the vertical space")
-report(ask_panel.count("ucc-shared-panel") == 1,
-	"module, record, question and guided questions share ONE panel, not three")
+report(ask_panel.count("ucc-ask-controls") == 1,
+	"module, record, question and the actions share ONE controls panel, not three")
 controls = ask_panel[:ask_panel.index("ucc-ask-thread")]
 for anchor in ("data-ask-module", "data-ask-record", "data-ask-question", "data-ask-guided"):
 	report(anchor in controls,
 		"%s is inside the single controls panel, so it is visible without scrolling" % anchor)
-report("<textarea" not in ask_panel,
-	"the question box is a single-line input -- the 2-row textarea was part of the height problem")
+# The earlier round replaced the question textarea with a single-line input to
+# recover vertical space. The 2026-08-01 redesign asks for a full-width text
+# area back -- a two-line question is normal here and a one-line input hid it.
+# The height concern is answered by rows=2 plus a bounded min-height, not by
+# refusing a textarea.
+report("<textarea" in ask_panel and 'rows=\\"2\\"' in ask_panel,
+	"the question box is a bounded 2-row textarea, wide enough for a real question")
+report(re.search(r"\.ucc-ask-field textarea\{[^}]*min-height:6\dpx", page_js) is not None,
+	"and it is height-bounded, so it cannot push the FAQ buttons below the fold")
 
 # --- clear chat (UX FIX 3) ---
 report("data-ask-clear" in page_js, "there is a Clear chat control")
-report(">Clear chat</button>" in shell_html, "the control is labelled Clear chat")
+report('clearButton.innerHTML = ASK_ICON.trash + "Clear chat"' in page_js,
+	"the control is labelled Clear chat, in words, beside its icon")
+report("window.confirm(" in page_js,
+	"clearing the conversation asks first -- an answer someone is reading is not discarded on a stray click")
 report('thread.innerHTML = "";' in page_js, "Clear chat empties the on-screen thread")
 report("clearButton.hidden = false" in page_js and "clearButton.hidden = true" in page_js,
 	"Clear chat appears once there is something to clear and hides again afterwards")
@@ -210,8 +274,10 @@ report("delete_conversation" not in page_js and "frappe.client.delete" not in pa
 	"Clear chat does NOT delete stored conversation records -- it is a display control only")
 
 # --- the AI notice is no longer shown on plain data lookups (UX FIX 2) ---
-report('if (hasFacts && status === "disabled") return "";' in page_js,
-	"a deliberately-disabled AI state is not announced when the facts already answered the question")
+report('if (hasFacts && status === "disabled") return renderVerifiedCard("", message);' in page_js,
+	"AI switched off is not announced when the facts already answered -- the facts render as a verified answer")
+report('"not_required"' in (APP / "ai" / "orchestration.py").read_text(encoding="utf-8"),
+	"a verified lookup never reaches the AI layer at all, so there is no AI state to report for it")
 report('|| status === "unavailable"' not in page_js,
 	"'unavailable' is NOT suppressed -- AI enabled-but-broken is a fault, not a setting")
 report('reasons = {' in page_js and "guardrail_blocked" in page_js,
