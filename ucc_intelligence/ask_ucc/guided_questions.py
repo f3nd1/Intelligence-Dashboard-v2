@@ -420,3 +420,58 @@ def supported_questions(module_key):
 		if questions:
 			output.append({"key": key, "label": label, "questions": questions})
 	return output
+
+
+# ---------------------------------------------------------------------------
+# LOOKUP vs INTERPRETATION
+#
+# "What is this student's nationality?" is a field on a record. "Is this
+# student ready to graduate?" is a judgement about several fields. Sending the
+# first one to a language model costs money, adds latency, and puts an "AI
+# generated" label on a value that was read straight out of the database --
+# which is exactly the labelling CLAUDE.md §8.4 exists to prevent.
+#
+# So: a guided question with a known route is a VERIFIED LOOKUP and skips the
+# AI layer entirely, UNLESS it is listed here. Free-typed questions always go
+# to AI -- intent is unknown, so the safe assumption is that judgement is
+# wanted.
+#
+# Listed by exact question text, the same key the routes use. An earlier note
+# in this file said hand-tagging the questions was the thing to do "if an
+# analytical question ever needs its own treatment". It does now.
+INTERPRETIVE_QUESTIONS = {
+	"student_journey": {
+		"Is this student ready to graduate?",
+		"Show this student's risk summary",
+		"What follow-up actions are needed for this student?",
+		"Has this student finished all modules?",
+	},
+	"recruitment_agent": {
+		"Should this agent's contract be renewed?",
+		"Show this agent's compliance issues",
+		"Show this agent's risk summary",
+		"Does this agent meet the minimum rating?",
+	},
+	"quality_action": {
+		"Is this Quality Action ready for closure?",
+		"Run a quality review of the root cause and action taken",
+		"Assess the root cause and resolution",
+	},
+}
+
+_INTERPRETIVE_BY_NORMALISED = {
+	module_key: {_normalise(q) for q in questions}
+	for module_key, questions in INTERPRETIVE_QUESTIONS.items()
+}
+
+
+def needs_interpretation(module_key, question):
+	"""True when this question wants judgement rather than a field.
+
+	A question with NO route is free text, so it needs interpretation by
+	default: we cannot tell what was meant, and answering a judgement question
+	with a bare field would be worse than the other way round.
+	"""
+	if route_for(module_key, question) is None:
+		return True
+	return _normalise(question) in _INTERPRETIVE_BY_NORMALISED.get(module_key, set())

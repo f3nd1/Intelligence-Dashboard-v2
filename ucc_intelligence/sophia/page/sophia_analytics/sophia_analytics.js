@@ -18,7 +18,7 @@
 // custom-html-block/CSS.css (sophia_analytics.css, same folder) loaded
 // page-scoped, not site-wide -- see the plan doc for why.
 
-const SHELL_HTML = "<div class=\"ucc-platform ucc-embed-safe\" data-build-id=\"SOPHIA-ANALYTICS-PAGE\" data-platform-version=\"phase-3\" id=\"uccIntelligencePlatform\"><header class=\"ucc-platform-shell\"><div class=\"ucc-platform-brand\"><div aria-hidden=\"true\" class=\"ucc-platform-mark\">UCC</div><div class=\"ucc-platform-brand-copy\"><div class=\"ucc-platform-brand-title\"><strong>UCC Intelligence Platform</strong></div><small>Analytics, evidence and guided answers</small></div></div><nav aria-label=\"Platform workspaces\" class=\"ucc-platform-workspaces\"><button aria-pressed=\"true\" class=\"is-active\" data-ucc-workspace=\"analytics\" type=\"button\">Analytics</button><button aria-pressed=\"false\" data-ucc-workspace=\"explore\" type=\"button\">Explore</button><button aria-pressed=\"false\" data-ucc-workspace=\"ask\" type=\"button\">Ask UCC</button></nav><button aria-label=\"UCC Intelligence Settings\" class=\"ucc-shell-settings-link\" data-ucc-settings-link=\"\" hidden=\"\" title=\"UCC Intelligence Settings\" type=\"button\"><span aria-hidden=\"true\">&#9881;</span><span class=\"ucc-visually-hidden\">UCC Intelligence Settings</span></button><div class=\"ucc-platform-dashboard-control\" data-ucc-dashboard-control=\"\"><label for=\"uccDashboardSelect\">Dashboard</label><select id=\"uccDashboardSelect\"><option value=\"criterion_1\">Criterion 1 \u00b7 Leadership and Strategic Planning</option><option value=\"criterion_2\">Criterion 2 \u00b7 Corporate Administration</option><option value=\"criterion_3\">Criterion 3 \u00b7 External Recruitment Agents</option><option value=\"criterion_4\">Criterion 4 \u00b7 Student Protection and Support Services</option><option selected=\"\" value=\"criterion_5\">Criterion 5 \u00b7 Academic Systems and Processes</option><option value=\"criterion_6\">Criterion 6 \u00b7 Quality Assurance, Innovation and Continual Improvement</option><option value=\"criterion_7\">Criterion 7 \u00b7 Performance Outcomes</option></select></div><button aria-expanded=\"true\" aria-label=\"Minimise UCC navigation\" class=\"ucc-shell-collapse-toggle\" data-shell-toggle=\"\" title=\"Minimise navigation\" type=\"button\"><span aria-hidden=\"true\" class=\"ucc-shell-toggle-icon\" data-shell-toggle-icon=\"\">\u2039</span><span class=\"ucc-visually-hidden\" data-shell-toggle-label=\"\">Minimise navigation</span></button></header><main class=\"ucc-platform-main\"><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"analytics\"><div class=\"ucc-criterion-dashboard\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_5\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_5\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_4\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_4\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_1\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_1\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_2\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_2\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_3\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_3\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_6\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_6\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_7\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_7\" data-live-api=\"1\"></div></section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"explore\" hidden=\"\">\n<div class=\"ucc-explore-hub\" data-ucc-explore=\"\">\n<header class=\"ucc-explore-hero\">\n<div>\n<span class=\"ucc-explore-kicker\">DIAGRAM EXPLORER</span>\n<h1>Find live diagrams without opening another dashboard page</h1>\n<p>Search all Criterion 1\u20137 visual catalogues. Criteria 1, 2, 3, 6 and 7 use permission-aware live API foundations; Criteria 4 and 5 retain their established live implementations.</p>\n</div>\n<div class=\"ucc-explore-summary\">\n<article><span>Criterion 4</span><strong data-ucc-explore-count=\"criterion_4\">0</strong><small>live visuals</small></article>\n<article><span>Criterion 5</span><strong data-ucc-explore-count=\"criterion_5\">0</strong><small>live visuals</small></article>\n<article><span>Live foundations</span><strong>5</strong><small>permission-aware APIs</small></article>\n</div>\n</header>\n<div class=\"ucc-explore-controls\">\n<label><span>Search</span><input autocomplete=\"off\" data-ucc-explore-search=\"\" placeholder=\"Search diagram, section, type or source\" role=\"searchbox\" spellcheck=\"false\" type=\"text\"/></label>\n<label><span>Section</span><select data-ucc-explore-section=\"\"><option value=\"\">All sections</option></select></label>\n<label><span>Visual type</span><select data-ucc-explore-type=\"\"><option value=\"\">All visual types</option></select></label>\n<button data-ucc-explore-clear=\"\" type=\"button\">Clear</button>\n</div>\n<div class=\"ucc-explore-layout\">\n<aside class=\"ucc-explore-catalogue\">\n<div class=\"ucc-explore-catalogue-head\">\n<div><strong>Available diagrams</strong><small data-ucc-explore-result-count=\"\">Scanning platform\u2026</small></div>\n<span class=\"ucc-explore-live-pill\">Live</span>\n</div>\n<div class=\"ucc-explore-list\" data-ucc-explore-list=\"\"></div>\n</aside>\n<section class=\"ucc-explore-guide\">\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">1</span>\n<div><strong>Choose the dashboard</strong><p>Use the existing Criterion selector in the top bar.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">2</span>\n<div><strong>Search or filter</strong><p>The catalogue is generated from the real chart elements, so future diagrams appear automatically.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">3</span>\n<div><strong>Open the live card</strong><p>One click takes you to the original analytics card. No duplicate rendering logic or copied data.</p></div>\n</div>\n<div class=\"ucc-explore-note\">\n<strong>Why this approach scales</strong>\n<p>Explore is a fast index over the existing dashboards\u2014not a second dashboard system. Criterion-specific calculations, D3 renderers, tables, exports and record links remain in their original tested components.</p>\n</div>\n</section>\n</div>\n</div>\n</section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"ask\" hidden=\"\"><div class=\"ucc-ask\" data-ucc-ask=\"\"><section class=\"panel ucc-shared-panel ucc-ask-controls\"><div class=\"ucc-ask-head\"><h2>Ask UCC</h2><p>Built from live records you already have permission to see. Any AI text is labelled separately.</p></div><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field\"><span>Module</span><select data-ask-module=\"\"></select></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Record</span><input autocomplete=\"off\" data-ask-record=\"\" placeholder=\"Search by name or ID\u2026\" type=\"text\"/><div class=\"ucc-ask-suggestions\" data-ask-suggestions=\"\" hidden=\"\"></div></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Question</span><input autocomplete=\"off\" data-ask-question=\"\" placeholder=\"e.g. Is this ready to close?\" type=\"text\"/></label><button class=\"btn btn-primary ucc-ask-submit\" data-ask-submit=\"\" type=\"button\">Ask</button><button class=\"btn ucc-ask-clear\" data-ask-clear=\"\" hidden=\"\" type=\"button\">Clear chat</button></div><div class=\"ucc-ask-guided\" data-ask-guided=\"\" hidden=\"\"><div class=\"ucc-ask-categories\" data-ask-categories=\"\"></div><div class=\"ucc-ask-questions\" data-ask-questions=\"\"></div></div><div class=\"ucc-ask-status\" data-ask-status=\"\" hidden=\"\"></div></section><section class=\"ucc-ask-thread\" data-ask-thread=\"\"></section></div></section></main></div>";
+const SHELL_HTML = "<div class=\"ucc-platform ucc-embed-safe\" data-build-id=\"SOPHIA-ANALYTICS-PAGE\" data-platform-version=\"phase-3\" id=\"uccIntelligencePlatform\"><header class=\"ucc-platform-shell\"><div class=\"ucc-platform-brand\"><div aria-hidden=\"true\" class=\"ucc-platform-mark\">UCC</div><div class=\"ucc-platform-brand-copy\"><div class=\"ucc-platform-brand-title\"><strong>UCC Intelligence Platform</strong></div><small>Analytics, evidence and guided answers</small></div></div><nav aria-label=\"Platform workspaces\" class=\"ucc-platform-workspaces\"><button aria-pressed=\"true\" class=\"is-active\" data-ucc-workspace=\"analytics\" type=\"button\">Analytics</button><button aria-pressed=\"false\" data-ucc-workspace=\"explore\" type=\"button\">Explore</button><button aria-pressed=\"false\" data-ucc-workspace=\"ask\" type=\"button\">Ask UCC</button></nav><button aria-label=\"UCC Intelligence Settings\" class=\"ucc-shell-settings-link\" data-ucc-settings-link=\"\" hidden=\"\" title=\"UCC Intelligence Settings\" type=\"button\"><span aria-hidden=\"true\">&#9881;</span><span class=\"ucc-visually-hidden\">UCC Intelligence Settings</span></button><div class=\"ucc-platform-dashboard-control\" data-ucc-dashboard-control=\"\"><label for=\"uccDashboardSelect\">Dashboard</label><select id=\"uccDashboardSelect\"><option value=\"criterion_1\">Criterion 1 \u00b7 Leadership and Strategic Planning</option><option value=\"criterion_2\">Criterion 2 \u00b7 Corporate Administration</option><option value=\"criterion_3\">Criterion 3 \u00b7 External Recruitment Agents</option><option value=\"criterion_4\">Criterion 4 \u00b7 Student Protection and Support Services</option><option selected=\"\" value=\"criterion_5\">Criterion 5 \u00b7 Academic Systems and Processes</option><option value=\"criterion_6\">Criterion 6 \u00b7 Quality Assurance, Innovation and Continual Improvement</option><option value=\"criterion_7\">Criterion 7 \u00b7 Performance Outcomes</option></select></div><button aria-expanded=\"true\" aria-label=\"Minimise UCC navigation\" class=\"ucc-shell-collapse-toggle\" data-shell-toggle=\"\" title=\"Minimise navigation\" type=\"button\"><span aria-hidden=\"true\" class=\"ucc-shell-toggle-icon\" data-shell-toggle-icon=\"\">\u2039</span><span class=\"ucc-visually-hidden\" data-shell-toggle-label=\"\">Minimise navigation</span></button></header><main class=\"ucc-platform-main\"><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"analytics\"><div class=\"ucc-criterion-dashboard\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_5\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_5\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_4\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_4\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_1\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_1\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_2\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_2\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_3\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_3\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_6\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_6\" data-live-api=\"1\"></div><div class=\"ucc-criterion-dashboard ucc-hidden\" data-dashboard-architecture=\"shared-v2\" data-dashboard-panel=\"criterion_7\" data-demo-active-tab=\"overview\" data-demo-dashboard=\"criterion_7\" data-live-api=\"1\"></div></section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"explore\" hidden=\"\">\n<div class=\"ucc-explore-hub\" data-ucc-explore=\"\">\n<header class=\"ucc-explore-hero\">\n<div>\n<span class=\"ucc-explore-kicker\">DIAGRAM EXPLORER</span>\n<h1>Find live diagrams without opening another dashboard page</h1>\n<p>Search all Criterion 1\u20137 visual catalogues. Criteria 1, 2, 3, 6 and 7 use permission-aware live API foundations; Criteria 4 and 5 retain their established live implementations.</p>\n</div>\n<div class=\"ucc-explore-summary\">\n<article><span>Criterion 4</span><strong data-ucc-explore-count=\"criterion_4\">0</strong><small>live visuals</small></article>\n<article><span>Criterion 5</span><strong data-ucc-explore-count=\"criterion_5\">0</strong><small>live visuals</small></article>\n<article><span>Live foundations</span><strong>5</strong><small>permission-aware APIs</small></article>\n</div>\n</header>\n<div class=\"ucc-explore-controls\">\n<label><span>Search</span><input autocomplete=\"off\" data-ucc-explore-search=\"\" placeholder=\"Search diagram, section, type or source\" role=\"searchbox\" spellcheck=\"false\" type=\"text\"/></label>\n<label><span>Section</span><select data-ucc-explore-section=\"\"><option value=\"\">All sections</option></select></label>\n<label><span>Visual type</span><select data-ucc-explore-type=\"\"><option value=\"\">All visual types</option></select></label>\n<button data-ucc-explore-clear=\"\" type=\"button\">Clear</button>\n</div>\n<div class=\"ucc-explore-layout\">\n<aside class=\"ucc-explore-catalogue\">\n<div class=\"ucc-explore-catalogue-head\">\n<div><strong>Available diagrams</strong><small data-ucc-explore-result-count=\"\">Scanning platform\u2026</small></div>\n<span class=\"ucc-explore-live-pill\">Live</span>\n</div>\n<div class=\"ucc-explore-list\" data-ucc-explore-list=\"\"></div>\n</aside>\n<section class=\"ucc-explore-guide\">\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">1</span>\n<div><strong>Choose the dashboard</strong><p>Use the existing Criterion selector in the top bar.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">2</span>\n<div><strong>Search or filter</strong><p>The catalogue is generated from the real chart elements, so future diagrams appear automatically.</p></div>\n</div>\n<div class=\"ucc-explore-guide-card\">\n<span class=\"ucc-explore-step\">3</span>\n<div><strong>Open the live card</strong><p>One click takes you to the original analytics card. No duplicate rendering logic or copied data.</p></div>\n</div>\n<div class=\"ucc-explore-note\">\n<strong>Why this approach scales</strong>\n<p>Explore is a fast index over the existing dashboards\u2014not a second dashboard system. Criterion-specific calculations, D3 renderers, tables, exports and record links remain in their original tested components.</p>\n</div>\n</section>\n</div>\n</div>\n</section><section class=\"ucc-platform-workspace\" data-ucc-workspace-panel=\"ask\" hidden=\"\"><div class=\"ucc-ask\" data-ucc-ask=\"\"><div class=\"ucc-ask-layout\"><div class=\"ucc-ask-main\"><header class=\"ucc-ask-head\"><div class=\"ucc-ask-head-copy\"><h2 id=\"uccAskTitle\">Ask UCC</h2><p>Ask about a selected record, or use a verified FAQ for a direct answer.</p></div><aside class=\"ucc-ask-assurance\" data-ask-assurance=\"\"></aside></header><section class=\"ucc-ask-controls\" aria-labelledby=\"uccAskTitle\"><div class=\"ucc-ask-row\"><label class=\"ucc-ask-field\"><span>Module</span><select data-ask-module=\"\"></select></label><label class=\"ucc-ask-field ucc-ask-field-grow\"><span>Record</span><input autocomplete=\"off\" data-ask-record=\"\" placeholder=\"Search by name or ID\u2026\" type=\"text\"/><div class=\"ucc-ask-suggestions\" data-ask-suggestions=\"\" hidden=\"\" role=\"listbox\"></div></label><div class=\"ucc-ask-field\"><span id=\"uccAskStatusLabel\">Status</span><p aria-labelledby=\"uccAskStatusLabel\" class=\"ucc-ask-record-status\" data-ask-record-status=\"\" data-state=\"none\">No record selected</p></div></div><label class=\"ucc-ask-field\"><span>Question</span><textarea data-ask-question=\"\" rows=\"2\" placeholder=\"Ask a question about the selected record\"></textarea></label><div class=\"ucc-ask-actions\"><button class=\"ucc-ask-submit\" data-ask-submit=\"\" type=\"button\"></button><button class=\"ucc-ask-clear\" data-ask-clear=\"\" hidden=\"\" type=\"button\"></button></div></section><div class=\"ucc-ask-guided\" data-ask-guided=\"\" hidden=\"\"><div aria-label=\"Question categories\" class=\"ucc-ask-categories\" data-ask-categories=\"\" role=\"tablist\"></div><div class=\"ucc-ask-faq-head\"><h3>Verified FAQs</h3><p>Direct answers from live records, no AI interpretation</p></div><div class=\"ucc-ask-questions\" data-ask-questions=\"\"></div></div><div class=\"ucc-ask-status\" data-ask-status=\"\" hidden=\"\" role=\"status\"></div><section aria-label=\"Answers\" aria-live=\"polite\" class=\"ucc-ask-thread\" data-ask-thread=\"\"></section></div><aside aria-label=\"Record context\" class=\"ucc-ask-context\" data-ask-context=\"\"></aside></div></div></section></main></div>";
 
 function initPlatformShell(root) {
 "use strict";
@@ -1184,7 +1184,7 @@ function initDiagramExplorer(platformRoot) {
 }
 
 // ---------------------------------------------------------------------------
-// ASK UCC -- the chat surface for ucc_intelligence.api.ask_ucc.
+// ASK UCC -- the decision-support surface for ucc_intelligence.api.ask_ucc.
 //
 // Lives here, inside the platform shell's `ask` workspace panel, NOT as a
 // separate Frappe Page. The original design (custom-html-block's
@@ -1197,59 +1197,236 @@ function initDiagramExplorer(platformRoot) {
 // browser-held OpenAI API key modal CLAUDE.md §1.1.9 forbids. This surface
 // talks to the server-side ai/ layer, which never exposes a key to the browser.
 //
-// The plan doc's §2.1 step 8 requirement -- a reader can always tell AI text
-// from retrieved facts -- is why the answer renders as three separately
-// labelled zones rather than one prose blob.
+// THE ONE RULE THIS LAYOUT EXISTS TO SERVE
+// A reader must never have to work out whether what they are looking at came
+// out of a record or out of a language model. So the card TYPE is decided
+// server-side (`answer_kind` in ask_ucc/contracts.py) and rendered as two
+// visibly different things:
+//
+//   VERIFIED RECORD ANSWER -- green, a value read from the record. No model
+//       was called at all; ai/orchestration.py returns before the AI layer for
+//       any question with a known route that is not listed as interpretive.
+//   AI ANALYSIS -- blue, a model's reading of those same records, with the
+//       number of record checks behind it stated in the header.
+//
+// A third band, amber, is neither: a deterministic field-vs-field check
+// (ask_ucc/data_checks.py). It is never phrased as an answer.
+//
+// Evidence, source records and technical metadata are all present and all
+// collapsed. The answer must be understandable without opening any of them --
+// which is also why the model name is in "Technical details" and not the
+// header, where it used to be.
 // ---------------------------------------------------------------------------
 const ASK_STYLE_ID = "ucc-ask-style";
+
+// Line icons, inline. No emoji: an emoji renders differently on every OS and
+// carries a tone this interface should not have. `aria-hidden` on all of them
+// -- every icon here sits beside a text label that carries the meaning, per
+// the "colour and icons are never the only indicator" rule.
+const ASK_ICON = (function () {
+	function svg(body, size) {
+		return '<svg class="ucc-ask-icon" aria-hidden="true" focusable="false" width="' + (size || 14)
+			+ '" height="' + (size || 14) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+			+ ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + body + "</svg>";
+	}
+	return {
+		shield: svg('<path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>'),
+		verified: svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>'),
+		ai: svg('<path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z"/>'),
+		warning: svg('<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>'),
+		send: svg('<path d="M4 20l17-8L4 4l3 8z"/><path d="M7 12h14"/>'),
+		trash: svg('<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/>'),
+		external: svg('<path d="M14 5h5v5"/><path d="M19 5l-8 8"/><path d="M18 14v5H5V6h5"/>', 13),
+		person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>', 13),
+		route: svg('<path d="M5 5h9a4 4 0 010 8H8a4 4 0 000 8h11"/>', 13),
+		chart: svg('<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>', 13),
+		arrow: svg('<path d="M5 12h13"/><path d="M13 6l6 6-6 6"/>', 13),
+		clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', 13),
+	};
+}());
+
+// Institutional palette, stated once. Colour never carries meaning alone here
+// -- every state below pairs it with a text label and an icon.
 const ASK_STYLE_TEXT = `
-.ucc-ask{display:flex;flex-direction:column;gap:12px;padding:12px}
-.ucc-ask-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:10px 16px 8px}
-.ucc-ask-head h2{margin:0;font-size:15px}
-.ucc-ask-head p{margin:0;font-size:12px;opacity:.7}
-.ucc-ask-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:0 16px 10px}
-.ucc-ask-field{display:flex;flex-direction:column;gap:3px;position:relative;min-width:180px}
+.ucc-ask{--ask-navy:#172554;--ask-blue:#2563EB;--ask-green:#15803D;--ask-green-bg:#F0FDF4;
+ --ask-ai-bg:#F3F7FF;--ask-amber:#B45309;--ask-amber-bg:#FFFBEB;--ask-red:#B91C1C;
+ --ask-page:#F6F8FC;--ask-text:#1E293B;--ask-muted:#64748B;--ask-border:#D8E0EC;
+ font-size:14px;color:var(--ask-text)}
+.ucc-ask-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start;padding:16px}
+.ucc-ask-main{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+/* header ------------------------------------------------------------------ */
+.ucc-ask-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.ucc-ask-head h2{margin:0;font-size:19px;font-weight:600;color:var(--ask-navy)}
+.ucc-ask-head p{margin:4px 0 0;font-size:13px;color:var(--ask-muted)}
+.ucc-ask-assurance{display:flex;gap:8px;align-items:flex-start;max-width:360px;padding:8px 12px;
+ background:#F3F7FF;border:1px solid var(--ask-border);border-radius:8px;font-size:11px;line-height:1.5;color:#334155}
+.ucc-ask-assurance .ucc-ask-icon{flex:none;margin-top:1px;color:var(--ask-blue)}
+
+/* controls ---------------------------------------------------------------- */
+.ucc-ask-controls{display:flex;flex-direction:column;gap:12px;padding:16px;background:#fff;
+ border:1px solid var(--ask-border);border-radius:12px}
+.ucc-ask-row{display:grid;grid-template-columns:minmax(150px,200px) minmax(0,1fr) auto;gap:12px;align-items:end}
+.ucc-ask-field{display:flex;flex-direction:column;gap:4px;position:relative;min-width:0}
 .ucc-ask-field-grow{flex:1}
-.ucc-ask-field>span{font-size:11px;font-weight:600;opacity:.75}
-.ucc-ask-field select,.ucc-ask-field input,.ucc-ask-field textarea{padding:6px 8px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;font:inherit;width:100%}
-.ucc-ask-submit{white-space:nowrap}
-.ucc-ask-suggestions{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card-bg,#fff);border:1px solid var(--border-color,#d1d8dd);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)}
-.ucc-ask-suggestion{padding:6px 10px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:1px}
-.ucc-ask-suggestion-id{font-size:11px;opacity:.65}
-/* Two rows, two jobs, so two visual weights. Row 1 is navigation: which
-   topic am I in -- uppercase, tracked, borderless, the selected one filled
-   solid so the current topic is unmistakable. Row 2 is the actions inside
-   that topic -- sentence case, outlined cards, larger text. Previously both
-   rows were near-identical pills and the hierarchy was invisible. */
-.ucc-ask-categories{display:flex;flex-wrap:wrap;gap:2px;padding:2px 16px 0;border-bottom:1px solid var(--border-color,#e6e9ec);margin:0 0 10px}
-.ucc-ask-category{padding:6px 12px;border:0;border-bottom:2px solid transparent;background:transparent;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted,#8d99a6);cursor:pointer}
-.ucc-ask-category:hover{color:var(--text-color,#36414c)}
-.ucc-ask-category.is-active{color:var(--text-color,#36414c);border-bottom-color:var(--text-color,#36414c)}
-.ucc-ask-questions{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}
-.ucc-ask-question{padding:6px 12px;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;background:var(--card-bg,#fff);font-size:13px;cursor:pointer;text-align:left}
-.ucc-ask-question:hover{background:var(--bg-light-gray,#f4f5f6);border-color:var(--text-muted,#8d99a6)}
-.ucc-shell-settings-link{margin-left:18px;padding:5px 9px;font-size:19px;line-height:1;background:transparent;border:1px solid var(--border-color,#d1d8dd);border-radius:6px;opacity:.7;cursor:pointer}
-.ucc-shell-settings-link:hover{opacity:1;background:var(--bg-light-gray,#f4f5f6)}
-.ucc-ask-suggestion:hover,.ucc-ask-suggestion.is-active{background:var(--bg-light-gray,#f4f5f6)}
-.ucc-ask-status{padding:0 16px 10px;font-size:13px}
-.ucc-ask-status[data-tone="error"]{color:var(--red-600,#c0392b)}
-.ucc-ask-thread{display:flex;flex-direction:column;gap:16px}
+.ucc-ask-field>span{font-size:11px;font-weight:600;color:var(--ask-muted)}
+/* box-sizing is stated because width:100% plus 10px padding was pushing the
+   record input 10px into the status badge beside it -- the host stylesheet
+   does not set it for these elements. */
+.ucc-ask-field select,.ucc-ask-field input,.ucc-ask-field textarea{box-sizing:border-box;padding:9px 10px;
+ background:#fff;border:1px solid var(--ask-border);border-radius:8px;font:inherit;font-size:13px;
+ width:100%;color:var(--ask-text)}
+.ucc-ask-field textarea{resize:vertical;min-height:60px;line-height:1.5}
+.ucc-ask select:focus-visible,.ucc-ask input:focus-visible,.ucc-ask textarea:focus-visible,
+.ucc-ask button:focus-visible,.ucc-ask a:focus-visible,.ucc-ask summary:focus-visible{
+ outline:2px solid var(--ask-blue);outline-offset:2px}
+.ucc-ask-record-status{display:inline-flex;align-items:center;gap:6px;margin:0;padding:8px 10px;
+ border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--ask-border);
+ background:#F8FAFC;color:var(--ask-muted);min-height:38px}
+.ucc-ask-record-status::before{content:"";width:7px;height:7px;border-radius:50%;background:#94A3B8;flex:none}
+.ucc-ask-record-status[data-state="active"]{background:var(--ask-green-bg);border-color:#BBF7D0;color:var(--ask-green)}
+.ucc-ask-record-status[data-state="active"]::before{background:var(--ask-green)}
+.ucc-ask-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ucc-ask-submit{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 20px;
+ background:var(--ask-navy);color:#fff;border:1px solid var(--ask-navy);border-radius:8px;
+ font-size:14px;font-weight:600;cursor:pointer}
+.ucc-ask-submit:hover{background:#1E3A8A}
+.ucc-ask-submit[disabled]{opacity:.55;cursor:default}
+.ucc-ask-clear{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;
+ background:#fff;color:var(--ask-red);border:1px solid var(--ask-border);border-radius:8px;
+ font-size:13px;font-weight:500;cursor:pointer}
+.ucc-ask-clear:hover{background:#FEF2F2;border-color:#FECACA}
+.ucc-ask-suggestions{position:absolute;top:100%;left:0;right:0;z-index:20;margin-top:4px;background:#fff;
+ border:1px solid var(--ask-border);border-radius:8px;max-height:240px;overflow:auto;box-shadow:0 4px 12px rgba(15,23,42,.08)}
+.ucc-ask-suggestion{padding:8px 10px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:1px}
+.ucc-ask-suggestion-id{font-size:11px;color:var(--ask-muted)}
+.ucc-ask-suggestion:hover,.ucc-ask-suggestion.is-active{background:#F1F5F9}
+
+/* category tabs vs FAQ chips: two rows, two jobs, two visual weights ------- */
+.ucc-ask-categories{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--ask-border)}
+.ucc-ask-category{min-height:40px;padding:0 12px;border:0;border-bottom:2px solid transparent;
+ background:transparent;font-size:13px;font-weight:500;color:var(--ask-muted);cursor:pointer}
+.ucc-ask-category:hover{color:var(--ask-navy)}
+.ucc-ask-category.is-active{color:var(--ask-navy);font-weight:600;border-bottom-color:var(--ask-navy)}
+.ucc-ask-faq-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 8px}
+.ucc-ask-faq-head h3{margin:0;font-size:13px;font-weight:600;color:var(--ask-text)}
+.ucc-ask-faq-head p{margin:0;font-size:11px;color:var(--ask-muted)}
+.ucc-ask-questions{display:flex;flex-wrap:wrap;gap:8px}
+.ucc-ask-question{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 12px;
+ border:1px solid var(--ask-border);border-radius:8px;background:#fff;font-size:13px;
+ color:#334155;cursor:pointer;text-align:left}
+.ucc-ask-question:hover{background:#F8FAFC;border-color:#94A3B8}
+.ucc-ask-question::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ask-green);flex:none}
+/* The settings gear is a SHELL control, but its rules have always lived in
+   this stylesheet because injectAskStyles() is the only style injection that
+   runs on boot. Left where they are deliberately: moving them would mean
+   touching the shell, which this round must not do. */
+.ucc-shell-settings-link{margin-left:18px;padding:5px 9px;font-size:19px;line-height:1;background:transparent;border:1px solid var(--ask-border);border-radius:6px;opacity:.7;cursor:pointer}
+.ucc-shell-settings-link:hover{opacity:1;background:#F1F5F9}
+.ucc-ask-status{font-size:13px;color:var(--ask-muted)}
+.ucc-ask-status[data-tone="error"]{color:var(--ask-red)}
+
+/* conversation ------------------------------------------------------------ */
+.ucc-ask-thread{display:flex;flex-direction:column;gap:24px}
 .ucc-ask-turn{display:flex;flex-direction:column;gap:12px}
-.ucc-ask-question-bubble{align-self:flex-end;max-width:70%;background:var(--bg-light-gray,#f4f5f6);padding:10px 14px;border-radius:12px;font-size:14px}
-.ucc-ask-zone{border:1px solid var(--border-color,#d1d8dd);border-radius:8px;overflow:hidden}
-.ucc-ask-zone-head{padding:8px 12px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--bg-light-gray,#f4f5f6)}
-.ucc-ask-zone-body{padding:12px}
-.ucc-ask-zone-ai .ucc-ask-zone-head{background:#eef4ff;color:#2c5aa0}
-.ucc-ask-zone-facts .ucc-ask-zone-head{background:#eefaf1;color:#1e7a45}
-.ucc-ask-answer-text{white-space:pre-wrap;font-size:14px;line-height:1.55}
+.ucc-ask-user{display:flex;justify-content:flex-end}
+.ucc-ask-user-bubble{max-width:70%;padding:10px 14px;border-radius:12px 12px 4px 12px;
+ background:var(--ask-navy);color:#fff;font-size:14px;line-height:1.5}
+.ucc-ask-card{border:1px solid var(--ask-border);border-radius:12px;background:#fff;overflow:hidden}
+.ucc-ask-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+ padding:8px 14px;border-bottom:1px solid var(--ask-border);font-size:11px}
+.ucc-ask-card-label{display:inline-flex;align-items:center;gap:7px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.ucc-ask-card-meta{color:var(--ask-muted);font-size:11px;text-align:right}
+.ucc-ask-card.is-verified .ucc-ask-card-head{background:var(--ask-green-bg);border-bottom-color:#BBF7D0;color:var(--ask-green)}
+.ucc-ask-card.is-ai .ucc-ask-card-head{background:var(--ask-ai-bg);border-bottom-color:#C7D9F5;color:var(--ask-blue)}
+.ucc-ask-card.is-unavailable .ucc-ask-card-head{background:#F8FAFC;color:var(--ask-muted)}
+.ucc-ask-card-body{padding:14px;display:flex;flex-direction:column;gap:12px}
+.ucc-ask-answer{margin:0;font-size:15px;line-height:1.55}
+.ucc-ask-answer strong{font-weight:600}
+.ucc-ask-answer-detail{display:block;margin-top:4px;font-size:13px;color:var(--ask-muted)}
+.ucc-ask-answer-text{white-space:pre-wrap;font-size:14px;line-height:1.6;margin:0}
+
+/* fact tiles -------------------------------------------------------------- */
+.ucc-ask-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.ucc-ask-tile{padding:8px 10px;background:#F8FAFC;border:1px solid var(--ask-border);border-radius:6px}
+.ucc-ask-tile dt{margin:0;font-size:11px;color:var(--ask-muted)}
+.ucc-ask-tile dd{margin:2px 0 0;font-size:14px;font-weight:600;color:var(--ask-text);word-break:break-word}
+
+/* warning ----------------------------------------------------------------- */
+.ucc-ask-warning{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;
+ background:var(--ask-amber-bg);border:1px solid #FDE68A;border-radius:8px;font-size:13px;
+ line-height:1.5;color:var(--ask-amber)}
+.ucc-ask-warning .ucc-ask-icon{flex:none;margin-top:2px}
+.ucc-ask-warning strong{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+
+/* card footer: everything collapsed ---------------------------------------- */
+.ucc-ask-card-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;
+ padding:10px 14px;border-top:1px solid var(--ask-border);background:#FCFDFF}
+.ucc-ask-collapse{flex:1 1 100%;border:1px solid var(--ask-border);border-radius:8px;background:#fff}
+.ucc-ask-collapse>summary{list-style:none;cursor:pointer;padding:8px 12px;min-height:40px;display:flex;
+ align-items:center;gap:8px;font-size:12px;font-weight:600;color:#334155}
+.ucc-ask-collapse>summary::-webkit-details-marker{display:none}
+.ucc-ask-collapse>summary::after{content:"+";margin-left:auto;font-weight:600;color:var(--ask-muted)}
+.ucc-ask-collapse[open]>summary::after{content:"\\2212"}
+.ucc-ask-collapse-body{padding:0 12px 12px}
 .ucc-ask-fact-group{margin-bottom:12px}
 .ucc-ask-fact-group:last-child{margin-bottom:0}
-.ucc-ask-fact-group>h4{font-size:12px;margin:0 0 6px;opacity:.8}
+.ucc-ask-fact-group>h4{font-size:12px;margin:0 0 6px;color:var(--ask-muted)}
 .ucc-ask-fact-table{width:100%;border-collapse:collapse;font-size:12px}
-.ucc-ask-fact-table th,.ucc-ask-fact-table td{border:1px solid var(--border-color,#e6e9ec);padding:4px 8px;text-align:left;vertical-align:top}
-.ucc-ask-fact-table th{width:34%;font-weight:600;opacity:.8}
-.ucc-ask-source{display:inline-flex;gap:6px;align-items:center;font-size:12px;padding:4px 8px;border:1px solid var(--border-color,#d1d8dd);border-radius:999px;margin:0 6px 6px 0;text-decoration:none}
-.ucc-ask-ai-unavailable{font-size:13px;opacity:.8;font-style:italic}
+.ucc-ask-fact-table th,.ucc-ask-fact-table td{border:1px solid #E6EBF3;padding:5px 8px;text-align:left;vertical-align:top}
+.ucc-ask-fact-table th{width:34%;font-weight:600;color:var(--ask-muted)}
+.ucc-ask-source{display:inline-flex;gap:6px;align-items:center;min-height:36px;font-size:12px;padding:0 10px;
+ border:1px solid var(--ask-border);border-radius:8px;text-decoration:none;color:var(--ask-blue);background:#fff}
+.ucc-ask-source:hover{background:var(--ask-ai-bg);text-decoration:none}
+
+/* suggested next questions ------------------------------------------------- */
+.ucc-ask-suggested{padding:12px;border:1px dashed var(--ask-border);border-radius:10px;background:transparent}
+.ucc-ask-suggested>h4{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.05em;
+ text-transform:uppercase;color:var(--ask-muted)}
+.ucc-ask-suggested-list{display:flex;flex-wrap:wrap;gap:8px}
+.ucc-ask-suggested-item{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 12px;
+ border:1px solid var(--ask-border);border-radius:8px;background:#fff;font-size:13px;color:#334155;
+ cursor:pointer;text-align:left}
+.ucc-ask-suggested-item:hover{background:#F8FAFC;border-color:#94A3B8}
+
+/* record context panel ----------------------------------------------------- */
+.ucc-ask-context{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ucc-ask-context-card{border:1px solid var(--ask-border);border-radius:12px;background:#fff;padding:14px}
+.ucc-ask-context-head h3{margin:0;font-size:13px;font-weight:600;color:var(--ask-navy)}
+.ucc-ask-context-head p{margin:2px 0 0;font-size:11px;color:var(--ask-muted)}
+.ucc-ask-context-identity{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.ucc-ask-avatar{flex:none;width:38px;height:38px;border-radius:50%;background:var(--ask-navy);color:#fff;
+ display:grid;place-content:center;font-size:13px;font-weight:600;letter-spacing:.04em}
+.ucc-ask-context-name{font-size:13px;font-weight:600;line-height:1.35;word-break:break-word}
+.ucc-ask-context-id{font-size:11px;color:var(--ask-muted);word-break:break-all}
+.ucc-ask-context-fields{margin:0;font-size:12px}
+.ucc-ask-context-field{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid #EEF2F7}
+.ucc-ask-context-field dt{margin:0;color:var(--ask-muted)}
+.ucc-ask-context-field dd{margin:0;font-weight:600;text-align:right;word-break:break-word}
+.ucc-ask-context-actions{display:flex;flex-direction:column;gap:6px}
+.ucc-ask-context-action{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 12px;
+ border:1px solid var(--ask-border);border-radius:8px;background:#fff;font-size:12px;color:#334155;
+ cursor:pointer;text-align:left;text-decoration:none}
+.ucc-ask-context-action:hover{background:#F8FAFC;text-decoration:none;color:#334155}
+.ucc-ask-freshness{display:flex;gap:8px;align-items:flex-start;font-size:11px;line-height:1.5;color:var(--ask-muted)}
+.ucc-ask-freshness .ucc-ask-icon{flex:none;margin-top:1px}
+.ucc-ask-context-empty{font-size:12px;color:var(--ask-muted);line-height:1.5}
+
+/* tablet and mobile -------------------------------------------------------- */
+@media(max-width:1100px){
+ .ucc-ask-layout{grid-template-columns:minmax(0,1fr) 250px}
+}
+@media(max-width:860px){
+ .ucc-ask-layout{grid-template-columns:minmax(0,1fr);padding:12px}
+ .ucc-ask-row{grid-template-columns:minmax(0,1fr)}
+ /* The context panel moves under the controls rather than to the bottom of
+    the page: on a phone it is the thing you check before you ask. */
+ .ucc-ask-context{position:static;order:2}
+ .ucc-ask-main{order:1}
+ .ucc-ask-assurance{max-width:none}
+ .ucc-ask-question,.ucc-ask-suggested-item,.ucc-ask-submit,.ucc-ask-clear{width:100%;justify-content:center}
+ .ucc-ask-user-bubble{max-width:88%}
+}
 `;
 
 function injectAskStyles() {
@@ -1272,17 +1449,34 @@ function initAskUcc(platformRoot) {
 
 	const moduleSelect = root.querySelector("[data-ask-module]");
 	const recordInput = root.querySelector("[data-ask-record]");
+	const recordStatus = root.querySelector("[data-ask-record-status]");
 	const suggestionBox = root.querySelector("[data-ask-suggestions]");
 	const questionInput = root.querySelector("[data-ask-question]");
 	const submitButton = root.querySelector("[data-ask-submit]");
 	const clearButton = root.querySelector("[data-ask-clear]");
 	const statusNode = root.querySelector("[data-ask-status]");
 	const thread = root.querySelector("[data-ask-thread]");
+	const contextPanel = root.querySelector("[data-ask-context]");
 	const guidedPanel = root.querySelector("[data-ask-guided]");
 	const categoryRow = root.querySelector("[data-ask-categories]");
 	const questionRow = root.querySelector("[data-ask-questions]");
 
-	const state = { modules: [], busy: false, category: "", selectedLabel: "" };
+	const state = {
+		modules: [], busy: false, category: "", selectedLabel: "",
+		asked: [], context: null, checkedAt: "",
+	};
+
+	// Icon-bearing labels are filled here rather than in SHELL_HTML: the shell
+	// is a single escaped string, and inline SVG in it would be unreadable and
+	// unreviewable. Text first in every one of them -- the icon decorates.
+	const assurance = root.querySelector("[data-ask-assurance]");
+	if (assurance) {
+		assurance.innerHTML = ASK_ICON.shield
+			+ "<span>Answers use records you already have permission to view. "
+			+ "Verified facts and AI analysis are labelled separately.</span>";
+	}
+	submitButton.innerHTML = ASK_ICON.send + "Ask";
+	clearButton.innerHTML = ASK_ICON.trash + "Clear chat";
 
 	function setStatus(text, tone) {
 		if (!text) {
@@ -1313,17 +1507,28 @@ function initAskUcc(platformRoot) {
 				recordInput.disabled = true;
 				questionInput.disabled = true;
 				setStatus("No Ask UCC modules are enabled for your account. Ask an administrator if you need access.", "error");
+				renderContext();
 				return;
 			}
 			moduleSelect.innerHTML = modules
 				.map((m) => `<option value="${askEsc(m.key)}">${askEsc(m.label)}</option>`)
 				.join("");
-			renderGuided();
+			applyModule();
 		},
 		error() {
 			setStatus("Could not load the available modules.", "error");
 		},
 	});
+
+	function applyModule() {
+		const module = currentModule();
+		questionInput.placeholder = module
+			? "Ask a question about this " + module.label.toLowerCase()
+				+ ", for example, Is this record ready to close?"
+			: "Ask a question about the selected record";
+		renderGuided();
+		renderContext();
+	}
 
 	// --- record picker: a search against the module's own DocType, run
 	// server-side so the searchable fields come from the module registry
@@ -1358,7 +1563,7 @@ function initAskUcc(platformRoot) {
 				}
 				suggestionBox.innerHTML = rows
 					.map((r) => (
-						'<div class="ucc-ask-suggestion" data-value="' + askEsc(r.id) + '">'
+						'<div class="ucc-ask-suggestion" role="option" data-value="' + askEsc(r.id) + '">'
 						+ "<strong>" + askEsc(r.label) + "</strong>"
 						+ '<span class="ucc-ask-suggestion-id">' + askEsc(r.id) + "</span>"
 						+ "</div>"
@@ -1370,8 +1575,22 @@ function initAskUcc(platformRoot) {
 		});
 	}
 
+	// The status badge states plainly whether a record is in scope. Colour is
+	// never the signal on its own -- the words change too.
+	function setRecordStatus() {
+		const record = recordInput.value.trim();
+		if (!record) {
+			recordStatus.dataset.state = "none";
+			recordStatus.textContent = "No record selected";
+			return;
+		}
+		recordStatus.dataset.state = "active";
+		recordStatus.textContent = state.context ? "Active record" : "Record selected";
+	}
+
 	recordInput.addEventListener("input", () => {
 		window.clearTimeout(searchTimer);
+		window.setTimeout(setRecordStatus, 0);
 		searchTimer = window.setTimeout(() => searchRecords(recordInput.value.trim()), 250);
 	});
 	suggestionBox.addEventListener("click", (event) => {
@@ -1379,8 +1598,16 @@ function initAskUcc(platformRoot) {
 		if (!option) return;
 		recordInput.value = option.dataset.value;
 		state.selectedLabel = (option.querySelector("strong") || {}).textContent || "";
+		// A newly chosen record has no answer behind it yet, so the panel shows
+		// what we genuinely know -- the name and id -- and says the rest loads
+		// with the first answer. Inventing a second lookup endpoint to fill it
+		// early would duplicate what ask_ucc already returns.
+		state.context = null;
+		state.checkedAt = "";
+		state.asked = [];
 		hideSuggestions();
-		renderGuided();
+		setRecordStatus();
+		renderContext();
 		questionInput.focus();
 	});
 	document.addEventListener("click", (event) => {
@@ -1390,11 +1617,15 @@ function initAskUcc(platformRoot) {
 		recordInput.value = "";
 		state.category = "";
 		state.selectedLabel = "";
+		state.context = null;
+		state.checkedAt = "";
+		state.asked = [];
 		hideSuggestions();
-		renderGuided();
+		setRecordStatus();
+		applyModule();
 	});
 
-	// --- guided ("FAQ") question buttons -------------------------------
+	// --- verified FAQ buttons -------------------------------------------
 	// Categories and questions come from the server, ported verbatim from
 	// the legacy UI's own question maps (ask_ucc/guided_questions.py). The
 	// legacy version sent a guided question IMMEDIATELY on click rather
@@ -1413,7 +1644,8 @@ function initAskUcc(platformRoot) {
 		}
 		categoryRow.innerHTML = categories
 			.map((c) => (
-				'<button type="button" class="ucc-ask-category' + (c.key === state.category ? " is-active" : "")
+				'<button type="button" role="tab" aria-selected="' + (c.key === state.category)
+				+ '" class="ucc-ask-category' + (c.key === state.category ? " is-active" : "")
 				+ '" data-ask-category="' + askEsc(c.key) + '">' + askEsc(c.label) + "</button>"
 			))
 			.join("");
@@ -1433,7 +1665,7 @@ function initAskUcc(platformRoot) {
 		renderGuided();
 	});
 
-	questionRow.addEventListener("click", (event) => {
+	root.addEventListener("click", (event) => {
 		const button = event.target.closest("[data-ask-question-text]");
 		if (!button) return;
 		const text = button.dataset.askQuestionText;
@@ -1466,7 +1698,7 @@ function initAskUcc(platformRoot) {
 
 		state.busy = true;
 		submitButton.disabled = true;
-		setStatus("Asking...");
+		setStatus("Checking live records…");
 
 		frappe.call({
 			method: "ucc_intelligence.api.ask_ucc",
@@ -1474,10 +1706,16 @@ function initAskUcc(platformRoot) {
 			callback(response) {
 				const message = response && response.message;
 				if (message) {
-					thread.insertAdjacentHTML("afterbegin", renderTurn(question, message, module));
+					state.asked.push(question);
+					if (message.record_context) state.context = message.record_context;
+					if (message.checked_at) state.checkedAt = message.checked_at;
+					thread.insertAdjacentHTML(
+						"afterbegin", renderTurn(question, message, module, suggestionsFor(module, question)));
 					questionInput.value = "";
 					clearButton.hidden = false;
 					setStatus("");
+					setRecordStatus();
+					renderContext();
 				} else {
 					setStatus("The server returned no answer.", "error");
 				}
@@ -1492,40 +1730,91 @@ function initAskUcc(platformRoot) {
 		});
 	}
 
+	// Follow-ups are drawn from the module's own verified question set, minus
+	// what has already been asked this session. System-generated, and provably
+	// so: nothing here is written by a model.
+	function suggestionsFor(module, justAsked) {
+		const asked = state.asked.concat([justAsked]).map((q) => q.toLowerCase());
+		const pool = [];
+		((module && module.categories) || []).forEach((category) => {
+			(category.questions || []).forEach((item) => {
+				if (asked.indexOf(item.question.toLowerCase()) === -1) pool.push(item);
+			});
+		});
+		return pool.slice(0, 3);
+	}
+
 	submitButton.addEventListener("click", ask);
 	questionInput.addEventListener("keydown", (event) => {
-		if (event.key === "Enter") ask();
+		if (event.key === "Enter" && !event.shiftKey) {
+			event.preventDefault();
+			ask();
+		}
 	});
 
 	// Clear chat wipes the on-screen thread only. Stored conversations (the
 	// UCC AI Conversation / Message records, when persistence is enabled) are
 	// deliberately untouched -- this is a "the screen is too long to read"
-	// control, not a delete-my-audit-trail control.
+	// control, not a delete-my-audit-trail control. It still confirms first:
+	// an answer someone was reading is not something to discard on a stray
+	// click.
 	clearButton.addEventListener("click", () => {
+		if (!window.confirm("Clear the answers shown on screen? Saved conversation records are not affected.")) return;
 		thread.innerHTML = "";
+		state.asked = [];
 		clearButton.hidden = true;
 		setStatus("");
 		questionInput.focus();
 	});
+
+	// The context panel and the answer cards both trigger questions, so one
+	// delegated listener on the root covers both.
+	contextPanel.addEventListener("click", (event) => {
+		const action = event.target.closest("[data-ask-context-question]");
+		if (!action) return;
+		questionInput.value = action.dataset.askContextQuestion;
+		ask();
+	});
+	thread.addEventListener("click", (event) => {
+		const suggestion = event.target.closest("[data-ask-suggested]");
+		if (!suggestion) return;
+		questionInput.value = suggestion.dataset.askSuggested;
+		ask();
+	});
+	// <details> exposes its own expanded state to assistive tech; mirroring it
+	// onto the summary keeps the explicit aria-expanded the brief asks for
+	// without hand-rolling a disclosure widget.
+	thread.addEventListener("toggle", (event) => {
+		const details = event.target;
+		if (!details || !details.matches || !details.matches(".ucc-ask-collapse")) return;
+		const summary = details.querySelector("summary");
+		if (summary) summary.setAttribute("aria-expanded", details.open ? "true" : "false");
+	}, true);
+
+	function renderContext() {
+		contextPanel.innerHTML = renderContextPanel(
+			currentModule(), recordInput.value.trim(), state.selectedLabel, state.context, state.checkedAt);
+	}
+
+	setRecordStatus();
+	renderContext();
 }
 
 // --- rendering -------------------------------------------------------------
-// Three visually distinct zones, per the plan doc: what the AI said, the
-// facts it was given, and where those came from. A reader must never have to
-// guess which is which.
+// Two card types, decided by the server's answer_kind, plus one amber band
+// that is neither. Nothing here infers the type from the text.
 
-function renderTurn(question, message, module) {
+function renderTurn(question, message, module, suggested) {
 	return (
 		'<article class="ucc-ask-turn">'
-		+ '<div class="ucc-ask-question-bubble">' + askEsc(question) + "</div>"
-		+ renderAnswerZone(message, module)
-		+ renderFactsZone(message)
-		+ renderSourcesZone(message)
+		+ '<div class="ucc-ask-user"><div class="ucc-ask-user-bubble">' + askEsc(question) + "</div></div>"
+		+ renderAnswerCard(question, message, module)
+		+ renderSuggested(suggested)
 		+ "</article>"
 	);
 }
 
-function renderAnswerZone(message, module) {
+function renderAnswerCard(question, message, module) {
 	// A blocked record renders the SAME notice Analytics uses for a blocked
 	// source -- not a bespoke error box, and never a raw exception string.
 	const blocked = (message.sources || []).find((s) => s.status === "permission_denied");
@@ -1536,65 +1825,18 @@ function renderAnswerZone(message, module) {
 			detail: blocked.message,
 		});
 	}
+	if (message.answer_kind === "verified_record") return renderVerifiedCard(question, message);
+	if (message.answer_kind === "ai_analysis") return renderAiCard(message);
+	return renderUnavailableCard(message);
+}
 
-	const status = message.ai_status;
-	if (status === "available" && message.answer) {
-		return (
-			'<div class="ucc-ask-zone ucc-ask-zone-ai">'
-			+ '<div class="ucc-ask-zone-head">AI interpretation'
-			+ (message.answer.model ? " &middot; " + askEsc(message.answer.model) : "")
-			+ "</div>"
-			+ '<div class="ucc-ask-zone-body"><div class="ucc-ask-answer-text">'
-			+ askEsc(message.answer.text)
-			+ "</div></div></div>"
-		);
-	}
-
-	// "AI interpretation is turned off" on a plain data lookup ("what is this
-	// student's nationality?") implies interpretation was ever expected, and
-	// on every answer it is just noise. So the notice is only shown when
-	// something was actually lost:
-	//
-	//   disabled -> an administrator deliberately turned AI off. That is a
-	//       choice, not an event; if the facts rendered, there is nothing to
-	//       report. Only worth saying when the facts zone will be empty too,
-	//       so the user isn't left with a blank answer.
-	//   unavailable -> AI is switched ON but cannot run: no key in
-	//       site_config, provider/model blank, unimplemented provider. ALWAYS
-	//       shown. This is a fault, not a setting, and suppressing it is what
-	//       made "Enable AI is on but nothing happens" impossible to diagnose
-	//       -- the message names the exact missing piece, so it must reach
-	//       the person who can fix it.
-	//   error / guardrail_blocked -> AI DID run and its output was lost or
-	//       withheld. Always shown; silently dropping a withheld answer would
-	//       hide a guardrail firing.
-	//   not_found -> a record-level failure, always shown.
-	//
-	// ponytail: keyed off "did any facts render", not off classifying the
-	// question as lookup-vs-analytical. Classifying would mean hand-tagging
-	// ~60 ported legacy questions with metadata the legacy UI never had. If
-	// an analytical question with AI off later needs its own "this needed
-	// interpretation" hint, that tagging is where it goes.
-	const hasFacts = Object.keys(message.facts || {})
-		.some((k) => message.facts[k] && message.facts[k].status === "available");
-	if (hasFacts && status === "disabled") return "";
-
-	const reasons = {
-		disabled: "AI interpretation is turned off. The facts below come straight from live records.",
-		unavailable: "AI is enabled but could not run, so this answer is facts only.",
-		guardrail_blocked: "An AI answer was generated but referenced something not present in the retrieved facts, so it was withheld. The facts below are unaffected.",
-		error: "AI interpretation could not be produced. The facts below come straight from live records.",
-		not_found: "That record could not be found.",
-	};
-	const text = reasons[status] || "AI interpretation is unavailable. The facts below come straight from live records.";
-	return (
-		'<div class="ucc-ask-zone ucc-ask-zone-ai">'
-		+ '<div class="ucc-ask-zone-head">AI interpretation unavailable</div>'
-		+ '<div class="ucc-ask-zone-body"><div class="ucc-ask-ai-unavailable">'
-		+ askEsc(text)
-		+ (message.answer_error ? "<br>" + askEsc(message.answer_error) : "")
-		+ "</div></div></div>"
-	);
+function askTimestamp(value) {
+	if (!value) return "";
+	const parsed = new Date(String(value).replace(" ", "T"));
+	if (isNaN(parsed.getTime())) return String(value);
+	return parsed.toLocaleString(undefined, {
+		day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit",
+	});
 }
 
 function humanise(key) {
@@ -1613,49 +1855,314 @@ function renderFactValue(value) {
 	return askEsc(value);
 }
 
-function renderFactsZone(message) {
+// Fields that identify the subject rather than answer anything about it. They
+// belong in the context panel and the answer sentence, not in a fact tile that
+// repeats what the reader already selected.
+const ASK_SUBJECT_KEYS = ["student_name", "agent_name", "title", "subject"];
+const ASK_SKIP_KEYS = ["status", "note"];
+
+// Every scalar fact on display, flattened, in the order the tools returned
+// them. Lists and nested objects are not tiles -- they are the collapsed
+// supporting-facts table, which is what the "one answer, evidence underneath"
+// hierarchy asks for.
+function scalarFacts(message) {
+	const facts = message.facts || {};
+	// The record's own id is not a fact about it: it is what the reader picked,
+	// and it is already on screen twice (the picker and the context panel).
+	// Identified by VALUE rather than by a list of per-module field names --
+	// the module keys belong on the server, not in a table in here.
+	const recordId = (message.record_context || {}).record;
+	const out = [];
+	Object.keys(facts).forEach((toolName) => {
+		const group = facts[toolName];
+		if (!group || group.status !== "available") return;
+		Object.keys(group).forEach((key) => {
+			if (ASK_SKIP_KEYS.indexOf(key) !== -1) return;
+			const value = group[key];
+			if (value && typeof value === "object") return;
+			if (recordId && value === recordId) return;
+			out.push({ key: key, label: humanise(key), value: value });
+		});
+	});
+	return out;
+}
+
+function subjectName(message) {
+	const facts = message.facts || {};
+	let found = "";
+	Object.keys(facts).forEach((toolName) => {
+		const group = facts[toolName];
+		if (!group || group.status !== "available" || found) return;
+		ASK_SUBJECT_KEYS.forEach((key) => {
+			if (!found && group[key] && typeof group[key] === "string") found = group[key];
+		});
+	});
+	if (found) return found;
+	const context = message.record_context;
+	const nameField = context && (context.fields || [])[0];
+	return (nameField && nameField.value) || "this record";
+}
+
+// The direct answer, built from the record's own values -- never phrased for
+// the reader by a model. A boolean gets the plain Yes/No it deserves; anything
+// else leads with the value itself. The second line names the field it came
+// from, so "No." is never a claim floating free of its source.
+function verifiedAnswerLine(message) {
+	const facts = scalarFacts(message).filter((f) => ASK_SUBJECT_KEYS.indexOf(f.key) === -1);
+	const subject = subjectName(message);
+	if (!facts.length) {
+		return '<p class="ucc-ask-answer"><strong>The record was read successfully.</strong>'
+			+ '<span class="ucc-ask-answer-detail">No individual field was requested by this question. '
+			+ "Open Supporting facts below for everything that was checked.</span></p>";
+	}
+	const first = facts[0];
+	let headline;
+	if (typeof first.value === "boolean") headline = first.value ? "Yes." : "No.";
+	else if (first.value == null || first.value === "" || first.value === "Not recorded") headline = "Not recorded.";
+	else headline = String(first.value);
+	return '<p class="ucc-ask-answer"><strong>' + askEsc(headline) + "</strong>"
+		+ '<span class="ucc-ask-answer-detail">' + askEsc(first.label) + " for " + askEsc(subject)
+		+ ", read from the live record.</span></p>";
+}
+
+function renderTiles(facts) {
+	if (!facts.length) return "";
+	return '<dl class="ucc-ask-tiles">' + facts.slice(0, 6).map((fact) => (
+		'<div class="ucc-ask-tile"><dt>' + askEsc(fact.label) + "</dt>"
+		+ "<dd>" + renderFactValue(fact.value) + "</dd></div>"
+	)).join("") + "</dl>";
+}
+
+// A warning is not an answer and not a fact. It says so in its own label, so a
+// reader skimming colour alone still cannot mistake it for either.
+function renderWarnings(message) {
+	return (message.warnings || []).map((warning) => (
+		'<div class="ucc-ask-warning" role="note">' + ASK_ICON.warning
+		+ "<div><strong>Data check</strong>" + askEsc(warning.message) + "</div></div>"
+	)).join("");
+}
+
+function renderCollapse(label, body, open) {
+	if (!body) return "";
+	return '<details class="ucc-ask-collapse"' + (open ? " open" : "") + ">"
+		+ '<summary aria-expanded="' + (open ? "true" : "false") + '">' + askEsc(label) + "</summary>"
+		+ '<div class="ucc-ask-collapse-body">' + body + "</div></details>";
+}
+
+function factsTableHtml(message) {
 	const facts = message.facts || {};
 	const groups = Object.keys(facts).filter((k) => facts[k] && facts[k].status === "available");
 	if (!groups.length) return "";
-
-	const body = groups
-		.map((toolName) => {
-			const group = facts[toolName];
-			const rows = Object.keys(group)
-				.filter((k) => k !== "status" && k !== "note")
-				.map((k) => "<tr><th>" + askEsc(humanise(k)) + "</th><td>" + renderFactValue(group[k]) + "</td></tr>")
-				.join("");
-			return (
-				'<div class="ucc-ask-fact-group"><h4>' + askEsc(humanise(toolName)) + "</h4>"
-				+ '<table class="ucc-ask-fact-table">' + rows + "</table>"
-				+ (group.note ? '<p class="ucc-card-description">' + askEsc(group.note) + "</p>" : "")
-				+ "</div>"
-			);
-		})
-		.join("");
-
-	return (
-		'<div class="ucc-ask-zone ucc-ask-zone-facts">'
-		+ '<div class="ucc-ask-zone-head">Facts from live records</div>'
-		+ '<div class="ucc-ask-zone-body">' + body + "</div></div>"
-	);
+	return groups.map((toolName) => {
+		const group = facts[toolName];
+		const rows = Object.keys(group)
+			.filter((k) => k !== "status" && k !== "note")
+			.map((k) => "<tr><th>" + askEsc(humanise(k)) + "</th><td>" + renderFactValue(group[k]) + "</td></tr>")
+			.join("");
+		return '<div class="ucc-ask-fact-group"><h4>' + askEsc(humanise(toolName)) + "</h4>"
+			+ '<table class="ucc-ask-fact-table">' + rows + "</table>"
+			+ (group.note ? "<p>" + askEsc(group.note) + "</p>" : "")
+			+ "</div>";
+	}).join("");
 }
 
-function renderSourcesZone(message) {
+function recordDetailsHtml(message) {
+	const context = message.record_context;
+	if (!context || !(context.fields || []).length) return "";
+	return '<table class="ucc-ask-fact-table">' + context.fields.map((field) => (
+		"<tr><th>" + askEsc(field.label) + "</th><td>" + renderFactValue(field.value) + "</td></tr>"
+	)).join("") + "</table>";
+}
+
+function sourceLinksHtml(message) {
 	const sources = (message.sources || []).filter((s) => s.status === "available" && s.record);
 	if (!sources.length) return "";
-	const links = sources
-		.map((s) => {
-			const route = window.UCCShared.doctypeRoute(s.doctype) + "/" + encodeURIComponent(s.record);
-			return '<a class="ucc-ask-source" href="' + askEsc(route) + '" target="_blank" rel="noopener">'
-				+ askEsc(s.doctype) + ": " + askEsc(s.record) + " &#8599;</a>";
-		})
-		.join("");
-	return (
-		'<div class="ucc-ask-zone">'
-		+ '<div class="ucc-ask-zone-head">Sources</div>'
-		+ '<div class="ucc-ask-zone-body">' + links + "</div></div>"
-	);
+	return sources.map((s) => {
+		const route = window.UCCShared.doctypeRoute(s.doctype) + "/" + encodeURIComponent(s.record);
+		return '<a class="ucc-ask-source" href="' + askEsc(route) + '" target="_blank" rel="noopener">'
+			+ askEsc(s.doctype) + ": " + askEsc(s.record) + ASK_ICON.external + "</a>";
+	}).join("");
+}
+
+function renderVerifiedCard(question, message) {
+	const facts = scalarFacts(message).filter((f) => ASK_SUBJECT_KEYS.indexOf(f.key) === -1);
+	return '<section class="ucc-ask-card is-verified" aria-label="Verified record answer">'
+		+ '<div class="ucc-ask-card-head"><span class="ucc-ask-card-label">'
+		+ ASK_ICON.verified + "Verified record answer</span>"
+		+ '<span class="ucc-ask-card-meta">Checked ' + askEsc(askTimestamp(message.checked_at)) + "</span></div>"
+		+ '<div class="ucc-ask-card-body">'
+		+ verifiedAnswerLine(message)
+		+ renderTiles(facts)
+		+ renderWarnings(message)
+		+ "</div>"
+		+ '<div class="ucc-ask-card-foot">'
+		+ renderCollapse("View supporting facts", factsTableHtml(message))
+		+ renderCollapse("Record details", recordDetailsHtml(message))
+		+ sourceLinksHtml(message)
+		+ "</div></section>";
+}
+
+function renderAiCard(message) {
+	const answer = message.answer || {};
+	const checks = Object.keys(message.facts || {})
+		.filter((k) => message.facts[k] && message.facts[k].status === "available").length;
+	// Model, version and timings go here and nowhere else. They matter for an
+	// audit trail and not at all to the person reading the answer, and putting
+	// them in the header made every answer look like a machine's output before
+	// anyone had read a word of it.
+	const technical = "<table class=\"ucc-ask-fact-table\">"
+		+ (answer.model ? "<tr><th>Model</th><td>" + askEsc(answer.model) + "</td></tr>" : "")
+		+ "<tr><th>Retrieved at</th><td>" + askEsc(askTimestamp(message.checked_at)) + "</td></tr>"
+		+ "<tr><th>Record checks</th><td>" + checks + "</td></tr>"
+		+ (answer.latency_ms ? "<tr><th>Latency</th><td>" + askEsc(answer.latency_ms) + " ms</td></tr>" : "")
+		+ (answer.token_usage ? "<tr><th>Token usage</th><td>" + renderFactValue(answer.token_usage) + "</td></tr>" : "")
+		+ (message.conversation_id ? "<tr><th>Conversation</th><td>" + askEsc(message.conversation_id) + "</td></tr>" : "")
+		+ "<tr><th>Limitation</th><td>Interpretation of the checked records only. "
+		+ "It is not an approval and not an official record.</td></tr>"
+		+ "</table>";
+	return '<section class="ucc-ask-card is-ai" aria-label="AI analysis">'
+		+ '<div class="ucc-ask-card-head"><span class="ucc-ask-card-label">'
+		+ ASK_ICON.ai + "AI analysis</span>"
+		+ '<span class="ucc-ask-card-meta">Based on ' + checks + " live record check"
+		+ (checks === 1 ? "" : "s") + "</span></div>"
+		+ '<div class="ucc-ask-card-body">'
+		+ '<p class="ucc-ask-answer-text">' + askEsc(answer.text || "") + "</p>"
+		+ renderWarnings(message)
+		+ "</div>"
+		+ '<div class="ucc-ask-card-foot">'
+		+ renderCollapse("View supporting facts", factsTableHtml(message))
+		+ renderCollapse("Technical details", technical)
+		+ sourceLinksHtml(message)
+		+ "</div></section>";
+}
+
+// "AI interpretation is turned off" on a plain data lookup implies
+// interpretation was ever expected. It is only shown when something was
+// actually lost:
+//
+//   disabled -> an administrator deliberately turned AI off. A choice, not an
+//       event; only worth saying when there are no facts to show either.
+//   unavailable -> AI is switched ON but cannot run: no key in site_config,
+//       provider/model blank, unimplemented provider. ALWAYS shown. This is a
+//       fault, not a setting, and suppressing it is what made "Enable AI is on
+//       but nothing happens" impossible to diagnose.
+//   error / guardrail_blocked -> AI DID run and its output was lost or
+//       withheld. Always shown; silently dropping a withheld answer would hide
+//       a guardrail firing.
+//   not_found -> a record-level failure, always shown.
+//
+// `not_required` never reaches here: a verified lookup does not call AI at
+// all, so there is nothing to report about it.
+function renderUnavailableCard(message) {
+	const status = message.ai_status;
+	const hasFacts = Object.keys(message.facts || {})
+		.some((k) => message.facts[k] && message.facts[k].status === "available");
+	if (hasFacts && status === "disabled") return renderVerifiedCard("", message);
+
+	const reasons = {
+		disabled: "AI interpretation is turned off, so this question could not be interpreted.",
+		unavailable: "AI is enabled but could not run, so this question could not be interpreted.",
+		guardrail_blocked: "An AI answer was generated but referenced something not present in the retrieved facts, so it was withheld.",
+		error: "AI interpretation could not be produced.",
+		not_found: "That record could not be found.",
+	};
+	const text = reasons[status] || "AI interpretation is unavailable.";
+	return '<section class="ucc-ask-card is-unavailable" aria-label="Answer unavailable">'
+		+ '<div class="ucc-ask-card-head"><span class="ucc-ask-card-label">'
+		+ ASK_ICON.warning + "Answer unavailable</span></div>"
+		+ '<div class="ucc-ask-card-body"><p class="ucc-ask-answer-text">' + askEsc(text)
+		+ (message.answer_error ? "\n" + askEsc(message.answer_error) : "") + "</p>"
+		+ renderWarnings(message) + "</div>"
+		+ '<div class="ucc-ask-card-foot">'
+		+ renderCollapse("View supporting facts", factsTableHtml(message))
+		+ sourceLinksHtml(message)
+		+ "</div></section>";
+}
+
+function renderSuggested(suggested) {
+	if (!suggested || !suggested.length) return "";
+	return '<nav class="ucc-ask-suggested" aria-label="Suggested next questions">'
+		+ "<h4>Suggested next questions</h4>"
+		+ '<div class="ucc-ask-suggested-list">' + suggested.map((item) => (
+			'<button type="button" class="ucc-ask-suggested-item" data-ask-suggested="'
+			+ askEsc(item.question) + '">' + ASK_ICON.arrow + askEsc(item.label) + "</button>"
+		)).join("") + "</div></nav>";
+}
+
+// --- record context panel ---------------------------------------------------
+// Only ever shows what the answer already returned. There is no second lookup:
+// ask_ucc's own record_context is built from the primary tool's result, which
+// this user's permissions already allowed. A field the record does not carry
+// is absent, not blank.
+function askInitials(name) {
+	const parts = String(name || "").replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
+	if (!parts.length) return "?";
+	if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+	return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// The panel's two shortcut buttons are the first verified question of each of
+// the module's first two categories -- taken from what the SERVER offered for
+// this module, never from a table of module keys in here. A module the server
+// does not offer has no buttons, because it has no categories.
+function contextActions(module) {
+	const categories = (module && module.categories) || [];
+	const icons = [ASK_ICON.route, ASK_ICON.chart];
+	return categories.slice(0, 2).map((category, index) => {
+		const first = (category.questions || [])[0];
+		return first ? { question: first.question, label: first.label, icon: icons[index] } : null;
+	}).filter(Boolean);
+}
+
+function renderContextPanel(module, record, selectedLabel, context, checkedAt) {
+	const head = '<div class="ucc-ask-context-head"><h3>Record context</h3>'
+		+ "<p>Selected record and current scope</p></div>";
+
+	if (!record) {
+		return '<section class="ucc-ask-context-card">' + head
+			+ '<p class="ucc-ask-context-empty">No record is selected. Search for one above to see its '
+			+ "summary and the fields every answer is checked against.</p></section>";
+	}
+
+	const name = (context && (context.fields || [])[0] && context.fields[0].value) || selectedLabel || record;
+	const fields = context
+		? (context.fields || []).slice(1).filter((field) => field.value !== context.record)
+		: [];
+	const identity = '<div class="ucc-ask-context-identity">'
+		+ '<span class="ucc-ask-avatar" aria-hidden="true">' + askEsc(askInitials(name)) + "</span>"
+		+ "<div><div class=\"ucc-ask-context-name\">" + askEsc(name) + "</div>"
+		+ '<div class="ucc-ask-context-id">' + askEsc(record) + "</div></div></div>";
+
+	const rows = fields.length
+		? '<dl class="ucc-ask-context-fields">' + fields.map((field) => (
+			'<div class="ucc-ask-context-field"><dt>' + askEsc(field.label) + "</dt>"
+			+ "<dd>" + renderFactValue(field.value) + "</dd></div>"
+		)).join("") + "</dl>"
+		: '<p class="ucc-ask-context-empty">Ask a question to load this record’s summary fields.</p>';
+
+	const recordLink = context && context.doctype && context.record
+		? '<a class="ucc-ask-context-action" target="_blank" rel="noopener" href="'
+			+ askEsc(window.UCCShared.doctypeRoute(context.doctype) + "/" + encodeURIComponent(context.record))
+			+ '">' + ASK_ICON.person + "Open " + askEsc(context.doctype) + ASK_ICON.external + "</a>"
+		: "";
+	const actions = contextActions(module)
+		.map((item) => (
+			'<button type="button" class="ucc-ask-context-action" data-ask-context-question="'
+			+ askEsc(item.question) + '">' + item.icon + askEsc(item.label) + "</button>"
+		)).join("");
+
+	const freshness = checkedAt
+		? '<section class="ucc-ask-context-card"><div class="ucc-ask-freshness">' + ASK_ICON.clock
+			+ "<div>Live record check completed " + askEsc(askTimestamp(checkedAt))
+			+ ". Access follows the signed-in user’s existing permissions.</div></div></section>"
+		: "";
+
+	return '<section class="ucc-ask-context-card">' + head + identity + rows + "</section>"
+		+ (recordLink || actions
+			? '<section class="ucc-ask-context-card"><div class="ucc-ask-context-actions">'
+				+ recordLink + actions + "</div></section>"
+			: "")
+		+ freshness;
 }
 
 
