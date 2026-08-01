@@ -213,9 +213,26 @@ def get_tab_charts(criterion, tab):
 
 
 @frappe.whitelist()
-def set_tab_chart_size(criterion, tab, chart, size):
-	"""Resize one card. One of the four named sizes, never a pixel value."""
-	return _tab_charts.set_size(criterion, tab, chart, size)
+def set_tab_chart_size(criterion, tab, chart, span):
+	"""Resize one card to a whole number of the tab's 12 grid columns. The drag
+	snaps to the grid in the browser; this refuses anything off it."""
+	return _tab_charts.set_size(criterion, tab, chart, span)
+
+
+@frappe.whitelist()
+def set_tab_chart_order(criterion, tab, order):
+	"""Reorder the cards on a tab, after a drag."""
+	return _tab_charts.set_order(criterion, tab, order)
+
+
+@frappe.whitelist()
+def get_tab_history(criterion, tab, limit=50):
+	"""Who changed this tab's configuration, what changed, and when.
+
+	No only_for: everyone who can see a tab can see how it came to look that
+	way, and the records hold configuration rather than institutional data.
+	Nobody can write one -- see analytics/tab_audit.py."""
+	return _tab_charts.history(criterion, tab, limit)
 
 
 @frappe.whitelist()
