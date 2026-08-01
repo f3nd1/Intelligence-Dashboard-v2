@@ -284,7 +284,10 @@ def search(term=None, limit=20):
 		chart = built.get(row["name"]) or {}
 		charts.append({
 			"chart": row["name"],
-			"title": row.get("title") or row["name"],
+			# Same rule as the card: a picker showing 52 hashes is a picker
+			# nobody can use.
+			"title": chart_presentation.label_for(
+				row["name"], row.get("title"), record=chart or None),
 			"chart_type": chart.get("chart_type") or "",
 			"has_chart": bool(chart),
 		})
@@ -523,7 +526,11 @@ def chart_data(chart, criterion=None, tab=None):
 	return {
 		"status": "available",
 		"chart": chart,
-		"title": doc.get("title") or chart,
+		# Chart title, then query title, then a labelled id -- never a bare
+		# hash. Insights creates an untitled backing query when a chart is
+		# built, and those were reaching the tabs as `o80pe2gco2`.
+		"title": chart_presentation.label_for(
+			chart, doc.get("title"), record=presentation),
 		"series": rows_to_chart_series(rows),
 		"columns": columns,
 		"rows": rows,

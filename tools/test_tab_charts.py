@@ -837,6 +837,52 @@ report(raises(PermissionError_, tab_charts.set_palette,
 	"a reader cannot recolour a chart")
 State.may_write = True
 
+# --- LABELS: never a bare id ------------------------------------------------
+# Insights creates an untitled backing query when a chart is built. Four of
+# those reached Felix's tabs and rendered as `o80pe2gco2`, `o2kqldogas`,
+# `noe9aqlhd8` -- four hashes where four chart names should have been.
+reset()
+State.charts["q-untitled"] = ""          # a query with no title at all
+State.readable.add("q-untitled")
+State.doctypes.add("Insights Chart v3")
+
+# With a Chart: the Chart's name is the label, even though the chart is not
+# drawable yet -- which is the case that was broken, since an unconfigured
+# chart took the fallback branch and carried no title with it.
+State.insights_charts = [{"name": "chart-9", "title": "Innovation type mix",
+	"chart_type": "Donut", "query": "q-untitled", "data_query": None,
+	"config": json.dumps({})}]
+tab_charts.add("criterion_3", "overview", "q-untitled")
+card = tab_charts.chart_data("q-untitled", criterion="criterion_3", tab="overview")
+report(card["title"] == "Innovation type mix",
+	"an untitled query shows its CHART's title, not a hash (%r)" % card["title"])
+report(card["presentation"]["status"] == "table_only",
+	"...even though the chart itself is not drawable yet")
+report("X Axis Column" in card["presentation"]["reason"],
+	"...and the reason names the control to set: %r" % card["presentation"]["reason"])
+
+# A titled query AND a titled chart: the chart wins, because that is what the
+# person building it named the thing they built.
+State.charts["q-untitled"] = "raw stakeholder rows"
+report(tab_charts.chart_data("q-untitled", criterion="criterion_3", tab="overview")["title"]
+	== "Innovation type mix", "the chart's title beats the query's")
+
+# No chart at all, no title either: labelled, never a raw hash.
+State.insights_charts = []
+State.charts["q-untitled"] = ""
+bare = tab_charts.chart_data("q-untitled", criterion="criterion_3", tab="overview")
+report(bare["title"] != "q-untitled" and "q-untitled" in bare["title"],
+	"with neither title, the id is LABELLED rather than dumped raw (%r)" % bare["title"])
+
+# The picker follows the same rule -- 52 hashes is not a list anyone can use.
+State.insights_charts = [{"name": "chart-9", "title": "Innovation type mix",
+	"chart_type": "Donut", "query": "q-untitled", "data_query": None, "config": "{}"}]
+picked = {row["chart"]: row["title"] for row in tab_charts.search("")["charts"]}
+report(picked["q-untitled"] == "Innovation type mix",
+	"the picker lists by title too, never by id (%r)" % picked["q-untitled"])
+report(not any(title == chart for chart, title in picked.items()),
+	"no row in the picker is labelled with its own id")
+
 # --- THE PICKER: both kinds, marked -----------------------------------------
 reset()
 State.doctypes.add("Insights Chart v3")
