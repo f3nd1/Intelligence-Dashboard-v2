@@ -323,6 +323,14 @@ report("chosen to resemble" in presentation_source.lower()
 
 ADR_015 = ROOT / "docs" / "architecture" / "decisions" / "ADR-015-sophia-owns-chart-colour.md"
 report(ADR_015.exists(), "ADR-015 records the colour decision")
+ADR_016 = ROOT / "docs" / "architecture" / "decisions" / "ADR-016-refuse-rather-than-infer.md"
+report(ADR_016.exists(), "ADR-016 records why Sophia refuses rather than infers")
+PROBE = ROOT / "docs" / "migration" / "scripts" / "probe_insights_chart_config.py"
+report(PROBE.exists(), "a probe exists for the builder controls whose config keys are unknown")
+for guessed in ("rotate_values", "show_data_labels", "split_series", "y_min", "y_max",
+		"show_scrollbar", "normalize", "overlap"):
+	report(guessed not in presentation_source,
+		"no config key was inferred from a UI label (%s)" % guessed)
 
 # --- OPERATIONS: two finished engines, finally visible ----------------------
 OPERATIONS = APP / "operations" / "service.py"
