@@ -13,28 +13,41 @@ Now a tab starts with nothing and a "+ Add chart" button. A person picks a real
 Insights query -- one they can already read -- and it is embedded on that tab,
 at the size they choose, until they remove it.
 
-WHERE IT LIVES
-`frappe.defaults`, per user, one key per tab (see _key). That is Frappe's own
-per-user key/value store -- no new DocType, no migration, no fixture. This app
-had no existing server-side per-user config to follow: the only precedent was
-localStorage["ucc.dashboard"], which is per browser rather than per user.
+WHERE IT LIVES -- ONE PLACE, SHARED BY EVERYONE
 
-Per USER, deliberately and consistently: the tab intro and the question
-selection live in the SAME record as the charts, so one person curating a tab
-never rearranges anyone else's. That is a real trade-off for the intro text in
-particular -- an intro someone writes is only visible to them. Making any of it
-institution-wide is the same single change (a shared layer beside this one, see
-ADR-014's revisit triggers), and it belongs in one place because everything a
-tab holds is in one place.
+    DocType:  UCC Analytics Tab        (one record per criterion+tab,
+                                        named "<criterion>::<tab>")
+    charts            -> field `charts`             (JSON list of {chart,size})
+    tab intro text    -> field `intro`              (Markdown subset)
+    hidden questions  -> field `hidden_questions`   (JSON list of question ids)
 
-PERMISSIONS -- THREE GATES, NONE OF THEM THE PICKER'S UI
+It was per user, in `frappe.defaults`, until 2026-08-02. That was wrong and
+Felix said so: Sophia is an institutional dashboard used as EduTrust evidence,
+not a personal workspace. A chart the Quality Manager adds as evidence has to
+be the chart the auditor sees. The old per-user records are migrated by
+patches/v1_0/migrate_tab_config_to_shared.py, not abandoned.
+
+WHO MAY CHANGE IT
+Write permission on `UCC Analytics Tab` -- the same permission shape
+`UCC Dashboard Access` already uses for dashboard configuration, so this is the
+existing Sophia pattern rather than a new one, and the role can be widened in
+Desk without a code change. can_edit() is the single gate; everyone else gets
+the same view with `can_edit: False`, and the page does not render the controls
+at all.
+
+PERMISSIONS -- FOUR GATES, NONE OF THEM THE PICKER'S UI
   1. the criterion tab itself: ucc_dashboard_access must show it to this user
-  2. the search: frappe.get_list applies read permission + user permissions,
+  2. WRITING anything: can_edit() -- write permission on UCC Analytics Tab
+  3. the search: frappe.get_list applies read permission + user permissions,
      so a query the user cannot read is never offered
-  3. every read afterwards: get_tab re-filters stored ids through the same list
+  4. every read afterwards: get_tab re-filters stored ids through the same list
      call, and chart_data() calls check_permission("read") before executing.
      Access revoked after a chart was added means it stops appearing -- a
      stored id is a preference, never a grant.
+
+Gate 4 is why sharing the configuration does not share access to the DATA:
+a chart on a shared tab still executes as the person looking at it, and simply
+does not appear for someone who may not read its query.
 """
 
 import json
@@ -55,9 +68,11 @@ from ucc_intelligence.permissions import access
 # broken card in front of a user who did nothing wrong.
 CHART_DOCTYPE = "Insights Query v3"
 
-# frappe.defaults key. Namespaced so it can never collide with a fieldname --
-# defaults whose key matches a field are used to prefill new documents.
-DEFAULTS_PREFIX = "ucc_sophia_tab_charts"
+CONFIG_DOCTYPE = "UCC Analytics Tab"
+
+# The per-user store this replaced. Still named here because the migration
+# patch reads it, and because a stale copy on a bench should be recognisable.
+LEGACY_DEFAULTS_PREFIX = "ucc_sophia_tab_charts"
 
 # A tab is a place to look at a few things, not a dumping ground. Bounded so a
 # stored value stays small and a tab stays loadable.
@@ -77,7 +92,26 @@ TAB_CHARACTERS = set("abcdefghijklmnopqrstuvwxyz0123456789._-")
 
 
 def _key(criterion, tab):
-	return "%s:%s:%s" % (DEFAULTS_PREFIX, criterion, tab)
+	"""The record name. autoname is format:{criterion}::{tab}, so the key and
+	the name are the same thing and a duplicate cannot exist."""
+	return "%s::%s" % (criterion, tab)
+
+
+def can_edit():
+	"""Whether this user may change how a tab is configured for everyone.
+
+	Write permission on the config DocType itself -- the same shape
+	`UCC Dashboard Access` uses. Not a hardcoded role: granting a Quality
+	Manager the right to curate tabs is a Desk change, not a deployment.
+	"""
+	return bool(frappe.has_permission(CONFIG_DOCTYPE, "write"))
+
+
+def _require_edit():
+	if not can_edit():
+		frappe.throw(
+			frappe._("You do not have permission to change how this tab is set up for everyone."),
+			frappe.PermissionError)
 
 
 def _validated(criterion, tab):
@@ -99,28 +133,44 @@ def _blank():
 	return {"charts": [], "intro": "", "questions": {"hidden": []}}
 
 
-def _stored(criterion, tab):
-	"""The raw stored config. Anything unreadable is treated as absent rather
-	than repaired -- a corrupt preference should cost a person their tab
-	layout, not raise on every page load.
-
-	Accepts the ORIGINAL shape too: the first version of this stored a bare
-	list of chart ids, before sizes, intros and question choices existed. A
-	stored list is read as charts at the default size rather than discarded.
-	"""
-	raw = frappe.defaults.get_user_default(_key(criterion, tab))
-	config = _blank()
-	if not raw:
-		return config
+def _json_list(value):
+	"""A stored JSON list, or an empty one. Unreadable is treated as absent
+	rather than repaired -- a corrupt field should cost a tab its layout, not
+	raise on every page load for every user."""
 	try:
-		stored = json.loads(raw)
+		parsed = json.loads(value or "[]")
 	except (TypeError, ValueError):
+		return []
+	return parsed if isinstance(parsed, list) else []
+
+
+def _stored(criterion, tab):
+	"""One tab's shared configuration.
+
+	Read with ignore_permissions for the same reason access.py reads
+	`UCC Dashboard Access` that way, and documented here rather than inherited
+	silently: this DocType holds interface configuration only -- which charts,
+	what intro text, which questions to hide. It contains no institutional
+	data, and every figure those charts and questions show is fetched
+	separately, as the signed-in user, with its own permission check
+	(chart_data() and the criterion engine). Everyone who can see a tab must be
+	able to see how it is set up, or a shared configuration would be invisible
+	to the people it is for. WRITING is gated by can_edit(); this is the read.
+	"""
+	config = _blank()
+	name = _key(criterion, tab)
+	try:
+		if not frappe.db.exists(CONFIG_DOCTYPE, name):
+			return config
+		record = frappe.get_doc(CONFIG_DOCTYPE, name)
+	except Exception:
 		return config
 
-	if isinstance(stored, list):
-		stored = {"charts": stored}
-	if not isinstance(stored, dict):
-		return config
+	stored = {
+		"charts": _json_list(record.get("charts")),
+		"intro": record.get("intro") or "",
+		"questions": {"hidden": _json_list(record.get("hidden_questions"))},
+	}
 
 	for item in (stored.get("charts") or [])[:MAX_PER_TAB]:
 		if isinstance(item, str) and item:
@@ -144,11 +194,26 @@ def _stored(criterion, tab):
 
 
 def _store(criterion, tab, config):
-	frappe.defaults.set_user_default(_key(criterion, tab), json.dumps({
-		"charts": config["charts"][:MAX_PER_TAB],
+	"""Write one tab's shared configuration.
+
+	Only ever reached after _require_edit(). ignore_permissions is NOT used
+	here -- the write goes through the DocType's own permission check as well,
+	so the gate holds even if some future caller forgets to ask first.
+	"""
+	name = _key(criterion, tab)
+	values = {
+		"charts": json.dumps(config["charts"][:MAX_PER_TAB]),
 		"intro": (config.get("intro") or "")[:MAX_INTRO_LENGTH],
-		"questions": {"hidden": config["questions"]["hidden"][:MAX_QUESTION_IDS]},
-	}))
+		"hidden_questions": json.dumps(config["questions"]["hidden"][:MAX_QUESTION_IDS]),
+	}
+	if frappe.db.exists(CONFIG_DOCTYPE, name):
+		record = frappe.get_doc(CONFIG_DOCTYPE, name)
+		record.update(values)
+		record.save()
+		return
+	record = frappe.new_doc(CONFIG_DOCTYPE)
+	record.update(dict(values, criterion=criterion, tab=tab))
+	record.insert()
 
 
 def readable(names):
@@ -203,6 +268,10 @@ def get_tab(criterion, tab):
 		],
 		"intro": config["intro"],
 		"questions": config["questions"],
+		# The page renders the same tab for everyone and shows the edit
+		# controls only when this is true. It is a UI signal, not the gate --
+		# every write endpoint checks again.
+		"can_edit": can_edit(),
 		"max": MAX_PER_TAB,
 		"sizes": sorted(SIZES, key=lambda name: SIZES[name]),
 	}
@@ -210,6 +279,7 @@ def get_tab(criterion, tab):
 
 def add(criterion, tab, chart):
 	criterion, tab = _validated(criterion, tab)
+	_require_edit()
 	chart = clean_text(chart)
 	# Permission BEFORE existence: same reason every other endpoint here does
 	# it, so a stranger cannot use the error text to learn which ids exist.
@@ -230,6 +300,7 @@ def remove(criterion, tab, chart):
 	from your own list is always allowed, and is the only way out if a chart
 	you can no longer read is still stored."""
 	criterion, tab = _validated(criterion, tab)
+	_require_edit()
 	chart = clean_text(chart)
 	config = _stored(criterion, tab)
 	config["charts"] = [item for item in config["charts"] if item["chart"] != chart]
@@ -242,6 +313,7 @@ def set_size(criterion, tab, chart, size):
 	in your own layout and reveals nothing -- an unreadable chart still will
 	not render."""
 	criterion, tab = _validated(criterion, tab)
+	_require_edit()
 	chart = clean_text(chart)
 	size = clean_text(size)
 	if size not in SIZES:
@@ -261,6 +333,7 @@ def set_intro(criterion, tab, intro):
 	(see askEsc/renderIntro) so this can never become an HTML injection point.
 	Empty by default -- no tab is given words nobody chose."""
 	criterion, tab = _validated(criterion, tab)
+	_require_edit()
 	config = _stored(criterion, tab)
 	config["intro"] = clean_text(intro)[:MAX_INTRO_LENGTH]
 	_store(criterion, tab, config)
@@ -284,6 +357,7 @@ def set_question(criterion, tab, question, visible):
 	computed live and permission-checked on each request, exactly as before.
 	"""
 	criterion, tab = _validated(criterion, tab)
+	_require_edit()
 	question = clean_text(question)
 	if not question or len(question) > 200:
 		frappe.throw(frappe._("Unknown question."), frappe.ValidationError)

@@ -289,11 +289,11 @@ function tabConfig(dashboard,tab){
 return tabChartState[tabChartKey(dashboard.dataset.demoDashboard,tab)]||null;
 }
 
-function tabChartAreaMarkup(tab){
+function tabChartAreaMarkup(tab,canEdit){
 return`<section class="ucc-tab-charts" data-tab-charts="${esc(tab)}">`
 +`<div class="ucc-tab-charts-head"><h2>Charts</h2>`
-+`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button></div>`
-+`<div class="ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
++(canEdit?`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button>`:"")
++`</div><div class="ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
 }
 
 // analyticsPanelMarkup() already emits an empty [data-live-anchor] between the
@@ -304,13 +304,26 @@ const panelKey=(config.panelMap&&config.panelMap[tab])||tab;
 if(panelKey==="quality"||panelKey==="sources")return null;
 const anchor=dashboard.querySelector(`[data-live-anchor="${CSS.escape(panelKey)}"]`);
 if(!anchor)return null;
+const state=tabConfig(dashboard,tab);
+const canEdit=!!(state&&state.canEdit);
 let area=anchor.querySelector(`:scope > .ucc-tab-charts[data-tab-charts="${CSS.escape(tab)}"]`);
 if(!area){
 const holder=document.createElement("div");
-holder.innerHTML=tabChartAreaMarkup(tab);
+holder.innerHTML=tabChartAreaMarkup(tab,canEdit);
 area=holder.firstElementChild;
 anchor.appendChild(area);
 }
+// The area is mounted before the config arrives, so the head is refreshed
+// once it does rather than left showing a control this user cannot use.
+else if(area.dataset.canEdit!==String(canEdit)){
+const head=area.querySelector(".ucc-tab-charts-head");
+const existing=head&&head.querySelector("[data-add-chart]");
+if(canEdit&&!existing&&head){
+head.insertAdjacentHTML("beforeend",
+`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button>`);
+}else if(!canEdit&&existing){existing.remove();}
+}
+area.dataset.canEdit=String(canEdit);
 return area;
 }
 
@@ -420,7 +433,7 @@ return'<div class="ucc-tab-charts-notice">'+esc(message)+"</div>";
 
 // ONE execute per chart feeds BOTH views, so the number in the table is by
 // construction the number in the bar. See tab_charts.chart_data().
-function embeddedChartMarkup(chart,sizes){
+function embeddedChartMarkup(chart,sizes,canEdit){
 const options=(sizes||["small","medium","large","full"]).map(function(size){
 return'<option value="'+esc(size)+'"'+(size===chart.size?" selected":"")+">"
 +esc(size.charAt(0).toUpperCase()+size.slice(1))+"</option>";
@@ -432,10 +445,12 @@ return`<article class="ucc-embedded-chart" data-embedded-chart="${esc(chart.char
 +`<div class="ucc-embedded-views" role="group" aria-label="View">`
 +`<button type="button" data-demo-view="diagram" class="is-active" aria-pressed="true">Diagram</button>`
 +`<button type="button" data-demo-view="table" aria-pressed="false">Table</button></div>`
-+`<select class="ucc-embedded-size" data-chart-size="${esc(chart.chart)}" `
++(canEdit
+?`<select class="ucc-embedded-size" data-chart-size="${esc(chart.chart)}" `
 +`aria-label="Size of ${esc(chart.title)}">${options}</select>`
 +`<button type="button" class="ucc-remove-chart" data-remove-chart="${esc(chart.chart)}" `
 +`title="Remove this chart from the tab" aria-label="Remove ${esc(chart.title)} from this tab">&times;</button>`
+:"")
 +`</div></div>`
 +`<div class="ucc-embedded-chart-body" data-demo-chart="${esc(chart.chart)}" data-embedded-chart-body>`
 +tabChartNotice("Loading…")+"</div>"
@@ -451,10 +466,12 @@ if(!state){grid.innerHTML=tabChartNotice("Loading your charts…");loadTabCharts
 if(state.loading){grid.innerHTML=tabChartNotice("Loading your charts…");return;}
 if(state.error){grid.innerHTML=tabChartNotice(state.error);return;}
 if(!state.charts.length){
-grid.innerHTML=tabChartNotice("No charts on this tab yet. Use “+ Add chart” to embed one from Frappe Insights.");
+grid.innerHTML=tabChartNotice(state.canEdit
+?"No charts on this tab yet. Use “+ Add chart” to embed one from Frappe Insights."
+:"No charts have been added to this tab yet.");
 return;
 }
-grid.innerHTML=state.charts.map(function(chart){return embeddedChartMarkup(chart,state.sizes);}).join("");
+grid.innerHTML=state.charts.map(function(chart){return embeddedChartMarkup(chart,state.sizes,state.canEdit);}).join("");
 state.charts.forEach(function(chart){paintEmbeddedChart(grid,chart);});
 }
 
@@ -464,6 +481,10 @@ charts:(response&&response.charts)||[],
 intro:(response&&response.intro)||"",
 hiddenQuestions:((response&&response.questions)||{}).hidden||[],
 sizes:(response&&response.sizes)||["small","medium","large","full"],
+// The server decides. This only hides controls that would fail anyway --
+// every write endpoint checks again, so a hidden button is a courtesy and
+// never the gate (CLAUDE.md §3.3: hiding is interface composition).
+canEdit:!!(response&&response.can_edit),
 loading:false,error:null};
 renderTabCharts(dashboard,config,tab);
 renderTabIntro(dashboard,config,tab);
@@ -643,11 +664,15 @@ if(!mount)return;
 const state=tabConfig(dashboard,tab);
 const text=(state&&state.intro)||"";
 if(mount.dataset.editing==="1")return;
+const canEdit=!!(state&&state.canEdit);
+if(!text&&!canEdit){mount.innerHTML="";return;}
 mount.innerHTML=(text
 ?'<div class="ucc-tab-intro-text">'+renderIntroMarkdown(text)+"</div>"
 :'<p class="ucc-tab-intro-empty">No introduction for this tab yet.</p>')
-+'<button type="button" class="ucc-tab-intro-edit" data-edit-intro="'+esc(tab)+'">'
-+(text?"Edit intro":"Add an introduction")+"</button>";
++(canEdit
+?'<button type="button" class="ucc-tab-intro-edit" data-edit-intro="'+esc(tab)+'">'
++(text?"Edit intro":"Add an introduction")+"</button>"
+:"");
 }
 
 function openIntroEditor(dashboard,config,tab){
@@ -873,6 +898,7 @@ const target=dashboard.querySelector(`[data-demo-qa="${CSS.escape(dashboard.data
 if(!target)return;
 const state=tabConfig(dashboard,tab);
 const hidden=(state&&state.hiddenQuestions)||[];
+const canEdit=!!(state&&state.canEdit);
 const all=extendedQuestionRows(result,tab);
 const rows=all.filter(function(row,index){return hidden.indexOf(qaQuestionId(row,index))===-1;});
 target.innerHTML=rows.length?rows.map((row,index)=>{
@@ -886,17 +912,17 @@ const answerAction=available&&row.metric_id
 const sourceAction=doctype
 ?`<button type="button" class="source-doctype-link ucc-qa-action" data-live-source-doctype="${esc(doctype)}">Open ${esc(displayDoctypeName(doctype))} list ↗</button>`
 :'<span class="source-unavailable">No readable source list</span>';
-const hideAction=`<button type="button" class="ucc-qa-hide" data-hide-question="${esc(qaQuestionId(row,all.indexOf(row)))}" title="Hide this question on this tab" aria-label="Hide: ${esc(row.question||"")}">&times;</button>`;
+const hideAction=canEdit?`<button type="button" class="ucc-qa-hide" data-hide-question="${esc(qaQuestionId(row,all.indexOf(row)))}" title="Hide this question on this tab" aria-label="Hide: ${esc(row.question||"")}">&times;</button>`:"";
 return`<tr><td>${esc(row.criterion||result?.meta?.subcriterion||result?.policy?.policy||tab)}</td><td>${esc(row.question)}</td><td><div>${esc(row.answer)}</div>${answerAction}</td><td><div>${esc(sourceCalculation(row,metric))}</div>${sourceAction}</td><td>${statusBadge(metric?.status||row.status)}${hideAction}</td></tr>`;
 }).join(""):`<tr><td colspan="5">${esc(all.length
 ?"Every management question for this section is hidden. Use “+ Add question” to bring one back."
 :"This criterion does not answer any management questions yet. Its metric catalogue has not been built, so there is nothing to ask.")}</td></tr>`;
-renderQaTools(dashboard,target,all.length,hidden.length);
+renderQaTools(dashboard,target,all.length,hidden.length,canEdit);
 }
 
 // The controls live directly under the table, in the same panel, so adding and
 // removing a question happens where the questions are.
-function renderQaTools(dashboard,tbody,total,hiddenCount){
+function renderQaTools(dashboard,tbody,total,hiddenCount,canEdit){
 const panel=tbody.closest(".ucc-management-panel");
 if(!panel)return;
 let tools=panel.querySelector("[data-qa-tools]");
@@ -906,7 +932,7 @@ tools.className="ucc-qa-tools";
 tools.dataset.qaTools="1";
 panel.appendChild(tools);
 }
-tools.innerHTML=`<button type="button" class="ucc-qa-add" data-add-question>+ Add question</button>`
+tools.innerHTML=(canEdit?`<button type="button" class="ucc-qa-add" data-add-question>+ Add question</button>`:"")
 +`<span class="ucc-tab-charts-notice">${esc(hiddenCount
 ?hiddenCount+" of "+total+" hidden on this tab"
 :total+" question"+(total===1?"":"s")+" available")}</span>`;
