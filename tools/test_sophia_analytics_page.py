@@ -606,6 +606,49 @@ checks.append(report("This workbook holds " in _picker,
 checks.append(report('workbook="";showStep(1)' in _picker,
 	"going back clears the workbook, so no scope survives off screen"))
 
+
+# --- ONE SHAPE PER TAB ------------------------------------------------------
+#
+# Individual chart-adding is retired going forward. A tab shows one Insights
+# dashboard; tabs that already carry charts keep rendering them but cannot gain
+# more. Asserted against renderTabActions' own source, because "which button
+# appears when" is exactly the thing a screenshot proves for one state only.
+_actions = region(ported, "function renderTabActions(dashboard,tab){",
+	"// analyticsPanelMarkup() already emits", "the tab action bar")
+
+# The BUTTON, not the phrase -- the phrase survives in a comment explaining
+# what was retired, and a comment is documentation, not a control.
+checks.append(report('class="ucc-add-chart" data-add-chart=' not in ported,
+	'the "+ Add chart" button is rendered on no tab state at all'))
+checks.append(report("Embed a dashboard" in _actions,
+	"an empty tab is offered a dashboard, and only that"))
+checks.append(report("editing&&!embedded&&!hasCharts" in _actions,
+	"...and that offer is conditional on the tab having neither"))
+checks.append(report("Change dashboard" in _actions and "Stop embedding" in _actions,
+	"an embedded tab is offered change and stop"))
+checks.append(report("editing&&embedded" in _actions,
+	"...and those two only when a dashboard is actually set"))
+checks.append(report("Embed a dashboard instead" in _actions,
+	"a tab that already has charts is offered the migration, worded as a move"))
+
+# The gate is the server, not the missing button.
+_add = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "analytics"
+	/ "tab_charts.py", encoding="utf-8").read()
+checks.append(report('if config["embedded_dashboard"]:' in _add
+	and "Stop embedding it before" in _add,
+	"add() refuses on an embedded tab -- the hidden button was never the gate"))
+
+# The dashboard picker keeps the chart picker's guarantees rather than
+# inventing softer ones.
+_dash = region(ported, "function openDashboardPicker(",
+	"function setTabDashboard(", "the dashboard picker")
+checks.append(report('let workbook="";' in _dash and "if(!workbook)return;" in _dash,
+	"the dashboard picker also opens with no workbook, and refuses to list without one"))
+checks.append(report("workbook:workbook" in _dash,
+	"...and scopes every search server-side"))
+checks.append(report("This tab also has " in ported and "kept, not deleted" in ported,
+	"an embedded tab SAYS that charts saved before it are kept, not deleted"))
+
 passed = all(checks)
 print()
 print(f"{'PASS' if passed else 'FAIL'}: {sum(checks)}/{len(checks)} checks")

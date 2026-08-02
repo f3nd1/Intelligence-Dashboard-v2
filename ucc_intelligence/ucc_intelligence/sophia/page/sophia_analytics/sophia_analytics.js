@@ -268,11 +268,17 @@ function activeSection(dashboard){return dashboard.dataset.demoActiveTab||"overv
 // ---------------------------------------------------------------------------
 // PER-TAB INSIGHTS CHARTS, TAB INTRO, AND THE QUESTION SELECTION
 //
-// A tab starts with NO charts and one "+ Add chart" button. Whatever a person
-// adds is theirs, on that tab, at the size they chose, and is stored
-// server-side (analytics/tab_charts.py -- frappe.defaults, per user). The same
-// record holds the tab's intro text and which management questions it hides,
-// because they are all "what this tab looks like to me".
+// A tab starts empty and is set up by embedding ONE Insights dashboard. The
+// stored record (analytics/tab_charts.py) also holds the tab's intro text and
+// which management questions it hides, because they are all "how this tab is
+// set up for everyone".
+//
+// It used to be per-card: a picker, a grid of Sophia-drawn charts, drag-resize,
+// per-card palette and title. That is retired going forward -- a dashboard
+// already holds everything those cards composed by hand, drawn by Insights
+// rather than re-drawn here. Tabs that already carry charts keep rendering
+// them and cannot gain more; the picker and the painters stay until the
+// embedded shape is proven across real use.
 //
 // This replaced 222 fixed chart boxes declared in this file: 16 had a real
 // Insights query behind them, 206 were blank. Nothing is declared here now, so
@@ -322,6 +328,17 @@ if(!mount)return;
 const state=tabConfig(dashboard,tab);
 const canEdit=!!(state&&state.canEdit);
 const editing=isEditing(dashboard,tab);
+// A TAB IS ONE SHAPE, AND EDIT MODE OFFERS ONLY THAT SHAPE'S CONTROLS.
+//
+// Individual chart-adding is retired going forward (decided 2026-08-03): a tab
+// shows one Insights dashboard, and a dashboard already holds everything the
+// per-card system composed by hand. So "+ Add chart" is gone from every tab,
+// including empty ones -- there is no longer a choice to present.
+//
+// Tabs that ALREADY carry charts keep rendering them, untouched, so nothing
+// existing breaks. They simply cannot gain more.
+const embedded=!!(state&&state.embeddedDashboard);
+const hasCharts=!!(state&&state.charts&&state.charts.length);
 mount.innerHTML=
 `<button type="button" class="ucc-tab-action" data-tab-history="${esc(tab)}">History</button>`
 +(editing?"":`<button type="button" class="ucc-tab-action" data-export-pdf="${esc(tab)}">Export PDF</button>`)
@@ -329,7 +346,20 @@ mount.innerHTML=
 ?`<button type="button" class="ucc-tab-action ucc-tab-mode${editing?" is-editing":""}" `
 +`data-toggle-edit="${esc(tab)}" aria-pressed="${editing}">${editing?"Done editing":"Edit tab"}</button>`
 :"")
-+(editing?`<button type="button" class="ucc-add-chart" data-add-chart="${esc(tab)}">+ Add chart</button>`:"");
++(editing&&embedded
+?`<button type="button" class="ucc-tab-action" data-pick-dashboard="${esc(tab)}">Change dashboard</button>`
++`<button type="button" class="ucc-tab-action" data-clear-dashboard="${esc(tab)}">Stop embedding</button>`
+:"")
+// An empty tab has exactly one thing it can become, so it is offered as the
+// primary action rather than one of two.
++(editing&&!embedded&&!hasCharts
+?`<button type="button" class="ucc-add-chart" data-pick-dashboard="${esc(tab)}">Embed a dashboard</button>`
+:"")
+// A tab that already has charts can migrate, but the wording says what it is:
+// a move to the shape everything else now uses, not a second option.
++(editing&&!embedded&&hasCharts
+?`<button type="button" class="ucc-tab-action" data-pick-dashboard="${esc(tab)}">Embed a dashboard instead</button>`
+:"");
 area.classList.toggle("is-editing",editing);
 }
 
@@ -563,14 +593,25 @@ if(!state){grid.innerHTML=tabChartNotice("Loading your charts…");loadTabCharts
 if(state.loading){grid.innerHTML=tabChartNotice("Loading your charts…");return;}
 if(state.error){grid.innerHTML=tabChartNotice(state.error);return;}
 if(state.embeddedDashboard){
-grid.innerHTML=embeddedDashboardMarkup(state);
+grid.innerHTML=embeddedDashboardMarkup(state)
+// Option A, stated rather than silent. Charts saved before this tab was
+// embedded are kept and hidden, not deleted -- so "stop embedding" really
+// does put the tab back. A tab quietly holding configuration nobody can
+// see is the cost, and this line is what stops it being quiet.
++((state.charts&&state.charts.length)
+?'<p class="ucc-embed-note">This tab also has '+state.charts.length
++(state.charts.length===1?" individual chart":" individual charts")
++" saved from before it was embedded. They are kept, not deleted — "
++"stop embedding to bring them back.</p>"
+:"");
 loadVisibleEmbeds(dashboard);
 return;
 }
 if(!state.charts.length){
+// Truly empty: no dashboard, no charts. One line of text, nothing open.
 grid.innerHTML=tabChartNotice(isEditing(dashboard,tab)
-?"No charts on this tab yet. Use “+ Add chart” to embed one from Frappe Insights."
-:"No charts have been added to this tab yet.");
+?"Nothing on this tab yet. Use “Embed a dashboard” to show one built in Frappe Insights."
+:"Nothing has been set up on this tab yet.");
 return;
 }
 const editing=isEditing(dashboard,tab);
@@ -2151,6 +2192,130 @@ error(error){pick.disabled=false;results.innerHTML=tabChartNotice(apiErrorMessag
 listWorkbooks();
 }
 
+// The dashboard picker. Same two-step, workbook-first shape as the chart
+// picker, and the same guarantees: the workbook narrows the list SERVER-side,
+// counts describe the whole permission-scoped search rather than the page, and
+// nothing is listed that this user could not already open in Insights.
+//
+// A separate function rather than a mode flag on openChartPicker: the two
+// pickers list different DocTypes, return different shapes and end in
+// different writes, and one function pretending to be two is how a picker ends
+// up offering a chart where a dashboard was meant.
+function openDashboardPicker(dashboard,config,tab){
+openModal("Embed an Insights dashboard",
+'<div class="ucc-chart-picker">'
++'<div data-picker-step1>'
++'<p class="ucc-chart-picker-note">Dashboards live in workbooks in Frappe '
++'Insights. Choose the workbook first.</p>'
++'<div class="ucc-chart-picker-results" data-workbook-list>'+tabChartNotice("Loading…")+"</div></div>"
++'<div data-picker-step2 hidden>'
++'<button type="button" class="ucc-chart-picker-back" data-picker-back>&#8592; Choose a different workbook</button>'
++'<h4 class="ucc-chart-picker-where" data-picker-where></h4>'
++'<input type="search" class="ucc-chart-picker-search" data-chart-picker-search '
++'placeholder="Search dashboards…" autocomplete="off" aria-label="Search Insights dashboards">'
++'<p class="ucc-chart-picker-note">This tab will show the whole dashboard, '
++'drawn by Insights with its own layout and colours.</p>'
++'<div class="ucc-chart-picker-results" data-chart-picker-results>'+tabChartNotice("Loading…")+"</div>"
++"</div></div>");
+const modal=ensureModal();
+const step1=modal.querySelector("[data-picker-step1]");
+const step2=modal.querySelector("[data-picker-step2]");
+const bookList=modal.querySelector("[data-workbook-list]");
+const where=modal.querySelector("[data-picker-where]");
+const input=modal.querySelector("[data-chart-picker-search]");
+const results=modal.querySelector("[data-chart-picker-results]");
+if(!input||!results||!step1||!step2||!bookList)return;
+let timer=null;
+let workbook="";
+
+if(window.frappe&&frappe.call)frappe.call({
+method:"ucc_intelligence.api.list_dashboard_workbooks",
+callback(response){
+const data=(response&&response.message)||{};
+const books=data.workbooks||[];
+if(!books.length){
+bookList.innerHTML=tabChartNotice(data.message
+||"No Insights workbook holds a dashboard you can read. Build one in "
++"Insights first, then it will appear here.");return;}
+bookList.innerHTML=books.map(function(book){
+const many=book.counts.all===1?" dashboard":" dashboards";
+return'<button type="button" class="ucc-chart-picker-result ucc-chart-picker-book" '
++'data-pick-workbook="'+esc(book.workbook)+'" data-workbook-title="'+esc(book.title)+'">'
++'<span class="ucc-chart-picker-book-name">'+esc(book.title)+"</span>"
++'<span class="ucc-chart-picker-book-what">'+esc(book.counts.all+many)+"</span>"
++"</button>";
+}).join("");
+},
+error(error){bookList.innerHTML=tabChartNotice(apiErrorMessage(error));},
+});
+
+function search(term){
+// Same guard as the chart picker: no workbook, no list, enforced here rather
+// than trusted to the call sites.
+if(!workbook)return;
+if(!(window.frappe&&frappe.call)){results.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
+frappe.call({
+method:"ucc_intelligence.api.search_insights_dashboards",
+args:{term:term||"",limit:20,workbook:workbook},
+callback(response){
+const data=(response&&response.message)||{};
+const rows=data.dashboards||[];
+if(!rows.length){
+results.innerHTML=tabChartNotice(data.message||"No dashboard here matched that search.");return;}
+results.innerHTML=rows.map(function(row){
+return'<button type="button" class="ucc-chart-picker-result" data-pick-dashboard-id="'
++esc(row.dashboard)+'">'+esc(row.title)+"</button>";
+}).join("");
+},
+error(error){results.innerHTML=tabChartNotice(apiErrorMessage(error));},
+});
+}
+
+input.addEventListener("input",function(){
+clearTimeout(timer);
+timer=setTimeout(function(){search(input.value);},250);
+});
+bookList.addEventListener("click",function(event){
+const pick=event.target.closest("[data-pick-workbook]");
+if(!pick)return;
+workbook=pick.dataset.pickWorkbook;
+input.value="";
+results.innerHTML=tabChartNotice("Loading…");
+step1.hidden=true;step2.hidden=false;
+where.textContent="In "+(pick.dataset.workbookTitle||"this workbook");
+input.focus();
+search("");
+});
+const back=modal.querySelector("[data-picker-back]");
+if(back)back.addEventListener("click",function(){
+workbook="";step1.hidden=false;step2.hidden=true;});
+results.addEventListener("click",function(event){
+const pick=event.target.closest("[data-pick-dashboard-id]");
+if(!pick)return;
+event.preventDefault();
+pick.disabled=true;
+setTabDashboard(dashboard,config,tab,pick.dataset.pickDashboardId,function(error){
+pick.disabled=false;results.innerHTML=tabChartNotice(error);});
+});
+}
+
+function setTabDashboard(dashboard,config,tab,id,onError){
+if(!(window.frappe&&frappe.call))return;
+frappe.call({
+method:"ucc_intelligence.api.set_tab_dashboard",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,dashboard:id||""},
+callback(response){
+applyTabConfig(dashboard,config,tab,(response&&response.message)||{});
+const modal=ensureModal();if(modal)modal.hidden=true;
+},
+error(error){
+const message=apiErrorMessage(error);
+if(onError)onError(message);
+else logEvent(dashboard,"ERROR","tab_dashboard_failed",message);
+},
+});
+}
+
 function removeTabChart(dashboard,config,tab,chart){
 if(!(window.frappe&&frappe.call))return;
 frappe.call({
@@ -2170,8 +2335,12 @@ style.textContent=`
 .ucc-tab-charts{margin:0 0 18px}
 .ucc-tab-charts-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
 .ucc-tab-charts-head h2{margin:0;font-size:15px}
-.ucc-add-chart{border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:36px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}
-.ucc-add-chart:hover{background:#F1F5F9}
+/* On an empty tab this is now the ONLY thing a person can do, so it reads as
+   the action rather than as another grey button beside History. It was a plain
+   white button when it sat next to a tab full of other controls. */
+.ucc-add-chart{border:1px solid #172554;background:#172554;color:#fff;border-radius:8px;
+ min-height:36px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}
+.ucc-add-chart:hover{background:#1E3A8A}
 .ucc-tab-charts-notice{padding:14px 2px;font-size:12px;color:#64748B}
 /* Twelve columns, so a card can be a quarter, a half, three quarters or the
    full width. The legacy .ucc-live-expanded-grid is a hard 2-column
@@ -2767,8 +2936,18 @@ if(exportButton){
 event.preventDefault();event.stopPropagation();
 exportTabPdf(dashboard,config,exportButton.dataset.exportPdf);return;
 }
+// data-add-chart is no longer rendered anywhere. The handler stays so a
+// browser tab left open on the old markup opens the picker rather than
+// silently doing nothing -- and tab_charts.add() refuses on an embedded tab,
+// which is the actual gate.
 const addChart=event.target.closest("[data-add-chart]");
 if(addChart){event.preventDefault();event.stopPropagation();openChartPicker(dashboard,config,addChart.dataset.addChart);return;}
+const pickDashboard=event.target.closest("[data-pick-dashboard]");
+if(pickDashboard){event.preventDefault();event.stopPropagation();
+openDashboardPicker(dashboard,config,pickDashboard.dataset.pickDashboard);return;}
+const clearDashboard=event.target.closest("[data-clear-dashboard]");
+if(clearDashboard){event.preventDefault();event.stopPropagation();
+setTabDashboard(dashboard,config,clearDashboard.dataset.clearDashboard,"");return;}
 const removeChart=event.target.closest("[data-remove-chart]");
 if(removeChart){event.preventDefault();event.stopPropagation();removeTabChart(dashboard,config,activeSection(dashboard),removeChart.dataset.removeChart);return;}
 // --- Diagram/Table toggle and drill-down (#8) --------------------------

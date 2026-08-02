@@ -273,6 +273,27 @@ def set_tab_dashboard(criterion, tab, dashboard=""):
 
 
 @frappe.whitelist()
+def list_dashboard_workbooks(term=None):
+	"""Dashboard picker, step 1: workbooks holding a dashboard you can read.
+
+	Derived from the same permission-scoped read as step 2, so a workbook is
+	never offered that opens onto nothing.
+	"""
+	return _tab_charts.dashboard_workbooks(term)
+
+
+@frappe.whitelist()
+def search_insights_dashboards(term=None, limit=20, workbook=None):
+	"""Dashboard picker, step 2: the dashboards in one workbook.
+
+	No only_for -- what comes back is exactly what frappe.get_list allows this
+	user to see. The workbook narrows the LIST after that read, so it can only
+	ever show fewer rows, never more.
+	"""
+	return _tab_charts.search_dashboards(term, limit, workbook)
+
+
+@frappe.whitelist()
 def set_tab_question(criterion, tab, question, visible):
 	"""Show or hide one management question on this tab. Stores WHICH question,
 	never an answer -- every answer is still computed live and

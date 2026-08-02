@@ -554,6 +554,14 @@ def add(criterion, tab, chart):
 	if not readable([chart]):
 		frappe.throw(frappe._("That chart is not available to your account."), frappe.PermissionError)
 	config = _stored(criterion, tab)
+	# A tab is one shape or the other, and this is the gate rather than the
+	# hidden button. The page stops offering "+ Add chart" on an embedded tab,
+	# but a browser tab left open in edit mode still holds the old markup, and
+	# hiding a control has never been the boundary in this codebase.
+	if config["embedded_dashboard"]:
+		frappe.throw(frappe._(
+			"This tab shows an Insights dashboard. Stop embedding it before "
+			"adding individual charts."))
 	if any(item["chart"] == chart for item in config["charts"]):
 		return get_tab(criterion, tab)
 	if len(config["charts"]) >= MAX_PER_TAB:
@@ -874,3 +882,81 @@ def history(criterion, tab, limit=50):
 	criterion, tab = _validated(criterion, tab)
 	return {"ok": True, "criterion": criterion, "tab": tab,
 		"changes": tab_audit.history(criterion, tab, limit)}
+
+
+# --- dashboards: the only way a tab is set up from now on --------------------
+#
+# Individual chart-adding is retired going forward (decided 2026-08-03). A tab
+# shows ONE Insights dashboard; a dashboard already holds everything the
+# per-card system composed by hand, drawn by Insights rather than re-drawn
+# here. Tabs that already carry charts keep rendering them -- nothing existing
+# breaks -- but no new tab is offered that shape.
+#
+# The listing mirrors the chart picker exactly: workbook first, derived from
+# what this user can actually read, counts over the whole permission-scoped set
+# before any page is cut. Same guarantees, one level up.
+
+def _dashboards(term=None):
+	"""Every Insights dashboard this user can read, with its workbook."""
+	filters = {}
+	term = clean_text(term)
+	if term:
+		filters["title"] = ["like", "%%%s%%" % term]
+	try:
+		rows = frappe.get_list(DASHBOARD_DOCTYPE, filters=filters,
+			fields=["name", "title", "workbook"],
+			order_by="modified desc", limit_page_length=MAX_SEARCH_SCAN)
+	except Exception:
+		return []
+	return [{
+		"dashboard": row["name"],
+		# An untitled dashboard is a hash, and a hash is not a choice anyone
+		# can make. Same rule as the chart picker's label_for().
+		"title": clean_text(row.get("title")) or row["name"],
+		"workbook": row.get("workbook") or "",
+	} for row in rows]
+
+
+def dashboard_workbooks(term=None):
+	"""Step 1 of the dashboard picker: workbooks holding a readable dashboard.
+
+	Derived from the dashboards themselves, so a workbook is never offered
+	that opens onto nothing -- the same reason workbooks() derives rather than
+	reading Insights Workbook independently.
+	"""
+	if not frappe.db.exists("DocType", DASHBOARD_DOCTYPE):
+		return {"ok": False, "workbooks": [], "message":
+			"Frappe Insights is not installed on this site, so there are no "
+			"dashboards to embed."}
+	rows = _dashboards(term)
+	grouped = {}
+	for row in rows:
+		grouped.setdefault(row["workbook"], []).append(row)
+	titles = _workbook_titles(grouped.keys())
+	listed = [{
+		"workbook": workbook,
+		"title": titles.get(workbook) or workbook or "Not in a workbook",
+		"counts": {"all": len(items)},
+	} for workbook, items in grouped.items()]
+	listed.sort(key=lambda entry: (-entry["counts"]["all"], entry["title"].lower()))
+	return {"ok": True, "workbooks": listed, "total": len(rows)}
+
+
+def search_dashboards(term=None, limit=20, workbook=None):
+	"""Step 2: the dashboards in one workbook.
+
+	Scoped, counted, then cut -- in that order, for the same reason the chart
+	picker is: a count taken after the page is cut describes the page rather
+	than the search, and a filter that reports nothing while matches exist is
+	worse than no filter.
+	"""
+	limit = max(1, min(int(limit or 20), 50))
+	workbook = clean_text(workbook)
+	if not frappe.db.exists("DocType", DASHBOARD_DOCTYPE):
+		return {"ok": False, "dashboards": [], "total": 0, "workbook": workbook,
+			"message": "Frappe Insights is not installed on this site."}
+	rows = _dashboards(term)
+	if workbook:
+		rows = [row for row in rows if row["workbook"] == workbook]
+	return {"ok": True, "workbook": workbook, "total": len(rows),
+		"dashboards": rows[:limit]}

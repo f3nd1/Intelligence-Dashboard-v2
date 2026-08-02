@@ -62,6 +62,7 @@ class State:
 	workbook_titles = {}   # workbook name -> title, absent = unreadable record
 	dashboards = {}          # Insights Dashboard v3 name -> title
 	readable_dashboards = set()   # of those, what THIS user may read
+	dashboard_workbook = {}       # dashboard name -> its Insights Workbook
 
 
 class FakeDoc:
@@ -141,7 +142,13 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 		names = [n for n in sorted(State.dashboards) if n in State.readable_dashboards]
 		if wanted:
 			names = [n for n in names if n == wanted]
-		return [{"name": n, "title": State.dashboards[n]} for n in names]
+		like = (filters or {}).get("title")
+		if like:
+			term = like[1].strip("%").lower()
+			names = [n for n in names if term in State.dashboards[n].lower()]
+		return [{"name": n, "title": State.dashboards[n],
+				"workbook": State.dashboard_workbook.get(n, "")}
+			for n in names[: (limit_page_length or 20)]]
 	if doctype == "Insights Workbook":
 		wanted = set(((filters or {}).get("name") or ["in", []])[1])
 		return [{"name": name, "title": title}
@@ -214,7 +221,7 @@ def install_fake_frappe():
 	def exists(doctype, name=None):
 		if doctype == "DocType":
 			return name in ("Insights Query v3", "UCC Analytics Tab",
-				"Insights Chart v3") and name in State.doctypes
+				"Insights Chart v3", "Insights Dashboard v3") and name in State.doctypes
 		if doctype == "UCC Analytics Tab":
 			return name in State.tabs
 		return name in State.charts
@@ -306,6 +313,7 @@ def reset():
 	State.workbook_titles = {}
 	State.dashboards = {}
 	State.readable_dashboards = set()
+	State.dashboard_workbook = {}
 
 
 def source_of(function_name):
@@ -1386,6 +1394,61 @@ report(raises(PermissionError_, tab_charts.set_dashboard,
 	"criterion_1", "overview", "dash-ok"),
 	"embedding needs the same tab edit permission as every other tab setting")
 State.may_write = True
+
+# ONE SHAPE PER TAB, enforced on the server. The page stops offering
+# "+ Add chart" on an embedded tab, but a browser left open on the old markup
+# still holds the button, and hiding a control has never been the boundary.
+reset()
+State.dashboards = {"dash-ok": "Sophia Pilot"}
+State.readable_dashboards = {"dash-ok"}
+tab_charts.add("criterion_1", "overview", "q-open")
+report(len(tab_charts.get_tab("criterion_1", "overview")["charts"]) == 1,
+	"a chart can be added to a tab with no dashboard")
+tab_charts.set_dashboard("criterion_1", "overview", "dash-ok")
+report(raises(ValidationError_, tab_charts.add, "criterion_1", "overview", "q-agents"),
+	"...and REFUSED once the tab embeds a dashboard, on the server")
+kept = tab_charts.get_tab("criterion_1", "overview")
+report(len(kept["charts"]) == 1 and kept["embedded_dashboard"] == "dash-ok",
+	"the chart added before embedding is KEPT, not deleted (option A)")
+tab_charts.set_dashboard("criterion_1", "overview", "")
+report(len(tab_charts.get_tab("criterion_1", "overview")["charts"]) == 1,
+	"...and comes back when embedding stops -- the migration is reversible")
+
+
+# --- the dashboard picker: same shape, same guarantees ----------------------
+reset()
+State.doctypes.add("Insights Dashboard v3")
+State.dashboards = {"d-1": "Applicants per year", "d-2": "Quality overview",
+	"d-3": "Payroll"}
+State.readable_dashboards = {"d-1", "d-2"}
+State.dashboard_workbook = {"d-1": "wb-admissions", "d-2": "wb-quality",
+	"d-3": "wb-payroll"}
+State.workbook_titles = {"wb-admissions": "Admissions", "wb-quality": "Quality",
+	"wb-payroll": "Payroll"}
+
+books = tab_charts.dashboard_workbooks()
+listed = {entry["workbook"]: entry for entry in books["workbooks"]}
+report(set(listed) == {"wb-admissions", "wb-quality"},
+	"step 1 lists only workbooks holding a dashboard this user can read: %s" % sorted(listed))
+report("wb-payroll" not in listed,
+	"a workbook whose only dashboard is unreadable is not offered at all")
+report(listed["wb-admissions"]["title"] == "Admissions",
+	"workbooks are titled, not shown as ids")
+report(books["total"] == 2, "the total counts readable dashboards, not all of them")
+
+scoped = tab_charts.search_dashboards("", limit=20, workbook="wb-quality")
+report([row["dashboard"] for row in scoped["dashboards"]] == ["d-2"],
+	"step 2 shows that workbook's dashboards and no others")
+report("d-3" not in [row["dashboard"] for row in
+		tab_charts.search_dashboards("", limit=20, workbook="wb-payroll")["dashboards"]],
+	"naming a workbook directly does not reach a dashboard this user cannot read")
+report(tab_charts.search_dashboards("", limit=1)["total"] == 2,
+	"the total describes the whole search, not the one-row page")
+report(len(tab_charts.search_dashboards("", limit=1)["dashboards"]) == 1,
+	"...while the page itself is cut to the limit")
+report(all(row["title"] != row["dashboard"] for row in
+		tab_charts.search_dashboards("")["dashboards"]),
+	"no dashboard is offered labelled with its own id")
 
 
 # --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------
