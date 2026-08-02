@@ -516,12 +516,24 @@ EMBED_CONTENT_PAD=36;
 // measured, not the container: the container is as tall as the frame, so
 // measuring it would let the frame keep whatever height it already had and
 // never shrink back for a short dashboard.
+//
+// THE TALLEST candidate, not the first. `#app .overflow-y-auto` matches more
+// than one element: AppSidebar.vue wraps its link list in one, and it comes
+// FIRST in document order. querySelector returned that, so the measurement was
+// the height of a hidden navigation menu -- near zero -- and every dashboard
+// fell back to the 520px floor. That is the bug Felix hit twice: the sizing
+// arithmetic was right and was being fed the wrong element.
 function insightsContentHeight(frame){
 const doc=insightsDocument(frame);
-const scroller=doc&&doc.querySelector("#app .overflow-y-auto");
-const grid=scroller&&scroller.firstElementChild;
-if(!grid)return 0;
-return Math.ceil(grid.getBoundingClientRect().height)+EMBED_CONTENT_PAD;
+if(!doc)return 0;
+let tallest=0;
+doc.querySelectorAll("#app .overflow-y-auto").forEach(function(scroller){
+const grid=scroller.firstElementChild;
+if(!grid)return;
+const height=Math.ceil(grid.getBoundingClientRect().height);
+if(height>tallest)tallest=height;
+});
+return tallest?tallest+EMBED_CONTENT_PAD:0;
 }
 
 function sizeEmbedFrame(frame){
@@ -554,11 +566,16 @@ note.textContent=clipped
 function watchEmbedContent(frame){
 const doc=insightsDocument(frame);
 const view=doc&&doc.defaultView;
-const scroller=doc&&doc.querySelector("#app .overflow-y-auto");
-const grid=scroller&&scroller.firstElementChild;
-if(!grid||!view||!view.ResizeObserver)return false;
-new view.ResizeObserver(function(){sizeEmbedFrame(frame);}).observe(grid);
-return true;
+if(!doc||!view||!view.ResizeObserver)return false;
+// Every candidate, for the same reason insightsContentHeight measures every
+// candidate: the sidebar's list is one of them, and watching only the first
+// would watch the wrong element.
+const observer=new view.ResizeObserver(function(){sizeEmbedFrame(frame);});
+let watched=0;
+doc.querySelectorAll("#app .overflow-y-auto").forEach(function(scroller){
+if(scroller.firstElementChild){observer.observe(scroller.firstElementChild);watched++;}
+});
+return watched>0;
 }
 let embedResizeBound=false;
 function bindEmbedResize(){
@@ -603,10 +620,15 @@ const report=insightsChromeReport(frame);
 logEvent(card,report==="hidden"?"INFO":"WARNING","embed_chrome",
 frame.dataset.embedName+" · Insights' own menu: "+report);
 // By now the grid exists, so the height can follow it from here on.
-if(!watchEmbedContent(frame))logEvent(card,"INFO","embed_height",
-frame.dataset.embedName+" · the dashboard's own height could not be measured; "
-+"the frame is sized to the window instead");
+const watching=watchEmbedContent(frame);
 sizeEmbedFrame(frame);
+// The NUMBERS, always -- not only on failure. Two rounds were spent asking
+// why the frame was short when the log could simply have said what it
+// measured. A measured height of 0 is the whole diagnosis.
+logEvent(card,watching?"INFO":"WARNING","embed_height",
+frame.dataset.embedName+" · dashboard content "+insightsContentHeight(frame)
++"px, frame "+frame.style.height
++(watching?"":" · could not watch the dashboard's grid; sized to the window"));
 },CHROME_CHECK_DELAY);
 },{once:true});
 frame.src=url;
@@ -800,50 +822,7 @@ return'<div class="ucc-embed-dashboard">'
 +'Drawn by Frappe Insights, with your own permissions. '
 +'<span class="ucc-embed-scroll" data-embed-scroll></span> '
 +'<a href="/insights/dashboards/'+encodeURIComponent(id)+'" target="_blank" '
-+'rel="noopener">Open in Insights</a></p>'
-// The Records strip. Filled after the dashboard's charts are resolved --
-// facts from a button, meaning from Ask UCC beside it, neither pretending to
-// be the other.
-+'<div class="ucc-records-strip" data-records-strip="'+esc(id)+'">'
-+tabChartNotice("Checking which charts can open their records…")+"</div></div>";
-}
-
-// One button per chart that CAN be drilled, named after the chart. One line
-// per chart that cannot, WITH ITS REASON -- a chart with no button beside it
-// and no explanation reads as a bug rather than as a fact about that chart.
-function renderRecordsStrip(node,data){
-if(!node)return;
-const charts=(data&&data.charts)||[];
-if(data&&data.ok===false){node.innerHTML=tabChartNotice(data.message||"");return;}
-if(!charts.length){node.innerHTML=tabChartNotice((data&&data.message)||"");return;}
-const open=charts.filter(function(row){return row.status==="available";});
-const shut=charts.filter(function(row){return row.status!=="available";});
-node.innerHTML='<div class="ucc-records-head"><strong>Records</strong>'
-+'<button type="button" class="ucc-records-ask" data-ask-dashboard>Ask about this dashboard</button></div>'
-+(open.length
-?'<div class="ucc-records-buttons">'+open.map(function(row){
-return'<button type="button" class="ucc-records-open" data-records-chart="'+esc(row.chart)+'" '
-+'data-records-doctype="'+esc(row.doctype)+'">'+esc(row.title)
-+'<span class="ucc-records-doctype">'+esc(row.doctype)+"</span></button>";
-}).join("")+"</div>"
-:'<p class="ucc-ops-empty">None of this dashboard\'s charts can open their records.</p>')
-+(shut.length?'<ul class="ucc-records-shut">'+shut.map(function(row){
-return"<li><strong>"+esc(row.title)+"</strong> — "+esc(row.message
-||"cannot open its records.")+"</li>";
-}).join("")+"</ul>":"");
-}
-
-function loadRecordsStrip(dashboard,tab){
-const area=dashboard.querySelector(`.ucc-tab-charts[data-tab-charts="${CSS.escape(tab)}"]`);
-const node=area&&area.querySelector("[data-records-strip]");
-if(!node)return;
-if(!(window.frappe&&frappe.call)){node.innerHTML="";return;}
-frappe.call({
-method:"ucc_intelligence.api.get_dashboard_drilldowns",
-args:{dashboard:node.dataset.recordsStrip},
-callback(response){renderRecordsStrip(node,(response&&response.message)||{});},
-error(error){node.innerHTML=tabChartNotice(apiErrorMessage(error));},
-});
++'rel="noopener">Open in Insights</a></p></div>';
 }
 
 function renderTabCharts(dashboard,config,tab){
@@ -860,7 +839,6 @@ if(state.embeddedDashboard){
 // set_dashboard in tab_charts.py) rather than hiding them.
 grid.innerHTML=embeddedDashboardMarkup(state);
 loadVisibleEmbeds(dashboard);
-loadRecordsStrip(dashboard,tab);
 return;
 }
 if(!state.charts.length){
@@ -2563,38 +2541,6 @@ pick.disabled=false;results.innerHTML=tabChartNotice(error);});
 // the value by being clicked; with no card, the values come from the chart's
 // own dimension -- fetched by the SAME endpoint the panel already pages
 // through, so there is no second way to read records.
-function showChartRecords(dashboard,chart,doctype){
-openModal((doctype||"Records"),tabChartNotice("Loading…"));
-if(!(window.frappe&&frappe.call))return;
-frappe.call({
-method:"ucc_intelligence.api.get_chart_records",
-args:{chart:chart,column:"",value:"",page:1,page_size:20},
-callback(response){
-const data=(response&&response.message)||{};
-if(data.ok===false){openModal(doctype||"Records",tabChartNotice(data.message||""));return;}
-const rows=data.records||[];
-openModal((doctype||"Records")+" · "+rows.length+(data.has_more?"+":"")
-+(rows.length===1?" record":" records"),
-rows.length
-?'<div class="ucc-records-list">'+rows.map(function(row){
-return'<a class="ucc-records-row" href="'+esc(recordRoute(doctype,row.name))+'">'
-+esc(row.title||row.name)+"</a>";
-}).join("")+"</div>"
-:tabChartNotice("No records behind this chart that your account can read."));
-},
-error(error){openModal(doctype||"Records",tabChartNotice(apiErrorMessage(error)));},
-});
-}
-
-// Hands Ask UCC the tab and dashboard as CONTEXT rather than making someone
-// describe a dashboard they are looking at. It carries no facts -- the Records
-// button is where facts come from, and this is where meaning does.
-function askAboutDashboard(dashboard){
-const shell=dashboard.closest(".ucc-platform")||document;
-const button=shell.querySelector('[data-ucc-workspace="ask"]');
-if(button)button.click();
-}
-
 function setTabDashboard(dashboard,config,tab,id,onError){
 if(!(window.frappe&&frappe.call))return;
 frappe.call({
@@ -2891,24 +2837,6 @@ style.textContent=`
 /* Empty unless the dashboard really is taller than its frame, so it never
    tells anyone to scroll through nothing. */
 .ucc-embed-scroll{color:#B45309;font-weight:600}
-/* The Records strip: facts, under the dashboard Insights drew. */
-.ucc-records-strip{margin:12px 0 0;padding:12px;border:1px solid #E6EBF3;border-radius:12px;background:#F8FAFC}
-.ucc-records-head{display:flex;align-items:center;justify-content:space-between;
- gap:10px;margin:0 0 8px;font-size:12px;color:#172554}
-.ucc-records-ask{border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:28px;
- padding:0 10px;font-size:11px;cursor:pointer;color:#2563EB;font-weight:600}
-.ucc-records-ask:hover{background:#EFF6FF}
-.ucc-records-buttons{display:flex;flex-wrap:wrap;gap:6px}
-.ucc-records-open{display:flex;flex-direction:column;align-items:flex-start;gap:1px;
- border:1px solid #D8E0EC;background:#fff;border-radius:8px;padding:6px 10px;
- font-size:12px;color:#334155;cursor:pointer;text-align:left}
-.ucc-records-open:hover{background:#F1F5F9}
-.ucc-records-doctype{font-size:10px;color:#64748B}
-.ucc-records-shut{margin:8px 0 0;padding-left:18px;font-size:11px;color:#64748B}
-.ucc-records-shut li{margin:2px 0}
-.ucc-records-list{display:flex;flex-direction:column;gap:2px}
-.ucc-records-row{padding:6px 8px;border-radius:6px;font-size:12px;color:#2563EB;text-decoration:none}
-.ucc-records-row:hover{background:#F1F5F9}
 .ucc-chart-picker-kinds{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
 .ucc-chart-picker-kind{border:1px solid #D8E0EC;background:#fff;color:#475569;border-radius:999px;
  min-height:30px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}
@@ -3262,16 +3190,6 @@ exportTabPdf(dashboard,config,exportButton.dataset.exportPdf);return;
 const pickDashboard=event.target.closest("[data-pick-dashboard]");
 if(pickDashboard){event.preventDefault();event.stopPropagation();
 openDashboardPicker(dashboard,config,pickDashboard.dataset.pickDashboard);return;}
-// The Records strip. The panel it opens is the SAME one the cards used --
-// same API, same paging, same record links, same permission chain. Only the
-// entry point moved, which is the whole reason drilldown.py is untouched.
-const recordsOpen=event.target.closest("[data-records-chart]");
-if(recordsOpen){event.preventDefault();event.stopPropagation();
-showChartRecords(dashboard,recordsOpen.dataset.recordsChart,
-recordsOpen.dataset.recordsDoctype);return;}
-const askDashboard=event.target.closest("[data-ask-dashboard]");
-if(askDashboard){event.preventDefault();event.stopPropagation();
-askAboutDashboard(dashboard);return;}
 const removeChart=event.target.closest("[data-remove-chart]");
 if(removeChart){event.preventDefault();event.stopPropagation();removeTabChart(dashboard,config,activeSection(dashboard),removeChart.dataset.removeChart);return;}
 // --- Diagram/Table toggle and drill-down (#8) --------------------------
