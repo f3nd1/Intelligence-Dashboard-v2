@@ -405,3 +405,84 @@ def reindex(source=None):
 		return {"ok": True, "reindexed": [_text(source)]}
 	done = ingestion.reindex_stale()
 	return {"ok": True, "reindexed": done if isinstance(done, list) else []}
+
+
+# --- institution-wide settings: access, and monitoring rules ----------------
+# Sections 2 and 4 of the settings split agreed on 2026-08-03. Sections 1, 3
+# and 5 (AI provider, chart palette, knowledge policy) stay on the Frappe form
+# for UCC Intelligence Settings -- they are plain fields and Frappe's own form
+# renders them perfectly well. These two do not: access is a matrix and rules
+# are a table, and both are unreadable as a stack of form fields.
+#
+# NO NEW PERMISSION CONCEPTS. Everything below surfaces what already exists:
+# UCC Dashboard Access for criteria and Ask UCC modules, and write permission
+# on the two DocTypes for editing tabs and acting on findings.
+
+def access_overview():
+	"""Who can see what, from the existing permission model only."""
+	from ucc_intelligence.permissions import access
+
+	try:
+		response = access.build_response()
+	except Exception as error:
+		return {"ok": False, "message": _text(error)}
+	criteria = response.get("criteria") or {}
+	return {
+		"ok": True,
+		"criteria": [{"key": key, "visible": bool(criteria.get(key))}
+			for key in sorted(criteria)],
+		"modules": {key: bool(response.get(key))
+			for key in ("ask_student_journey", "ask_recruitment_agent", "ask_quality_action")
+			if key in response},
+		# Read-only mirrors, so the whole model is legible in one place. These
+		# are Frappe DocType permissions and are changed in Role Permission
+		# Manager, not here -- stated rather than implied.
+		"can_edit_tabs": bool(frappe.has_permission("UCC Analytics Tab", "write")),
+		"can_manage_findings": can_manage_findings(),
+		"can_manage_sources": can_manage_sources(),
+		"note": ("Criterion and Ask UCC visibility comes from the UCC Dashboard Access "
+			"records. Who may edit tabs or close findings is ordinary Frappe DocType "
+			"permission, changed in Role Permission Manager."),
+	}
+
+
+def set_rule_config(rule_id, enabled=None, severity=None):
+	"""Turn one rule on or off, or change its severity.
+
+	The rule's DEFINITION stays in code -- what it looks at and what counts as
+	a problem is not editable, because a rule an auditor cannot trust is not
+	worth running. What an administrator legitimately changes is whether it
+	runs and how loudly it reports, and that is what this writes.
+	"""
+	from ucc_intelligence.monitoring import rule_registry
+
+	rule_id = _text(rule_id)
+	if rule_id not in rule_registry.RULES:
+		frappe.throw(frappe._("Unknown monitoring rule."))
+	if not frappe.has_permission(RULE_DOCTYPE, "write"):
+		raise frappe.PermissionError(
+			"You do not have permission to change monitoring rules.")
+	definition = rule_registry.RULES[rule_id]
+
+	existing = frappe.get_all(RULE_DOCTYPE, filters={"rule_id": rule_id},
+		fields=["name"], limit_page_length=1) or []
+	if existing:
+		doc = frappe.get_doc(RULE_DOCTYPE, existing[0]["name"])
+	else:
+		# First time this rule is configured. Seeded from the registry so the
+		# record always describes the rule correctly.
+		doc = frappe.new_doc(RULE_DOCTYPE)
+		doc.rule_id = rule_id
+		doc.title = definition.get("title") or rule_id
+		doc.purpose = definition.get("purpose") or ""
+		doc.target_doctype = definition.get("target_doctype") or ""
+		doc.responsible_role = definition.get("responsible_role") or ""
+		doc.remediation = definition.get("remediation") or ""
+	doc.rule_version = definition.get("version") or ""
+	if enabled is not None:
+		doc.enabled = 1 if _text(enabled).lower() in ("1", "true", "yes", "on") else 0
+	if _text(severity) in SEVERITIES:
+		doc.severity = _text(severity)
+	doc.save() if existing else doc.insert()
+	return {"ok": True, "rule_id": rule_id,
+		"enabled": bool(doc.enabled), "severity": doc.severity}

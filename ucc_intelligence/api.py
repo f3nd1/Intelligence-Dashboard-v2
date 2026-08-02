@@ -361,6 +361,22 @@ def reindex_knowledge(source=None):
 
 
 @frappe.whitelist()
+def get_access_overview():
+	"""Who can see what, for the settings page. Existing permissions only."""
+	return _operations.access_overview()
+
+
+@frappe.whitelist()
+def set_monitoring_rule(rule_id, enabled=None, severity=None):
+	"""Turn a monitoring rule on/off, or change its severity.
+
+	The rule's definition stays in code; only its on/off state and severity are
+	editable. Gated on write permission for UCC Monitoring Rule.
+	"""
+	return _operations.set_rule_config(rule_id, enabled, severity)
+
+
+@frappe.whitelist()
 def get_chart_drilldown(chart):
 	"""Whether a chart's segments can be opened, and on which columns.
 

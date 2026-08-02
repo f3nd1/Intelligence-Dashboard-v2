@@ -269,6 +269,18 @@ def _column_of(value):
 	"""
 	if isinstance(value, str):
 		return value.strip()
+	# A LIST was in this docstring from the day it was written and was never
+	# handled. That is the bug behind "This chart has no X Axis Column set" on
+	# a chart whose axes ARE set: `bool(config["x_axis"])` is True for a list,
+	# so every diagnostic said the axis was present, while this returned "".
+	# The first resolvable entry wins -- the x-axis is one column, and a list
+	# of one is how the builder writes it.
+	if isinstance(value, (list, tuple)):
+		for item in value:
+			found = _column_of(item)
+			if found:
+				return found
+		return ""
 	if isinstance(value, dict):
 		for key in ("column_name", "dimension_name", "measure_name", "name", "column", "value"):
 			found = value.get(key)
@@ -434,6 +446,16 @@ def presentation_for(query, columns=None, palette=None):
 
 	# The check that stops a confident wrong answer. If the author's column is
 	# not in what the query returned, we do not know what they meant.
+	# NO COLUMNS AT ALL is not an axis problem, and must never be reported as
+	# one. It means the query returned nothing -- a broken query, an empty
+	# table, or rows this user cannot see -- and saying "no X Axis Column set"
+	# would send someone to Insights to fix a setting that is already correct.
+	if not available:
+		blank["chart_type"] = raw_type
+		blank["reason"] = ("This chart's query returned no rows, so there is nothing "
+			"to draw. The chart's own settings are not the problem.")
+		return blank
+
 	if available:
 		if label_column and label_column not in available:
 			blank["chart_type"] = raw_type
@@ -443,9 +465,16 @@ def presentation_for(query, columns=None, palette=None):
 		value_columns = [column for column in value_columns if column in available]
 		if not label_column:
 			blank["chart_type"] = raw_type
-			blank["reason"] = ("This chart has no X Axis Column set in Insights. "
-				"Open it in Insights, set X Axis Column and Y Axis Series, and it "
-				"will draw here.")
+			# Two different situations, two different sentences. Telling someone
+			# to go and set an axis they have already set is worse than saying
+			# nothing: they will set it again and it still will not work.
+			blank["reason"] = ("This chart has an X Axis setting that Sophia could "
+				"not read. Its value is not a column name Sophia recognises — this "
+				"is a Sophia limitation, not something to fix in Insights."
+				if config.get("x_axis") or config.get("xAxis")
+				else "This chart has no X Axis Column set in Insights. Open it in "
+					"Insights, set X Axis Column and Y Axis Series, and it will "
+					"draw here.")
 			return blank
 		if not value_columns:
 			blank["chart_type"] = raw_type
