@@ -50,11 +50,17 @@ WHAT THE 2026-08-03 CONFIG PROBE SETTLED (probe_insights_chart_config.py)
   DELIBERATELY NOT READ -- the key name is confirmed, the MEANING is not
     order_by            re-sorting on a misread shape silently reorders an
                         evidence chart, and a wrong order looks like a finding
-    value_column        \
-    label_column         | plausibly the Number chart's figure and caption.
-    label_position       | "Plausibly" is the problem: nothing corroborates it
-    number_columns       | beyond the names, and CLAUDE.md's standing rule is
-    number_column_options/ that a name is not evidence.
+    label_position      no evidence of what it positions
+    number_column_options   no evidence of what it configures
+
+  READ SINCE 2026-08-03, ON EVIDENCE
+    label_column, value_column, number_columns -- these were refused on
+    2026-08-03 because nothing corroborated their meaning beyond their names.
+    Felix's Donut then produced the corroboration: its x_axis is
+    {"dimension": {}} (empty) while label_column holds "benchmark_type", a
+    real column its query returns. A chart type whose ONLY populated axis key
+    is that one, holding a real column name, is evidence -- not a name guess.
+    See axis_keys_for().
     date_column         no confirmation it is an x-axis rather than, say, a
                         filter field or a granularity control
     location_column     configures Map
@@ -286,6 +292,15 @@ def _column_of(value):
 			found = value.get(key)
 			if isinstance(found, str) and found.strip():
 				return found.strip()
+		# One level deeper. A Donut's x_axis is {"dimension": {}} on this site
+		# -- an empty wrapper -- and the populated form of that same shape is
+		# {"dimension": {"column_name": ...}}. Recursing reads the second
+		# without inventing anything about the first, which still yields "".
+		for nested in value.values():
+			if isinstance(nested, (dict, list, tuple)):
+				found = _column_of(nested)
+				if found:
+					return found
 	return ""
 
 
@@ -294,6 +309,48 @@ def _columns_of(value):
 		return [column for column in (_column_of(item) for item in value) if column]
 	single = _column_of(value)
 	return [single] if single else []
+
+
+# Which config keys hold the axes, per renderer. First match wins; the rest
+# are tried in order, so nothing is lost if a chart is configured unusually.
+CATEGORY_AXIS_KEYS = (
+	("x_axis", "label_column", "xAxis"),
+	("y_axis", "value_column", "number_columns", "yAxis"),
+)
+LABELLED_AXIS_KEYS = (
+	("label_column", "x_axis", "xAxis"),
+	("value_column", "number_columns", "y_axis", "yAxis"),
+)
+# donut/number are label+value shapes; bar/line/funnel are axis shapes.
+LABELLED_RENDERERS = ("donut", "number")
+
+
+def axis_keys_for(render_as):
+	"""The key order to try for this renderer."""
+	return LABELLED_AXIS_KEYS if render_as in LABELLED_RENDERERS else CATEGORY_AXIS_KEYS
+
+
+def resolve_axes(config, render_as):
+	"""(label column, value columns) as presentation_for resolves them.
+
+	Public so the bench probe can call the REAL resolution instead of
+	re-implementing it. The probe's "axes are present; Sophia should draw this"
+	verdict was a truthiness check on x_axis, and it was a false positive on
+	exactly the chart that did not draw. A probe that disagrees with the code
+	is worse than no probe.
+	"""
+	label_keys, value_keys = axis_keys_for(render_as)
+	label = ""
+	for key in label_keys:
+		label = _column_of(config.get(key))
+		if label:
+			break
+	values = []
+	for key in value_keys:
+		values = _columns_of(config.get(key))
+		if values:
+			break
+	return label, values
 
 
 def default_palette():
@@ -433,16 +490,34 @@ def presentation_for(query, columns=None, palette=None):
 			if raw_type else "This Insights chart has no chart type set.")
 		return blank
 
-	label_column = _column_of(config.get("x_axis"))
-	value_columns = _columns_of(config.get("y_axis"))
-	# Fallback to the camelCase pair ONLY when snake_case gave nothing. Safe
-	# because every column below is still checked against what the query really
-	# returned -- the empty placeholder shape yields "" and is rejected there.
-	# See the docstring: the earlier "ignored permanently" was overstated.
-	if not label_column:
-		label_column = _column_of(config.get("xAxis"))
-	if not value_columns:
-		value_columns = _columns_of(config.get("yAxis"))
+	# WHICH KEYS HOLD THE AXES DEPENDS ON THE CHART TYPE (evidence, 2026-08-03)
+	#
+	# Felix's Donut has x_axis = {"dimension": {}} -- genuinely empty -- while
+	# `label_column` holds "benchmark_type", a real column the query returns.
+	# So a Donut is configured through label_column/value_column and an
+	# axis chart through x_axis/y_axis, and reading x_axis universally is what
+	# left the Donut blank.
+	#
+	# This is NOT the name-inference ADR-016 forbids. The 2026-08-03 config
+	# probe declined to read `label_column` precisely because nothing
+	# corroborated what it meant; a live chart whose only populated axis key is
+	# that one, holding a real column name, IS that corroboration.
+	#
+	# Both orders are tried either way, so a chart configured unusually still
+	# resolves -- and every candidate is checked against the columns the query
+	# really returned before it is used.
+	label_keys, value_keys = axis_keys_for(supported)
+	label_column = ""
+	for key in label_keys:
+		label_column = _column_of(config.get(key))
+		if label_column:
+			break
+	value_columns = []
+	for key in value_keys:
+		value_columns = _columns_of(config.get(key))
+		if value_columns:
+			break
+
 
 	# The check that stops a confident wrong answer. If the author's column is
 	# not in what the query returned, we do not know what they meant.
