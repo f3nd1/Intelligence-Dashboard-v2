@@ -570,7 +570,15 @@ if(!doc||!view||!view.ResizeObserver)return false;
 // Every candidate, for the same reason insightsContentHeight measures every
 // candidate: the sidebar's list is one of them, and watching only the first
 // would watch the wrong element.
-const observer=new view.ResizeObserver(function(){sizeEmbedFrame(frame);});
+// The chrome is re-hidden here, not only at load. Injecting once assumes the
+// frame keeps the document it was given: a reload, a re-render that replaces
+// the head, or anything else that drops the <style> takes the sidebar's
+// hiding with it, and nothing would ever put it back. hideInsightsChrome
+// returns early when the sheet is already present, so this costs one
+// querySelector per resize and repairs the case where it is not.
+const observer=new view.ResizeObserver(function(){
+hideInsightsChrome(frame);
+sizeEmbedFrame(frame);});
 let watched=0;
 doc.querySelectorAll("#app .overflow-y-auto").forEach(function(scroller){
 if(scroller.firstElementChild){observer.observe(scroller.firstElementChild);watched++;}
@@ -600,6 +608,10 @@ if(frame.dataset.embedSrc===undefined)return;
 const url=frame.dataset.embedSrc;
 delete frame.dataset.embedSrc;
 const started=(window.performance&&performance.now)?performance.now():0;
+// EVERY load, not just the first. A frame that reloads for any reason gets a
+// fresh document with no stylesheet in it; a one-shot listener would leave
+// Insights' menu on screen with nothing left to put it back.
+frame.addEventListener("load",function(){hideInsightsChrome(frame);});
 frame.addEventListener("load",function(){
 const ms=started?Math.round(performance.now()-started):0;
 hideInsightsChrome(frame);
@@ -616,6 +628,10 @@ logEvent(card,"INFO","embed_loaded",frame.dataset.embedName+" · "+ms+" ms");
 // itself does not: a rule appended early applies to elements that appear
 // later, which is the whole reason this is CSS and not a DOM edit.
 window.setTimeout(function(){
+// Re-applied before it is judged: if the sheet went missing between load and
+// now, this is where it comes back, and the report below then says "hidden"
+// because it looks at what the rules DO, not at whether a <style> exists.
+hideInsightsChrome(frame);
 const report=insightsChromeReport(frame);
 logEvent(card,report==="hidden"?"INFO":"WARNING","embed_chrome",
 frame.dataset.embedName+" · Insights' own menu: "+report);
