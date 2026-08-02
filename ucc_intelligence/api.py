@@ -260,6 +260,19 @@ def set_tab_intro(criterion, tab, intro):
 
 
 @frappe.whitelist()
+def set_tab_dashboard(criterion, tab, dashboard=""):
+	"""PHASE 1 PILOT: embed one Insights dashboard on this tab, or clear it.
+
+	Stores an id. Sophia never fetches the dashboard's contents -- the page
+	builds an /insights/dashboards/<id> URL and the iframe carries the
+	viewer's own session, so Insights applies its own permission check to
+	whoever is looking. Writing is gated by the same tab edit permission as
+	every other tab setting.
+	"""
+	return _tab_charts.set_dashboard(criterion, tab, dashboard)
+
+
+@frappe.whitelist()
 def set_tab_question(criterion, tab, question, visible):
 	"""Show or hide one management question on this tab. Stores WHICH question,
 	never an answer -- every answer is still computed live and

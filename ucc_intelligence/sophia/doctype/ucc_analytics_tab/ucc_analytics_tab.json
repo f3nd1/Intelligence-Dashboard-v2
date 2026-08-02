@@ -1,64 +1,71 @@
 {
- "doctype": "DocType",
- "name": "UCC Analytics Tab",
- "module": "Sophia",
- "custom": 0,
- "istable": 0,
- "issingle": 0,
- "track_changes": 1,
- "engine": "InnoDB",
  "autoname": "format:{criterion}::{tab}",
+ "custom": 0,
  "description": "How one Sophia Analytics tab is configured, for EVERYONE. One record per criterion+tab. Institutional configuration, not a personal workspace: what is set here is what every staff member sees.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
  "field_order": [
   "criterion",
   "tab",
   "intro",
   "charts",
-  "hidden_questions"
+  "hidden_questions",
+  "embedded_dashboard"
  ],
  "fields": [
   {
+   "description": "criterion_1 to criterion_7.",
    "fieldname": "criterion",
    "fieldtype": "Data",
-   "label": "Criterion",
-   "reqd": 1,
    "in_list_view": 1,
-   "description": "criterion_1 to criterion_7."
+   "label": "Criterion",
+   "reqd": 1
   },
   {
+   "description": "overview, or a subcriterion such as 4.1.1.",
    "fieldname": "tab",
    "fieldtype": "Data",
-   "label": "Tab",
-   "reqd": 1,
    "in_list_view": 1,
-   "description": "overview, or a subcriterion such as 4.1.1."
+   "label": "Tab",
+   "reqd": 1
   },
   {
+   "description": "Shown at the top of the tab. A small Markdown subset renders: **bold**, *italic*, `code`, [links](https://...) and - bullets. Empty by default.",
    "fieldname": "intro",
    "fieldtype": "Long Text",
-   "label": "Introduction",
-   "description": "Shown at the top of the tab. A small Markdown subset renders: **bold**, *italic*, `code`, [links](https://...) and - bullets. Empty by default."
+   "label": "Introduction"
   },
   {
+   "description": "JSON list of {\"chart\": \"<Insights Query v3 name>\", \"size\": \"small|medium|large|full\"}. Edited from the tab itself, not here.",
    "fieldname": "charts",
    "fieldtype": "Long Text",
-   "label": "Charts (JSON)",
-   "description": "JSON list of {\"chart\": \"<Insights Query v3 name>\", \"size\": \"small|medium|large|full\"}. Edited from the tab itself, not here."
+   "label": "Charts (JSON)"
   },
   {
+   "description": "JSON list of management-question ids hidden on this tab. Everything the criterion can answer is shown unless it is listed here.",
    "fieldname": "hidden_questions",
    "fieldtype": "Long Text",
-   "label": "Hidden questions (JSON)",
-   "description": "JSON list of management-question ids hidden on this tab. Everything the criterion can answer is shown unless it is listed here."
+   "label": "Hidden questions (JSON)"
+  },
+  {
+   "description": "Insights Dashboard v3 name. When set, this tab shows that dashboard embedded from Insights instead of Sophia's own painted charts.",
+   "fieldname": "embedded_dashboard",
+   "fieldtype": "Data",
+   "label": "Embedded Insights Dashboard"
   }
  ],
+ "issingle": 0,
+ "istable": 0,
+ "module": "Sophia",
+ "name": "UCC Analytics Tab",
  "permissions": [
   {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
    "create": 1,
-   "delete": 1
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
   }
- ]
+ ],
+ "track_changes": 1
 }
