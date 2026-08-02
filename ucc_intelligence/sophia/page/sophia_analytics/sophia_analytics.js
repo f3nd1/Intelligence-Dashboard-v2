@@ -469,7 +469,9 @@ return`<article class="ucc-embedded-chart${editing?" is-editable":""}" data-embe
 +`<button type="button" data-demo-view="diagram" class="is-active" aria-pressed="true">Diagram</button>`
 +`<button type="button" data-demo-view="table" aria-pressed="false">Table</button></div>`
 +(editing
-?`<span class="ucc-palette-control"><input type="color" data-recolour-chart="${esc(chart.chart)}" `
+?`<button type="button" class="ucc-tab-action ucc-retitle" data-retitle-chart="${esc(chart.chart)}" `
++`title="Give this card its own title">Rename</button>`
++`<span class="ucc-palette-control"><input type="color" data-recolour-chart="${esc(chart.chart)}" `
 +`value="${esc((chart.palette&&chart.palette[0])||"#2563EB")}" `
 +`title="Series colour for this chart" aria-label="Series colour for ${esc(chart.title)}"></span>`
 +`<span class="ucc-drag-grip" data-drag-grip title="Drag to reorder" aria-hidden="true">&#8942;&#8942;</span>`
@@ -732,6 +734,11 @@ const limit=Number(presentation.limit)||0;
 const shown=(limit&&series.length>limit)?series.slice(0,limit):series;
 const painter=CHART_PAINTERS[presentation.render_as]||paintBarSeries;
 painter(card,node,shown);
+// #4: a drawable chart OPENS as the diagram. Table stays one click away and
+// stays the automatic state only when nothing can be drawn -- which is what
+// paintTableOnly() does. Set explicitly rather than relying on the markup's
+// initial classes, so a re-render cannot leave a chart card showing a table.
+setChartView(card,"diagram");
 if(limit&&series.length>limit){
 node.insertAdjacentHTML("beforeend",
 '<p class="ucc-insights-axis-label">Top '+limit+" of "+series.length
@@ -1235,9 +1242,13 @@ return'<article class="ucc-ops-stat'+(count?" is-"+level.toLowerCase():"")+'"><s
 }).join("")
 +'<article class="ucc-ops-stat"><strong>'+esc(String(data.open_total||0))
 +"</strong><span>open in total</span></article></div>"
-+'<div class="ucc-ops-section"><h3>Rules</h3>'
++'<div class="ucc-ops-section"><div class="ucc-ops-section-head"><h3>Rules</h3>'
++(data.can_manage
+?'<button type="button" class="ucc-ops-primary" data-run-monitoring>Run all rules now</button>'
+:"")+"</div>"
 +(rules.length?'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
-+"<th>Rule</th><th>Looks at</th><th>Severity</th><th>State</th><th>Last run</th><th>Open</th></tr></thead><tbody>"
++"<th>Rule</th><th>Looks at</th><th>Severity</th><th>State</th><th>Last run</th><th>Open</th>"
++(data.can_manage?"<th></th>":"")+"</tr></thead><tbody>"
 +rules.map(function(rule){
 return"<tr><td><strong>"+esc(rule.title)+"</strong><br><small>"+esc(rule.purpose||"")+"</small></td>"
 +"<td>"+esc(rule.target_doctype||"—")+"</td>"
@@ -1246,7 +1257,10 @@ return"<tr><td><strong>"+esc(rule.title)+"</strong><br><small>"+esc(rule.purpose
 // never been set up either way, and saying "disabled" would invent an intent.
 +"<td>"+(rule.configured?(rule.enabled?"Enabled":"Disabled"):"Not configured yet")+"</td>"
 +"<td>"+opsDate(rule.last_run)+"</td>"
-+"<td>"+esc(String(rule.open_findings||0))+"</td></tr>";
++"<td>"+esc(String(rule.open_findings||0))+"</td>"
++(data.can_manage
+?'<td><button type="button" class="ucc-tab-action" data-run-monitoring="'
++esc(rule.rule_id)+'">Run</button></td>':"")+"</tr>";
 }).join("")+"</tbody></table></div>":opsNotice("No monitoring rules are registered."))
 +"</div>"
 +'<div class="ucc-ops-section"><div class="ucc-ops-section-head"><h3>Open findings</h3>'
@@ -1260,13 +1274,22 @@ return"<tr><td><strong>"+esc(rule.title)+"</strong><br><small>"+esc(rule.purpose
 +'<div data-ops-findings>'+opsNotice("Loading…")+"</div></div>"
 +'<div class="ucc-ops-section"><h3>Recent runs</h3>'
 +(runs.length?'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
-+"<th>Started</th><th>Status</th><th>Rules</th><th>Open</th><th>Resolved</th></tr></thead><tbody>"
++"<th>Started</th><th>Rule</th><th>Status</th><th>Records checked</th>"
++"<th>Opened</th><th>Resolved</th></tr></thead><tbody>"
 +runs.map(function(run){
-return"<tr><td>"+opsDate(run.started_at)+"</td><td>"+esc(run.status||"—")+"</td>"
-+"<td>"+esc(String(run.rules_run||0))+"</td><td>"+esc(String(run.findings_open||0))
-+"</td><td>"+esc(String(run.findings_resolved||0))+"</td></tr>";
+return"<tr><td>"+opsDate(run.started_at)+"</td>"
++"<td>"+esc(run.rule||"—")+"</td><td>"+esc(run.status||"—")
++(run.error_message?"<br><small>"+esc(run.error_message)+"</small>":"")+"</td>"
++"<td>"+esc(String(run.records_evaluated||0))+"</td>"
++"<td>"+esc(String(run.findings_opened||0))+"</td>"
++"<td>"+esc(String(run.findings_resolved||0))+"</td></tr>";
 }).join("")+"</tbody></table></div>"
-:opsNotice("No monitoring run has been recorded yet."))
+// "Nothing found" and "never ran" look identical if you only show a zero.
+// Said apart explicitly, because Felix could not tell them apart.
+:opsNotice("No monitoring run has ever been recorded. The counts above are "
++"zero because nothing has been checked yet, not because nothing is wrong. "
++(data.can_manage?"Use “Run all rules now” above to check for the first time."
+:"An administrator needs to run it for the first time.")))
 +"</div>";
 }
 
@@ -1282,7 +1305,7 @@ return;
 }
 const canManage=!!data.can_manage;
 target.innerHTML='<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
-+"<th>Severity</th><th>Finding</th><th>Record</th><th>Last seen</th>"
++"<th>Severity</th><th>Finding</th><th>Record</th><th>Seen</th>"
 +(canManage?"<th>Action</th>":"")+"</tr></thead><tbody>"
 +rows.map(function(row){
 const record=row.target_record
@@ -1290,8 +1313,10 @@ const record=row.target_record
 +esc(row.target_record)+"</a>":"—";
 return'<tr><td><span class="ucc-ops-pill is-'+esc((row.severity||"low").toLowerCase())+'">'
 +esc(row.severity||"—")+"</span></td>"
-+"<td><strong>"+esc(row.rule_title||row.rule_id||"")+"</strong><br><small>"+esc(row.detail||"")+"</small></td>"
-+"<td>"+record+"</td><td>"+opsDate(row.last_seen)+"</td>"
++"<td><strong>"+esc(row.rule_title||row.rule||"")+"</strong><br><small>"+esc(row.detail||"")+"</small>"
++(row.remediation?'<br><small class="ucc-ops-fix">Fix: '+esc(row.remediation)+"</small>":"")+"</td>"
++"<td>"+record+"</td><td>"+opsDate(row.modified)
++(row.occurrence_count>1?"<br><small>"+esc(String(row.occurrence_count))+" runs</small>":"")+"</td>"
 +(canManage?'<td class="ucc-ops-actions">'
 +(row.status==="Open"
 ?'<button type="button" data-finding-action="Resolved" data-finding="'+esc(row.name)+'">Resolve</button>'
@@ -1396,6 +1421,18 @@ panel.hidden=panel.dataset.opsPanel!==tab.dataset.opsTab;
 return;
 }
 
+const run=event.target.closest("[data-run-monitoring]");
+if(run){
+const rule=run.dataset.runMonitoring||"";
+run.disabled=true;run.textContent="Running…";
+frappe.call({method:"ucc_intelligence.api.run_monitoring",
+args:rule?{rule:rule}:{},
+callback(){loadOperations(root);},
+error(error){openModal("Could not run monitoring",tabChartNotice(apiErrorMessage(error)));
+loadOperations(root);}});
+return;
+}
+
 const action=event.target.closest("[data-finding-action]");
 if(action){
 // Suppression silences a finding for good, so it asks for a reason and
@@ -1427,13 +1464,21 @@ frappe.call({method:"ucc_intelligence.api.add_knowledge_source",
 args:{title:title,source_type:type,text:text},
 callback(response){
 const result=(response&&response.message)||{};
-if(status)status.textContent=result.indexed
-?"Registered and indexed."
-:("Registered, but indexing failed: "+(result.message||"unknown reason"));
+// Never silent. Every outcome says which one it was, including the one
+// where the document registered but could not be indexed.
+if(status){
+status.textContent=result.ok===false
+?("Could not register: "+(result.message||"unknown reason"))
+:result.indexed
+?("Registered and indexed — "+(result.sections||0)+" section(s).")
+:("Registered, but not indexed: "+(result.message||"unknown reason"));
+}
+if(result.ok!==false){
 const titleField=ops.querySelector("[data-source-title]");
 const textField=ops.querySelector("[data-source-text]");
 if(titleField)titleField.value="";
 if(textField)textField.value="";
+}
 loadOperations(root);
 },
 error(error){if(status)status.textContent=apiErrorMessage(error);}});
@@ -1743,7 +1788,8 @@ style.textContent=`
 .ucc-palette-control input{width:34px;height:26px;padding:0;border:1px solid #D8E0EC;border-radius:6px;
  background:#fff;cursor:pointer}
 /* --- Operations workspace ------------------------------------------------- */
-.ucc-ops{padding:4px 0}
+/* #1: the tables were flush against the workspace edge. */
+.ucc-ops{padding:4px 18px 24px}
 .ucc-ops-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
  flex-wrap:wrap;margin-bottom:14px}
 .ucc-ops-head h2{margin:0;font-size:17px;color:#172554}
@@ -1790,11 +1836,17 @@ style.textContent=`
  min-height:34px;padding:0 14px;font-size:12px;font-weight:600;cursor:pointer}
 .ucc-ops-primary:hover{background:#1E3A8A}
 .ucc-ops-hint{margin:8px 0 0;font-size:11px;color:#64748B}
+.ucc-ops-fix{color:#2563EB}
 @media(max-width:760px){.ucc-ops-head{flex-direction:column;align-items:flex-start}}
 
 /* #4: the intro renders Markdown, so it needs the elements Markdown makes. */
-.ucc-tab-intro-text h3{margin:10px 0 6px;font-size:15px;font-weight:600;color:#172554}
-.ucc-tab-intro-text h4,.ucc-tab-intro-text h5,.ucc-tab-intro-text h6{margin:8px 0 4px;font-size:13px;font-weight:600;color:#334155}
+/* #6: the intro headings were barely larger than body text, so a "#"
+   heading read as bold body copy. Scaled to the shell's own type ramp
+   (the workspace h2 is 17px), stepping down rather than flattening. */
+.ucc-tab-intro-text h3{margin:14px 0 6px;font-size:19px;font-weight:600;color:#172554;line-height:1.3}
+.ucc-tab-intro-text h4{margin:12px 0 5px;font-size:16px;font-weight:600;color:#172554}
+.ucc-tab-intro-text h5{margin:10px 0 4px;font-size:14px;font-weight:600;color:#334155}
+.ucc-tab-intro-text h6{margin:10px 0 4px;font-size:13px;font-weight:600;color:#334155;text-transform:uppercase;letter-spacing:.04em}
 .ucc-tab-intro-text ol{margin:0 0 8px;padding-left:20px}
 .ucc-tab-intro-text blockquote{margin:0 0 8px;padding:2px 0 2px 12px;border-left:3px solid #D8E0EC;color:#64748B}
 .ucc-tab-intro-text hr{border:0;border-top:1px solid #D8E0EC;margin:10px 0}
@@ -2194,6 +2246,27 @@ const card=clearSegment.closest("[data-embedded-chart]");
 if(card)renderChartTable(card,null);
 return;
 }
+// #4: a card's own title. Insights names a query for whoever built it; a
+// criterion tab is read by an auditor, and "Chart 1" tells them nothing.
+const retitle=event.target.closest("[data-retitle-chart]");
+if(retitle){
+event.preventDefault();event.stopPropagation();
+const card=retitle.closest("[data-embedded-chart]");
+const heading=card&&card.querySelector(".ucc-embedded-chart-head h3");
+const next=window.prompt(
+"Title for this card. Leave blank to use the chart's own title from Insights.",
+heading?heading.textContent:"");
+if(next===null)return;
+const tab=activeSection(dashboard);
+if(!(window.frappe&&frappe.call))return;
+frappe.call({method:"ucc_intelligence.api.set_tab_chart_title",
+args:{criterion:dashboard.dataset.demoDashboard,tab:tab,
+chart:retitle.dataset.retitleChart,title:next},
+callback(response){applyTabConfig(dashboard,config,tab,(response&&response.message)||{});},
+error(error){openModal("Could not rename the card",tabChartNotice(apiErrorMessage(error)));}});
+return;
+}
+
 const drillRecords=event.target.closest("[data-drill-records]");
 if(drillRecords){
 event.preventDefault();event.stopPropagation();

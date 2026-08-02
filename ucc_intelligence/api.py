@@ -281,6 +281,16 @@ def get_tab_chart_data(chart, criterion=None, tab=None):
 
 
 @frappe.whitelist()
+def set_tab_chart_title(criterion, tab, chart, title=None):
+	"""Give one card its own display title.
+
+	An Insights record is named for whoever built the query; a criterion tab is
+	read by an auditor. Blank clears it and the record's own title returns.
+	"""
+	return _tab_charts.set_display_title(criterion, tab, chart, title)
+
+
+@frappe.whitelist()
 def set_tab_chart_palette(criterion, tab, chart, palette=None):
 	"""Override one chart's series colours on one tab.
 

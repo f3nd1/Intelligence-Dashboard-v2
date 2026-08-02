@@ -73,18 +73,40 @@ WHAT THE 2026-08-03 CONFIG PROBE SETTLED (probe_insights_chart_config.py)
   control in Insights, save, re-run the probe on that chart, and see which key
   moved. Nothing here is blocked on anything larger.
 
-xAxis / yAxis ARE IGNORED -- DO NOT WIRE THEM
+xAxis / yAxis: THE 2026-08-03 CLAIM WAS TOO STRONG, AND IS CORRECTED HERE
+This docstring previously said the camelCase pair was ignored "on purpose,
+permanently". That was written from nine charts that all happened to have the
+snake_case pair populated, and stated with more confidence than the evidence
+carried.
+
+Then Felix set X and Y axes on a chart and Sophia still reported none. That is
+new evidence: either the tab resolves to a different record, or the current
+builder writes the axes somewhere this module was told never to look.
+
+So the camelCase pair is now a FALLBACK, used only when all three hold:
+  1. the snake_case key is absent or empty, AND
+  2. the camelCase value resolves to a non-empty column name, AND
+  3. that name matches a column the query actually returned.
+
+Condition 3 is what makes this safe rather than a guess: the empty placeholder
+shape still yields nothing, and a name that is not a real column is still
+withheld. The worst case is unchanged behaviour, never a wrong chart.
+
+`docs/migration/scripts/probe_tab_chart_resolution.py` settles which of the
+three explanations is actually true. This fallback is a safety net, not the
+diagnosis -- if the tab is pointing at the wrong record, it changes nothing and
+the probe is what says so.
+
+ORIGINAL FINDING, still true of the charts it was taken from:
 Three charts (o2kvutcfld, tt51l7mma3, ni4pnlah9o) carry BOTH `x_axis` and
 `xAxis`. The snake_case pair holds the real column names; the camelCase pair
 holds the empty placeholder shape the builder initialises:
 
     {"aggregation": "", "column_name": "", ...}
 
-So they are not an alternative spelling to fall back to -- they are unfilled
-scaffolding, and treating them as a fallback would resolve a chart to a column
-named "". `_column_of()` returns "" for that shape anyway, and a test asserts
-it, so even a future mistake here cannot produce a column. Reading them is
-still pointless: ignored, on purpose, permanently.
+On THOSE charts they are unfilled scaffolding, and a naive fallback would have
+resolved a chart to a column named "". `_column_of()` returns "" for that
+shape, and a test asserts it, so the fallback above cannot be fooled by one.
 
 WHAT THE BUILDER EXPOSES, AND WHAT IS READ HERE
 Read off the v3 builder UI. The left column is what a person sees; the right
@@ -401,6 +423,14 @@ def presentation_for(query, columns=None, palette=None):
 
 	label_column = _column_of(config.get("x_axis"))
 	value_columns = _columns_of(config.get("y_axis"))
+	# Fallback to the camelCase pair ONLY when snake_case gave nothing. Safe
+	# because every column below is still checked against what the query really
+	# returned -- the empty placeholder shape yields "" and is rejected there.
+	# See the docstring: the earlier "ignored permanently" was overstated.
+	if not label_column:
+		label_column = _column_of(config.get("xAxis"))
+	if not value_columns:
+		value_columns = _columns_of(config.get("yAxis"))
 
 	# The check that stops a confident wrong answer. If the author's column is
 	# not in what the query returned, we do not know what they meant.
