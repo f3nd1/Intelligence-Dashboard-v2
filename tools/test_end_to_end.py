@@ -386,7 +386,10 @@ report("window.UCCOperations" in page_source,
 	"...and the shell's switcher opens it on first entry rather than at boot")
 
 # No external provider anywhere in this layer -- it must work with AI off.
-report("openai" not in operations_source.lower() and "requests." not in operations_source,
+# Executable source only. The docstring now NAMES OpenAI while describing the
+# three-pillar design Document Knowledge belongs to -- documentation, not a call.
+operations_code = strip_comments_and_strings(operations_source, True)
+report("openai" not in operations_code.lower() and "requests." not in operations_code,
 	"the operations layer calls no external provider")
 
 # No hand-rolled SVG, ever again. The deleted renderers are asserted gone

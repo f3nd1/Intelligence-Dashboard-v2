@@ -487,6 +487,104 @@ State.may_write_sources = True
 rule_body = inspect.getsource(service.set_rule_config) if "inspect" in dir() else ""
 
 
+# --- ONE settings surface, all five sections -------------------------------
+reset()
+only_for_calls = []
+sys.modules["frappe"].only_for = lambda role: only_for_calls.append(role)
+
+
+class FakeSingle:
+	def __init__(self):
+		self.data = {"enable_ai": 1, "ai_provider": "OpenAI", "ai_model": "gpt-4",
+			"max_output_tokens": 800, "default_temperature": 0.2,
+			"ai_request_timeout_seconds": 30, "chart_palette": "",
+			"enable_document_knowledge": 0, "enable_persistent_conversations": 1,
+			"enable_monitoring": 0}
+		self.saved = False
+
+	def get(self, key):
+		return self.data.get(key)
+
+	def set(self, key, value):
+		self.data[key] = value
+
+	def save(self):
+		self.saved = True
+
+
+single = FakeSingle()
+
+
+# get_meta reads the REAL DocType JSON, so a settings field that does not exist
+# fails here rather than rendering as an empty box on Felix's screen -- the
+# same lesson as `rule_title`, applied before it can bite twice.
+class FakeMeta:
+	def __init__(self, doctype):
+		path = (ROOT / "ucc_intelligence/ucc_intelligence/sophia/doctype"
+			/ doctype.lower().replace(" ", "_") / (doctype.lower().replace(" ", "_") + ".json"))
+		self.fields = {f["fieldname"]: f for f in _json.loads(path.read_text())["fields"]}
+
+	def get_field(self, fieldname):
+		row = self.fields.get(fieldname)
+		return types.SimpleNamespace(fieldtype=row["fieldtype"],
+			options=row.get("options")) if row else None
+
+
+sys.modules["frappe"].get_single = lambda doctype: single
+sys.modules["frappe"].get_meta = FakeMeta
+sys.modules["frappe"].utils.cint = lambda v: int(float(v or 0))
+sys.modules["frappe"].utils.flt = lambda v: float(v or 0)
+
+settings = service.platform_settings()
+report(settings["ok"] and len(settings["sections"]) == 4,
+	"the settings surface serves every section in ONE call (%d)" % len(settings["sections"]))
+keys = [section["key"] for section in settings["sections"]]
+report(keys == ["ai", "presentation", "knowledge", "monitoring"],
+	"...in a stable order: %s" % keys)
+report("System Manager" in only_for_calls, "reading them is System Manager only")
+fields = [f["fieldname"] for section in settings["sections"] for f in section["fields"]]
+report("chart_palette" in fields and "enable_ai" in fields,
+	"the palette (ADR-015) and the AI toggle are both on the one surface")
+
+# The allowlist is the point: a settings endpoint that writes whatever it is
+# handed can set fields nobody put on the page.
+#
+# `ai_settings_section` is the load-bearing case. It is a REAL field on the
+# DocType, so meta.get_field() finds it and the meta lookup waves it through --
+# only SETTINGS_FIELDS stops it. Deleting the allowlist used to survive this
+# whole block, because every made-up name was already caught by the meta.
+del only_for_calls[:]
+result = service.save_platform_settings({"enable_ai": "0", "chart_palette": "#111111",
+	"max_output_tokens": "1200", "default_temperature": "0.7",
+	"some_other_field": "sneaky", "owner": "attacker@example.com",
+	"ai_settings_section": "clobbered"})
+report("System Manager" in only_for_calls, "writing them is System Manager only, checked again")
+report("ai_settings_section" not in single.data,
+	"a real DocType field that is not on the settings page is still refused")
+report(result["ok"] and single.saved, "saving works")
+report(single.data["enable_ai"] == 0 and single.data["chart_palette"] == "#111111",
+	"...and writes the allowlisted fields")
+report(single.data["max_output_tokens"] == 1200 and single.data["default_temperature"] == 0.7,
+	"...with their real types, not strings")
+report("some_other_field" not in single.data and single.data.get("owner") is None,
+	"a field that is NOT on the allowlist is ignored, never written")
+report(set(result["written"]) <= set(service.SETTINGS_FIELDS),
+	"and the report of what was written names only allowlisted fields")
+report(raises(ValidationError_, service.save_platform_settings, "not json at all"),
+	"junk instead of settings is refused rather than half-applied")
+
+# Found by SCREENSHOT, not by assertion: `.ucc-ops-form label` sets a column
+# direction and outranks a bare `.ucc-set-check`, so every checkbox stacked
+# above its own label. Same family as the hairline-column bug -- every check
+# passed while the surface was wrong.
+PAGE = (ROOT / "ucc_intelligence/ucc_intelligence/sophia/page/sophia_analytics"
+	/ "sophia_analytics.js").read_text()
+report(".ucc-ops-form label.ucc-set-check" in PAGE,
+	"the checkbox rule outranks .ucc-ops-form label, so it is not stacked")
+report('.replace(/\\bAi\\b/g,"AI")' in PAGE,
+	'the settings labels read "AI", not "Ai"')
+
+
 # --- the gate must be EXPLICIT, not inherited from the DocType -------------
 # Removing the permission check from set_finding_status() passed every
 # behavioural check above, because FakeDoc.save() refuses anyway -- exactly as

@@ -1351,7 +1351,12 @@ panel.innerHTML=
 +'<article class="ucc-ops-stat"><strong>'+esc(String(data.chunks||0))+"</strong><span>sections</span></article>"
 +"</div>"
 +(data.can_manage
-?'<div class="ucc-ops-section"><h3>Register a document</h3>'
+?'<p class="ucc-ops-help"><strong>This is the institution&#39;s knowledge base.</strong> '
++"A document registered here becomes part of what the whole platform can draw on - "
++"Ask UCC, the criterion dashboards, monitoring, and any report or alert built on "
++"them - not a private index for one screen. Policies, procedures, course documents "
++"and compliance requirements belong here.</p>"
++'<div class="ucc-ops-section"><h3>Register a document</h3>'
 +'<div class="ucc-ops-form">'
 +'<label>Title<input type="text" data-source-title placeholder="e.g. Student Support Services Procedure"></label>'
 +'<label>Type<select data-source-type><option>Policy</option><option>Procedure</option>'
@@ -1380,8 +1385,8 @@ return"<tr><td><strong>"+esc(row.title||row.name)+"</strong>"
 +(data.can_manage?'<td><button type="button" class="ucc-tab-action" data-reindex-source="'
 +esc(row.name)+'">Re-index</button></td>':"")+"</tr>";
 }).join("")+"</tbody></table></div>"
-:opsNotice("No documents are registered yet. The search engine is built and waiting; "
-+"it will answer as soon as real documents are added above."))
+:opsNotice("No documents are registered yet. The retrieval engine is built and waiting - "
++"permission-aware search with citations, ready the moment real documents arrive. Nothing is indexed until you add one above."))
 +"</div>";
 }
 
@@ -1537,18 +1542,58 @@ if(event.target.closest("[data-ops-status]")||event.target.closest("[data-ops-se
 // editing tabs and closing findings -- so the whole model is legible in one
 // place without inventing a second one.
 // ===========================================================================
+// ONE surface, all five sections. The gear used to make you CHOOSE between a
+// Sophia page and the Frappe form, which meant three of the five sections were
+// always somewhere you were not -- a dead end whichever you picked.
 window.UCCSettings={open:function(){
 openModal("Sophia settings",tabChartNotice("Loading…"));
 if(!(window.frappe&&frappe.call))return;
+const collected={};
+let waiting=3;
+function done(){if(--waiting===0)renderSettings(collected);}
+frappe.call({method:"ucc_intelligence.api.get_platform_settings",
+callback(r){collected.platform=(r&&r.message)||{};done();},
+error(e){collected.platform={ok:false,message:apiErrorMessage(e)};done();}});
 frappe.call({method:"ucc_intelligence.api.get_access_overview",
-callback(response){
-const access=(response&&response.message)||{};
+callback(r){collected.access=(r&&r.message)||{};done();},
+error(e){collected.access={ok:false,message:apiErrorMessage(e)};done();}});
 frappe.call({method:"ucc_intelligence.api.get_monitoring_overview",
-callback(second){renderSettings(access,(second&&second.message)||{});},
-error(){renderSettings(access,{});}});
-},
-error(error){openModal("Sophia settings",tabChartNotice(apiErrorMessage(error)));}});
+callback(r){collected.monitoring=(r&&r.message)||{};done();},
+error(){collected.monitoring={};done();}});
 }};
+
+function settingsField(field){
+const id="set-"+field.fieldname;
+// humaniseColumn is shared with the chart columns, so the acronym is fixed
+// here rather than teaching it a settings-only special case.
+const label=humaniseColumn(field.fieldname.replace(/^enable_/,"enable ")).replace(/\bAi\b/g,"AI");
+if(field.fieldtype==="Check"){
+return'<label class="ucc-set-check"><input type="checkbox" id="'+esc(id)+'" '
++'data-setting="'+esc(field.fieldname)+'" data-kind="Check"'
++(field.value?" checked":"")+"> "+esc(label)+"</label>";
+}
+const type=(field.fieldtype==="Int"||field.fieldtype==="Float")?"number":"text";
+// ai_provider is a Select on the DocType. A free-text box beside it would let
+// someone type a provider the app cannot call, and only find out at ask time.
+// ai_model is also a Select but ships with NO options, so it falls through to
+// a text box rather than an empty dropdown nobody can pick a model from.
+const options=String(field.options||"").split("\n").filter(function(v){return v!=="";});
+if(field.fieldtype==="Select"&&options.length){
+return'<label class="ucc-set-field"><span>'+esc(label)+"</span>"
++'<select data-setting="'+esc(field.fieldname)+'" data-kind="Select">'
++options.map(function(option){
+return'<option'+(String(field.value||"")===option?" selected":"")+">"+esc(option)+"</option>";
+}).join("")+"</select></label>";
+}
+if(field.fieldtype==="Small Text"){
+return'<label class="ucc-set-field"><span>'+esc(label)+"</span>"
++'<textarea rows="4" data-setting="'+esc(field.fieldname)+'" data-kind="Small Text">'
++esc(field.value==null?"":field.value)+"</textarea></label>";
+}
+return'<label class="ucc-set-field"><span>'+esc(label)+"</span>"
++'<input type="'+type+'" data-setting="'+esc(field.fieldname)+'" '
++'data-kind="'+esc(field.fieldtype)+'" value="'+esc(field.value==null?"":field.value)+'"></label>';
+}
 
 function settingsRow(label,allowed,note){
 return'<tr><td>'+esc(label)+"</td>"
@@ -1557,15 +1602,33 @@ return'<tr><td>'+esc(label)+"</td>"
 +"<td><small>"+esc(note||"")+"</small></td></tr>";
 }
 
-function renderSettings(access,monitoring){
+function renderSettings(data){
+const access=data.access||{};
+const platform=data.platform||{};
 const criteria=access.criteria||[];
-const rules=monitoring.rules||[];
+const rules=(data.monitoring||{}).rules||[];
+const sections=platform.sections||[];
 openModal("Sophia settings",
-'<p class="ucc-chart-picker-note">Institution-wide configuration. The AI provider, '
-+"chart colours and document-knowledge policy are on the "
-+'<a href="/app/ucc-intelligence-settings">UCC Intelligence Settings form</a>; '
-+"what is shown here needs more room than a form field.</p>"
-+'<h4 class="ucc-settings-heading">Access and visibility</h4>'
+'<p class="ucc-chart-picker-note">Everything that is set once for the whole '
++"institution, in one place. Anything that belongs to a single tab — its charts, "
++"its introduction, which questions it shows — stays on that tab.</p>"
++'<nav class="ucc-settings-nav">'
++["ai","presentation","knowledge","monitoring","access"].map(function(key){
+const labels={ai:"AI and providers",presentation:"Presentation",
+knowledge:"Document knowledge",monitoring:"Monitoring rules",access:"Access and visibility"};
+return'<a href="#ucc-set-'+key+'">'+labels[key]+"</a>";
+}).join("")+"</nav>"
++(platform.ok===false
+?tabChartNotice(platform.message||"These settings are not available to your account.")
+:sections.map(function(section){
+return'<h4 class="ucc-settings-heading" id="ucc-set-'+esc(section.key)+'">'
++esc(section.label)+"</h4>"
++'<div class="ucc-ops-form">'+(section.fields||[]).map(settingsField).join("")+"</div>";
+}).join("")
++'<div class="ucc-settings-save"><button type="button" class="ucc-ops-primary" '
++'data-save-settings>Save these settings</button>'
++'<span class="ucc-ops-hint" data-settings-saved></span></div>')
++'<h4 class="ucc-settings-heading" id="ucc-set-access">Access and visibility</h4>'
 +(access.ok===false?tabChartNotice(access.message||"Access settings are unavailable.")
 :'<p class="ucc-ops-help">'+esc(access.note||"")+"</p>"
 +'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
@@ -1603,11 +1666,37 @@ return'<option'+(rule.severity===level?" selected":"")+">"+level+"</option>";
 }).join("")+"</select></td></tr>";
 }).join("")+"</tbody></table></div>"
 :tabChartNotice("No monitoring rules are registered."))
-+'<p class="ucc-ops-hint" data-settings-status></p>');
++'<p class="ucc-ops-hint" data-settings-status></p>'
+// The Frappe form stays reachable as an ESCAPE HATCH, not a destination --
+// every section above is editable here, so nothing is lost by never clicking
+// it, and nothing is hidden if you do.
++'<p class="ucc-ops-hint">Advanced: the same settings are also on the '
++'<a href="/app/ucc-intelligence-settings">Frappe form</a>.</p>');
 }
 
 // One delegated handler for both controls. The server re-checks the
 // permission; this only decides what is drawn.
+document.addEventListener("click",function(event){
+const save=event.target.closest("[data-save-settings]");
+if(!save||!(window.frappe&&frappe.call))return;
+const values={};
+document.querySelectorAll("[data-setting]").forEach(function(field){
+values[field.dataset.setting]=field.type==="checkbox"
+?(field.checked?"1":"0"):field.value;
+});
+const saved=document.querySelector("[data-settings-saved]");
+if(saved)saved.textContent="Saving…";
+frappe.call({method:"ucc_intelligence.api.save_platform_settings",
+args:{values:JSON.stringify(values)},
+callback(response){
+const result=(response&&response.message)||{};
+if(saved)saved.textContent=result.ok
+?("Saved "+((result.written||[]).length)+" setting(s).")
+:"Could not save.";
+},
+error(error){if(saved)saved.textContent=apiErrorMessage(error);}});
+});
+
 document.addEventListener("change",function(event){
 const toggle=event.target.closest("[data-rule-enabled]");
 const severity=event.target.closest("[data-rule-severity]");
@@ -1972,6 +2061,19 @@ style.textContent=`
 .ucc-ops-help strong{color:#172554}
 .ucc-settings-heading{margin:18px 0 8px;font-size:14px;color:#172554}
 .ucc-settings-heading:first-of-type{margin-top:8px}
+.ucc-settings-nav{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.ucc-settings-nav a{font-size:11px;font-weight:600;color:#334155;background:#F1F5F9;
+ border:1px solid #E2E8F0;border-radius:999px;padding:4px 10px;text-decoration:none}
+.ucc-settings-nav a:hover{background:#E2E8F0}
+.ucc-set-field{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#64748B}
+.ucc-set-field input,.ucc-set-field textarea,.ucc-set-field select{border:1px solid #D8E0EC;border-radius:6px;
+ padding:6px 8px;font:inherit;font-size:12px;color:#334155;box-sizing:border-box}
+/* .ucc-ops-form label sets column direction and outranks a bare .ucc-set-check,
+   which stacked every checkbox above its own label. */
+.ucc-ops-form label.ucc-set-check,.ucc-set-check{display:flex;flex-direction:row;
+ align-items:center;gap:7px;font-size:12px;color:#334155;align-self:end;padding-bottom:6px}
+.ucc-set-check input{margin:0;flex:0 0 auto}
+.ucc-settings-save{display:flex;align-items:center;gap:10px;margin:14px 0 4px}
 /* Same colour language as the severity pills and the findings table. */
 .ucc-ops-state{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;
  border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
