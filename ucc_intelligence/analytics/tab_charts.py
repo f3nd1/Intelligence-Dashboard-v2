@@ -473,9 +473,14 @@ def _dashboard_readable(dashboard):
 def set_dashboard(criterion, tab, dashboard):
 	"""Embed one Insights dashboard on this tab, or clear it with "".
 
-	PHASE 1 PILOT, and deliberately additive: a tab with this set shows the
-	embedded dashboard, a tab without it is unchanged. Nothing about the
-	painted charts is removed, so the whole thing reverts by clearing a field.
+	EMBEDDING DELETES THE TAB'S PAINTED CHARTS (decided 2026-08-04).
+
+	They used to be kept and hidden, so that clearing the field put the tab
+	back. Felix retired that fallback: every tab is a dashboard, and charts
+	nobody can see, sitting in a record nobody reads, are configuration
+	pretending to be a safety net. The audit line records how many were
+	removed and which they were, so the deletion is traceable even though it
+	is not reversible from the UI.
 
 	The dashboard must be one this user can read. That is not the security
 	boundary -- the iframe's own session is -- but refusing here means a typo
@@ -490,14 +495,22 @@ def set_dashboard(criterion, tab, dashboard):
 			"No Insights dashboard %s is readable by your account." % dashboard))
 	config = _stored(criterion, tab)
 	before = config["embedded_dashboard"]
-	if before == dashboard:
+	dropped = [item["chart"] for item in config["charts"]] if dashboard else []
+	if before == dashboard and not dropped:
 		return get_tab(criterion, tab)
 	config["embedded_dashboard"] = dashboard
+	if dashboard:
+		config["charts"] = []
 	_store(criterion, tab, config)
 	tab_audit.record(criterion, tab,
 		"dashboard_embedded" if dashboard else "dashboard_unembedded",
 		tab_audit.dashboard_embedded(_dashboard_title(dashboard), dashboard),
 		before=before, after=dashboard)
+	if dropped:
+		tab_audit.record(criterion, tab, "charts_deleted",
+			frappe._("Deleted %d painted chart(s) replaced by the embedded dashboard: %s")
+			% (len(dropped), ", ".join(dropped)),
+			before=", ".join(dropped), after="")
 	return get_tab(criterion, tab)
 
 

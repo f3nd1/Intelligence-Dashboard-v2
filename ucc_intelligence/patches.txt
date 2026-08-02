@@ -6,3 +6,8 @@
 # Runs post-model-sync because it writes into a DocType this same migrate
 # creates.
 ucc_intelligence.patches.v1_0.migrate_tab_config_to_shared
+
+# Every tab is one embedded Insights dashboard now. Charts that were kept
+# hidden underneath an embed are deleted -- the fallback that justified
+# keeping them is gone, so keeping them would just be unreachable data.
+ucc_intelligence.patches.v1_0.delete_charts_under_embedded_dashboards
