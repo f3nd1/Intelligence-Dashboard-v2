@@ -63,6 +63,9 @@ class State:
 	dashboards = {}          # Insights Dashboard v3 name -> title
 	readable_dashboards = set()   # of those, what THIS user may read
 	dashboard_workbook = {}       # dashboard name -> its Insights Workbook
+	dashboard_charts = {}         # dashboard name -> its linked_charts rows
+	drilldowns = {}               # query name -> what drilldown.resolve returns
+	unreadable_charts = set()     # Insights Chart v3 records this user may NOT read
 
 
 class FakeDoc:
@@ -128,8 +131,16 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 	if doctype == "Insights Chart v3":
 		rows = []
 		for row in State.insights_charts:
+			# A chart record this user cannot read is simply not returned --
+			# that is what real get_list does, and it is the hop that keeps a
+			# dashboard from listing a chart someone may not open.
+			if row["name"] in State.unreadable_charts:
+				continue
 			for key, value in (filters or {}).items():
-				if row.get(key) != value:
+				if isinstance(value, list) and len(value) == 2 and value[0] == "in":
+					if row.get(key) not in value[1]:
+						break
+				elif row.get(key) != value:
 					break
 			else:
 				rows.append(dict(row))
@@ -166,7 +177,28 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 		for n in names[: (limit_page_length or 20)]]
 
 
+class FakeDashboard:
+	"""Enough of an Insights Dashboard v3 to exercise the four permission hops:
+	it refuses check_permission when unreadable, and carries linked_charts."""
+
+	def __init__(self, name):
+		self.name = name
+
+	def check_permission(self, ptype="read"):
+		if self.name not in State.readable_dashboards:
+			raise PermissionError_("no permission")
+
+	def get(self, field):
+		if field != "linked_charts":
+			return None
+		return [{"chart": c} for c in State.dashboard_charts.get(self.name, [])]
+
+
 def fake_get_doc(doctype, name):
+	if doctype == "Insights Dashboard v3":
+		if name not in State.dashboards:
+			raise DoesNotExistError_(name)
+		return FakeDashboard(name)
 	if doctype == "UCC Analytics Tab":
 		if name not in State.tabs:
 			raise DoesNotExistError_(name)
@@ -254,6 +286,14 @@ def install_fake_frappe():
 	document.Document = Document
 	sys.modules["frappe.model"] = model
 	sys.modules["frappe.model.document"] = document
+
+	# drilldown.py has its own 30-check suite; stubbed here so THIS test
+	# exercises the chain that reaches it, not the resolution inside it.
+	drill = types.ModuleType("ucc_intelligence.analytics.drilldown")
+	drill.resolve = lambda chart: State.drilldowns.get(chart,
+		{"status": "unsupported", "doctype": "", "columns": [],
+			"message": "Not drillable."})
+	sys.modules["ucc_intelligence.analytics.drilldown"] = drill
 	return frappe
 
 
@@ -314,6 +354,9 @@ def reset():
 	State.dashboards = {}
 	State.readable_dashboards = set()
 	State.dashboard_workbook = {}
+	State.dashboard_charts = {}
+	State.drilldowns = {}
+	State.unreadable_charts = set()
 
 
 def source_of(function_name):
@@ -1449,6 +1492,70 @@ report(len(tab_charts.search_dashboards("", limit=1)["dashboards"]) == 1,
 report(all(row["title"] != row["dashboard"] for row in
 		tab_charts.search_dashboards("")["dashboards"]),
 	"no dashboard is offered labelled with its own id")
+
+
+# --- THE RECORDS STRIP: the drill-down chain, and its permission hops -------
+#
+# Four hops: the dashboard (check_permission), its linked_charts (child rows of
+# a document just proven readable), each chart (get_list), the records
+# (drilldown.py, untouched). The strip can only offer what a person could
+# already open in Insights.
+reset()
+State.doctypes.add("Insights Dashboard v3")
+State.doctypes.add("Insights Chart v3")
+State.dashboards = {"d-1": "Applicants"}
+State.readable_dashboards = {"d-1"}
+State.dashboard_charts = {"d-1": ["chart-open", "chart-sql", "chart-hidden"]}
+State.insights_charts = [
+	{"name": "chart-open", "title": "Applicants by status", "chart_type": "Bar",
+		"query": "q-open", "data_query": None, "config": "{}"},
+	{"name": "chart-sql", "title": "Written as SQL", "chart_type": "Bar",
+		"query": "q-agents", "data_query": None, "config": "{}"},
+	# On the dashboard, but this user cannot read it -- get_list drops it.
+	{"name": "chart-hidden", "title": "Payroll", "chart_type": "Bar",
+		"query": "q-secret", "data_query": None, "config": "{}"},
+]
+State.unreadable_charts = {"chart-hidden"}
+State.drilldowns = {
+	"q-open": {"status": "available", "doctype": "Student Applicant",
+		"columns": ["status"], "message": ""},
+	"q-agents": {"status": "unsupported", "doctype": "", "columns": [],
+		"message": "This chart is written as SQL rather than built from a table."},
+}
+
+strip = tab_charts.dashboard_drilldowns("d-1")
+titles = [row["title"] for row in strip["charts"]]
+report(strip["ok"] and len(strip["charts"]) == 2,
+	"the strip lists the dashboard's charts this user can read (%s)" % titles)
+report("Payroll" not in titles,
+	"a chart ON the dashboard that this user cannot read is not listed at all")
+report(len(strip["charts"]) == 2 and strip["charts"][0]["status"] == "available",
+	"drillable charts are listed first, so the buttons are not hunted for")
+report(len(strip["charts"]) == 2 and strip["charts"][1]["status"] != "available"
+	and "written as SQL" in strip["charts"][1]["message"],
+	"...and one that cannot be drilled carries its REASON, rather than vanishing")
+report(bool(strip["charts"]) and strip["charts"][0]["doctype"] == "Student Applicant"
+	and strip["charts"][0]["chart"] == "q-open",
+	"each button carries the query drilldown.py needs and the DocType it opens")
+
+State.readable_dashboards = set()
+denied = tab_charts.dashboard_drilldowns("d-1")
+report(denied["ok"] is False and "not available" in denied["message"],
+	"a dashboard this user cannot read yields no chart list, with a reason")
+State.readable_dashboards = {"d-1"}
+
+State.dashboard_charts = {"d-1": []}
+empty = tab_charts.dashboard_drilldowns("d-1")
+report(empty["ok"] and empty["charts"] == [] and empty["source"] == "linked_charts",
+	"an empty linked_charts says which field was empty, not just 'no charts'")
+
+# The MESSAGE, not just the refusal. Without the guard a blank id still fails
+# -- by reaching get_doc("") and being reported as "no longer in Insights",
+# which is a different and wrong explanation.
+blank = tab_charts.dashboard_drilldowns("")
+report(blank["ok"] is False and "No dashboard given" in blank["message"],
+	"a blank dashboard id is refused BEFORE any lookup, and says so: %r"
+	% blank["message"])
 
 
 # --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------

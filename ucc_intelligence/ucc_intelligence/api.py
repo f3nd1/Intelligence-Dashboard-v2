@@ -294,6 +294,18 @@ def search_insights_dashboards(term=None, limit=20, workbook=None):
 
 
 @frappe.whitelist()
+def get_dashboard_drilldowns(dashboard):
+	"""The Records strip: which of an embedded dashboard's charts open records.
+
+	Four permission hops, each scoped -- the dashboard is read with
+	check_permission, its charts through frappe.get_list, and the records
+	themselves through drilldown.py, which uses get_list and never Insights'
+	permission-blind execute(). See tab_charts.dashboard_drilldowns().
+	"""
+	return _tab_charts.dashboard_drilldowns(dashboard)
+
+
+@frappe.whitelist()
 def set_tab_question(criterion, tab, question, visible):
 	"""Show or hide one management question on this tab. Stores WHICH question,
 	never an answer -- every answer is still computed live and
