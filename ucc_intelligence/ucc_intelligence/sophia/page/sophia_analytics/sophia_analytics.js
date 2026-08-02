@@ -433,9 +433,27 @@ loadVisibleEmbeds(dashboard);
 // that selector was claiming.
 //   div.border-r.bg-gray-50   App.vue's wrapper around <AppSidebar/>
 //   #app header               Dashboard.vue's breadcrumb + refresh bar
+//
+// The last rules are not about chrome. Insights' dashboard scrolls in an inner
+// `overflow-y-auto` container, and browsers draw OVERLAY scrollbars there --
+// invisible until you already know to scroll, which is how a dashboard came to
+// look simply cut off rather than scrollable.
+//
+// `scrollbar-gutter:stable` is what actually does the work: measured in
+// Chromium, ::-webkit-scrollbar rules alone reserved NO width (gutter 0px) and
+// left the bar an invisible overlay, while the gutter turned it into a real
+// one (12px). The ::-webkit rules stay because they colour that bar once it
+// exists, and are ignored where it does not. Neither is guaranteed on every
+// browser, which is why the caption line under the frame -- not the scrollbar
+// -- is what promises to say there is more below.
 const INSIGHTS_CHROME_CSS=
 "div.border-r.bg-gray-50{display:none!important}"
-+"#app header{display:none!important}";
++"#app header{display:none!important}"
++"#app .overflow-y-auto{scrollbar-gutter:stable}"
++"#app ::-webkit-scrollbar{width:12px;height:12px}"
++"#app ::-webkit-scrollbar-track{background:#F1F5F9}"
++"#app ::-webkit-scrollbar-thumb{background:#94A3B8;border-radius:6px;"
++"border:3px solid #F1F5F9}";
 function insightsDocument(frame){
 try{const doc=frame.contentDocument;return(doc&&doc.head)?doc:null;}
 catch(error){return null;}
@@ -476,16 +494,74 @@ return"no sidebar or header matched. #app children: "
 +(Array.prototype.map.call(root.children,named).join(" | ")||"(none)");
 }
 
-// The frame fills the space between its own top edge and the bottom of the
-// window, rather than a fixed 620px that cut this dashboard's charts in half.
-// Nothing is measured INSIDE the frame -- this is the parent page's geometry
-// only, so it works whether or not same-origin scripting into the frame does.
-// A dashboard taller than the space scrolls inside its own frame.
-const EMBED_MIN_HEIGHT=520,EMBED_BOTTOM_GAP=88,CHROME_CHECK_DELAY=2500;
+// HEIGHT, THIRD ATTEMPT.
+//
+// 620px fixed cut charts in half. Filling the window was better but landed in
+// the worst place of all: two full rows and a third sliced through the middle,
+// with nothing saying more existed. A frame that is nearly tall enough reads as
+// a broken dashboard, not as a scrollable one.
+//
+// So the frame is sized to the dashboard's OWN content when that can be
+// measured -- no cut-off, and no empty space under a short dashboard either.
+// A very tall dashboard is capped at EMBED_MAX_SCREENS of the window, because
+// a 4,000px frame pushes the Records strip somewhere nobody will find it; past
+// the cap it scrolls inside the frame, with a real scrollbar and a line of
+// text saying so.
+//
+// The window-filling calculation stays as the fallback: it needs nothing from
+// inside the frame, so a dashboard still gets a sensible height even if
+// same-origin measuring fails entirely.
+const EMBED_MIN_HEIGHT=520,EMBED_BOTTOM_GAP=88,CHROME_CHECK_DELAY=2500,
+EMBED_MAX_SCREENS=1.6,EMBED_CONTENT_PAD=36;
+
+// Insights' scroll container, and the grid inside it. The GRID is what gets
+// measured, not the container: the container is as tall as the frame, so
+// measuring it would let the frame keep whatever height it already had and
+// never shrink back for a short dashboard.
+function insightsContentHeight(frame){
+const doc=insightsDocument(frame);
+const scroller=doc&&doc.querySelector("#app .overflow-y-auto");
+const grid=scroller&&scroller.firstElementChild;
+if(!grid)return 0;
+return Math.ceil(grid.getBoundingClientRect().height)+EMBED_CONTENT_PAD;
+}
+
 function sizeEmbedFrame(frame){
 const top=frame.getBoundingClientRect().top;
-const room=(window.innerHeight||0)-top-EMBED_BOTTOM_GAP;
-frame.style.height=Math.max(EMBED_MIN_HEIGHT,Math.round(room))+"px";
+const window_height=window.innerHeight||0;
+const room=Math.round(window_height-top-EMBED_BOTTOM_GAP);
+const content=insightsContentHeight(frame);
+const cap=Math.round(window_height*EMBED_MAX_SCREENS)||room;
+const height=Math.max(EMBED_MIN_HEIGHT,content?Math.min(content,cap):room);
+frame.style.height=height+"px";
+// Clipped only when the dashboard is genuinely taller than the frame it got.
+// Unmeasurable content counts as clipped: the notice is a hint either way,
+// and a silent cut-off is the thing being fixed.
+markEmbedClipped(frame,content?content>height:true);
+}
+
+// The notice sits in the caption under the frame, beside the load time, and
+// only appears when there is really something below the fold.
+function markEmbedClipped(frame,clipped){
+const note=frame.parentNode&&frame.parentNode.querySelector("[data-embed-scroll]");
+if(!note)return;
+note.textContent=clipped
+?"This dashboard is taller than the panel — scroll inside it to see the rest."
+:"";
+}
+
+// Charts arrive after the page loads, so the height is re-taken whenever the
+// grid's own size changes. The observer belongs to the FRAME's window, which
+// is the only one that can see its elements. No feedback loop: the grid's
+// height comes from its rows, not from the frame it sits in.
+function watchEmbedContent(frame){
+const doc=insightsDocument(frame);
+const view=doc&&doc.defaultView;
+const scroller=doc&&doc.querySelector("#app .overflow-y-auto");
+const grid=scroller&&scroller.firstElementChild;
+if(!grid||!view||!view.ResizeObserver)return false;
+new view.ResizeObserver(function(){sizeEmbedFrame(frame);}).observe(grid);
+return true;
 }
 let embedResizeBound=false;
 function bindEmbedResize(){
@@ -529,6 +605,11 @@ window.setTimeout(function(){
 const report=insightsChromeReport(frame);
 logEvent(card,report==="hidden"?"INFO":"WARNING","embed_chrome",
 frame.dataset.embedName+" · Insights' own menu: "+report);
+// By now the grid exists, so the height can follow it from here on.
+if(!watchEmbedContent(frame))logEvent(card,"INFO","embed_height",
+frame.dataset.embedName+" · the dashboard's own height could not be measured; "
++"the frame is sized to the window instead");
+sizeEmbedFrame(frame);
 },CHROME_CHECK_DELAY);
 },{once:true});
 frame.src=url;
@@ -720,6 +801,7 @@ return'<div class="ucc-embed-dashboard">'
 +esc(name)+'” — a named set of charts from its workbook. '
 +'<span data-embed-timing>Loading…</span> · '
 +'Drawn by Frappe Insights, with your own permissions. '
++'<span class="ucc-embed-scroll" data-embed-scroll></span> '
 +'<a href="/insights/dashboards/'+encodeURIComponent(id)+'" target="_blank" '
 +'rel="noopener">Open in Insights</a></p>'
 // The Records strip. Filled after the dashboard's charts are resolved --
@@ -2811,6 +2893,9 @@ style.textContent=`
 .ucc-embed-frame{display:block;width:100%;height:520px;border:1px solid #E6EBF3;
  border-radius:12px;background:#fff}
 .ucc-embed-note{margin:6px 0 0;font-size:11px;color:#64748B}
+/* Empty unless the dashboard really is taller than its frame, so it never
+   tells anyone to scroll through nothing. */
+.ucc-embed-scroll{color:#B45309;font-weight:600}
 /* The Records strip: facts, under the dashboard Insights drew. */
 .ucc-records-strip{margin:12px 0 0;padding:12px;border:1px solid #E6EBF3;border-radius:12px;background:#F8FAFC}
 .ucc-records-head{display:flex;align-items:center;justify-content:space-between;

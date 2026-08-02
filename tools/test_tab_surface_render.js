@@ -64,13 +64,15 @@ const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown"
 	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
 	"paintTableOnly", "sortForDisplay", "embeddedDashboardMarkup", "loadVisibleEmbeds",
 	"hideInsightsChrome", "insightsDocument", "insightsChromeReport", "sizeEmbedFrame",
-	"bindEmbedResize"];
+	"bindEmbedResize", "insightsContentHeight", "markEmbedClipped", "watchEmbedContent"];
 // Module-level consts, which lift() cannot reach because it looks for
 // `function <name>(`. Taken from the real source VERBATIM rather than retyped,
 // so a painter or a threshold changed on the page cannot silently disagree
 // with what this harness tests.
 const CONSTS = ["CHART_PAINTERS", "DONUT_LABEL_MIN_SHARE", "SORTED_BY_VALUE",
 	"INSIGHTS_CHROME_CSS", "EMBED_MIN_HEIGHT", "embedResizeBound"]
+	// EMBED_MIN_HEIGHT's declaration carries EMBED_MAX_SCREENS and the rest on
+	// the same statement, so they arrive with it.
 	.map(function (name) {
 		const found = (SRC.match(new RegExp("(?:const|let) " + name + "=[\\s\\S]*?;\\n")) || [])[0];
 		assert.ok(found, "the page declares " + name);
@@ -430,7 +432,15 @@ function el(tag, attrs) {
 			}
 			return null;
 		},
-		querySelector() { return null; },
+		querySelector(sel) {
+			let hit = null;
+			(function walk(n) {
+				if (hit) return;
+				if (sel === "[data-embed-scroll]" && n.dataset.embedScroll !== undefined) { hit = n; return; }
+				n.children.forEach(walk);
+			})(this);
+			return hit;
+		},
 		querySelectorAll(sel) {
 			const out = [];
 			(function walk(n) {
@@ -494,19 +504,30 @@ function fakeFrame(contentDocument) {
 function fakeInsights(opts) {
 	const o = opts || {};
 	const styles = [];
+	const observed = [];
 	const node = (tag, className) => ({ tagName: tag, className,
 		style: { display: o.shown === false ? "none" : "" } });
 	const sidebar = o.sidebar === false ? null : node("DIV", "h-full border-r bg-gray-50");
 	const header = o.header === false ? null : node("HEADER", "flex h-12 items-center border-b");
 	const appRoot = { children: o.appChildren
 		|| [node("DIV", "flex h-screen w-screen overflow-hidden bg-white")] };
-	return { styles, head: { appendChild: (n) => styles.push(n) },
+	// The grid Insights renders inside its scroll container. Its height is its
+	// ROWS' height -- it does not stretch to the frame -- which is why it, and
+	// not the container, is what gets measured.
+	const grid = { tagName: "DIV", className: "h-fit w-full",
+		getBoundingClientRect: () => ({ height: o.contentHeight }) };
+	const scroller = o.content === false ? null
+		: { className: "flex-1 overflow-y-auto p-4", firstElementChild: o.emptyGrid ? null : grid };
+	return { styles, observed, head: { appendChild: (n) => styles.push(n) },
 		createElement: () => ({ setAttribute() {}, textContent: "" }),
-		defaultView: { getComputedStyle: (n) => n.style },
+		defaultView: { getComputedStyle: (n) => n.style,
+			ResizeObserver: o.noObserver ? undefined : function (fn) {
+				this.observe = (target) => observed.push({ target, fn }); } },
 		querySelector(sel) {
 			if (sel === "style[data-ucc-embed-chrome]") return styles[0] || null;
 			if (sel === "div.border-r.bg-gray-50") return sidebar;
 			if (sel === "#app header") return header;
+			if (sel === "#app .overflow-y-auto") return scroller;
 			if (sel === "#app") return o.appRoot === false ? null : appRoot;
 			return null;
 		} };
@@ -586,32 +607,101 @@ assert.strictEqual(chromeLog[0].level, "WARNING",
 assert.ok(chromeLog[0].detail.includes("border-r"),
 	"...carrying what it actually found");
 
-// --- the frame fills the window instead of a fixed 620px -------------------
-// #2 from the live bench: charts cut off at the bottom. Height comes from the
-// PARENT page's geometry, so it does not depend on same-origin scripting.
-const sized = area("4.3.1", false, "/insights/dashboards/dash-5").frame;
-exported.sizeEmbedFrame(sized);           // top 240, window 900
-assert.strictEqual(sized.style.height, "572px",
-	"the frame fills the space from its top edge to the bottom of the window");
+// --- the frame is sized to the dashboard, not to a guess -------------------
+// Three rounds of this: 620px fixed cut charts in half; window-filling landed
+// two rows and a sliced third, which reads as broken rather than scrollable.
+// The dashboard's own height is what decides now, capped so a huge one does
+// not bury the Records strip.
+function sizedFrame(contentHeight, opts) {
+	const built = area("4.3.1", false, "/insights/dashboards/dash-5");
+	const scrollNote = el("span", { embedScroll: "" });
+	scrollNote.textContent = "";
+	built.area.children.push(scrollNote);
+	built.frame.parentNode = built.area;
+	const doc = fakeInsights(Object.assign({ contentHeight }, opts || {}));
+	Object.defineProperty(built.frame, "contentDocument", { get: () => doc });
+	return { frame: built.frame, note: scrollNote, doc };
+}
+// Frame top is 240 and the window 900, so the window-filling fallback is 572.
+const shortDash = sizedFrame(300);
+exported.sizeEmbedFrame(shortDash.frame);
+assert.strictEqual(shortDash.frame.style.height, exported.EMBED_MIN_HEIGHT + "px",
+	"a short dashboard does not leave the frame padded out with empty space "
+	+ "(the floor is what stops it, not the window)");
+assert.strictEqual(shortDash.note.textContent, "",
+	"...and nothing tells anyone to scroll through content that all fits");
+
+const tallDash = sizedFrame(900);
+exported.sizeEmbedFrame(tallDash.frame);
+assert.strictEqual(tallDash.frame.style.height, "936px",
+	"a dashboard taller than the window gets a frame its own size -- 900 of "
+	+ "content plus its padding -- rather than a window-shaped slice of itself");
+assert.strictEqual(tallDash.note.textContent, "",
+	"...and still says nothing about scrolling, because nothing is cut off");
+
+// Past the cap the frame stops growing, and THAT is when the notice appears.
+const hugeDash = sizedFrame(4000);
+exported.sizeEmbedFrame(hugeDash.frame);
+assert.strictEqual(hugeDash.frame.style.height, "1440px",
+	"a huge dashboard is capped at 1.6 windows, so the Records strip stays findable");
+assert.ok(hugeDash.note.textContent.includes("scroll inside it"),
+	"...and the caption SAYS the rest is below, rather than leaving a silent cut-off");
+
+// Unmeasurable: fall back to filling the window, and warn rather than assume
+// it all fits. This path needs nothing from inside the frame.
+const blindDash = sizedFrame(0, { content: false });
+exported.sizeEmbedFrame(blindDash.frame);
+assert.strictEqual(blindDash.frame.style.height, "572px",
+	"a frame whose content cannot be measured still fills the window");
+assert.ok(blindDash.note.textContent.includes("scroll inside it"),
+	"...and says there may be more below, because it cannot prove otherwise");
+
 win.innerHeight = 500;                    // a short laptop window
-exported.sizeEmbedFrame(sized);
-assert.strictEqual(sized.style.height, exported.EMBED_MIN_HEIGHT + "px",
-	"...never collapsing below the floor, however short the window");
+exported.sizeEmbedFrame(blindDash.frame);
+assert.strictEqual(blindDash.frame.style.height, exported.EMBED_MIN_HEIGHT + "px",
+	"never collapsing below the floor, however short the window");
 win.innerHeight = 900;
 assert.ok(!/height:\s*620px/.test(SRC), "and the fixed 620px height is gone from the page CSS");
 
+// The scrollbar itself. Overlay scrollbars are invisible until you already
+// know to scroll, which is exactly how the cut-off looked like a bug.
+// Measured in Chromium: ::-webkit-scrollbar rules alone reserved 0px and left
+// the bar an invisible overlay; the gutter reserved 12px and made it real. The
+// webkit rules only colour a bar the gutter has already created.
+assert.ok(/#app \.overflow-y-auto\{scrollbar-gutter:stable\}/.test(exported.INSIGHTS_CHROME_CSS),
+	"the scroll container reserves a real scrollbar gutter, not an overlay bar");
+assert.ok(/::-webkit-scrollbar\{width:12px/.test(exported.INSIGHTS_CHROME_CSS),
+	"...and the bar itself is given a width");
+assert.ok(/::-webkit-scrollbar-thumb\{background:#94A3B8/.test(exported.INSIGHTS_CHROME_CSS),
+	"...with a thumb dark enough to see against the track");
+
+// The height follows the grid as charts arrive -- a dashboard measured before
+// its charts render measures nearly nothing.
+const watched = sizedFrame(900);
+assert.strictEqual(exported.watchEmbedContent(watched.frame), true,
+	"the frame watches its dashboard's grid for changes");
+assert.strictEqual(watched.doc.observed.length, 1, "...observing exactly one element");
+assert.strictEqual(watched.doc.observed[0].target.className, "h-fit w-full",
+	"...the GRID, whose height is its rows -- not the scroll container, which is "
+	+ "as tall as the frame and would pin the frame to whatever it already was");
+assert.strictEqual(exported.watchEmbedContent(sizedFrame(900, { noObserver: true }).frame), false,
+	"a browser without ResizeObserver reports the failure rather than pretending");
+assert.strictEqual(exported.watchEmbedContent(sizedFrame(0, { emptyGrid: true }).frame), false,
+	"...and so does a dashboard with nothing in it yet");
+
 // A frame someone loaded in a narrow window is re-sized when its tab is shown
 // again -- the sizing pass must not be gated on the src promotion.
-sized.style.height = "";
+const reshown = sizedFrame(900).frame;
+reshown.style.height = "";
 const sizedArea = el("section", { tabCharts: "4.3.1" });
-sized.parentNode = sizedArea;
-sizedArea.children.push(sized);
-delete sized.dataset.embedSrc;
+reshown.parentNode = sizedArea;
+sizedArea.children.push(reshown);
+delete reshown.dataset.embedSrc;
 const sizedRoot = el("div", {});
 sizedRoot.children.push(sizedArea);
 sizedArea.parentNode = sizedRoot;
 exported.loadVisibleEmbeds(sizedRoot);
-assert.strictEqual(sized.style.height, "572px",
+assert.strictEqual(reshown.style.height, "936px",
 	"an ALREADY-loaded frame is re-sized when its tab is shown again");
 assert.ok((win.listeners.resize || []).length >= 1,
 	"and the window resize is bound, so the frame follows the window");
