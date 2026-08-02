@@ -50,6 +50,42 @@ WHAT THE 2026-08-03 CONFIG PROBE SETTLED (probe_insights_chart_config.py)
                 filters" withheld every chart on the platform. filter_count()
                 walks the group; nothing here tests the value's shape.
 
+  THE NINE UNMAPPED CONTROLS -- SETTLED 2026-08-03, STILL NOT READ
+    Rotate Values, Overlap, Normalize, Show Data Labels, the Show Axis Label
+    toggle, Show Scrollbar, Y-Min, Y-Max and Split Series were listed for two
+    rounds as "key name unconfirmed, therefore not implemented". The names are
+    now confirmed, from Insights' OWN TypeScript declarations in
+    `frontend/src2/types/chart.types.ts` -- a source, not a plausible name:
+
+        Rotate Values      x_axis.label_rotation      number
+        Overlap            y_axis.overlap             boolean, Bar only
+        Normalize          y_axis.normalize           boolean, Bar only
+        Show Data Labels   y_axis.show_data_labels    boolean
+                           y_axis.series[n].show_data_labels  per series
+        Show Axis Label    y_axis.show_axis_label     boolean
+                           (the TEXT is y_axis.axis_label, already read)
+        Show Scrollbar     y_axis.show_scrollbar      boolean
+        Y-Min              y_axis.min                 number
+        Y-Max              y_axis.max                 number
+        Split Series       split_by  {dimension, max_split_values}
+
+    Note `y_axis.min`/`y_axis.max`, NOT `y_min`/`y_max`. And note that ALL NINE
+    are AXIS-CHART keys: only Bar, Line and Row declare x_axis/y_axis at all.
+    DonutChartConfig declares label_column, value_column, legend_position,
+    max_slices and show_inline_labels, and nothing else. A Donut carrying none
+    of the nine is correct, not a failed search -- which is exactly what the
+    2026-08-03 probe run reported, on a Donut.
+
+    NONE OF THEM IS READ YET, and the reason is no longer "unconfirmed". Eight
+    are cosmetic and Sophia's painters do not have the concepts (a scrollbar it
+    does not scroll, an overlap it does not overlap). `split_by` is the one
+    that is NOT cosmetic: it changes the SHAPE of the series, and Sophia
+    executes the query, which knows nothing about it. Drawing a split chart's
+    rows unsplit would put one bar where Insights shows several -- the same
+    class of mismatch the filter withholding exists to prevent, so split_by
+    belongs with `filters` as a withhold, not with `legend_position` as a
+    cosmetic. Neither is built; both are decided.
+
   A NOTE ON NAMES
     The contract calls the resolved axes `x_column` and `y_columns`, NOT
     `label_column`/`value_columns`. Insights has its own `label_column` and
