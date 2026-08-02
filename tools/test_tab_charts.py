@@ -1162,6 +1162,64 @@ report(all(row["title"] != row["chart"] for row in rows),
 	"no surviving row is labelled with its own id")
 
 
+# --- THE PICKER FILTER: charts only / table only ----------------------------
+#
+# The property that makes this more than a one-line UI change: the filter has
+# to run BEFORE the page is cut. The DB limit used to be the page size, so
+# "Charts only" would have searched the 20 most recent rows for the 7 charts
+# among 52 queries and shown however few landed in that window. A filter that
+# reports nothing while matches exist is worse than no filter, so the fixture
+# below deliberately buries the only chart PAST the page size.
+reset()
+State.doctypes.add("Insights Chart v3")
+for index in range(40):
+	name = "q-bulk-%02d" % index
+	State.charts[name] = "Bulk query %02d" % index
+	State.readable.add(name)
+State.charts["q-buried"] = "Buried behind forty others"
+State.readable.add("q-buried")
+State.insights_charts = [{"name": "chart-b", "title": "Buried chart",
+	"chart_type": "Bar", "query": "q-buried", "data_query": None, "config": "{}"}]
+
+everything = tab_charts.search("", limit=5)
+report(len(everything["charts"]) == 5 and everything["counts"]["all"] > 5,
+	"the page is still %d rows, while the count describes them all (%d)"
+	% (len(everything["charts"]), everything["counts"]["all"]))
+
+only_charts = tab_charts.search("", limit=5, kind="charts")
+report([row["chart"] for row in only_charts["charts"]] == ["q-buried"],
+	"'Charts only' finds the ONE chart buried past the page size")
+report(all(row["has_chart"] for row in only_charts["charts"]),
+	"...and every row it returns really has a chart")
+report(only_charts["counts"]["charts"] == 1
+	and only_charts["counts"]["tables"] == len(State.readable) - 1,
+	"the counts add up over the whole search, not the page")
+report(only_charts["counts"]["all"]
+	== only_charts["counts"]["charts"] + only_charts["counts"]["tables"],
+	"...and all = charts + tables, so no row is in neither bucket")
+
+only_tables = tab_charts.search("", limit=50, kind="tables")
+report(not any(row["has_chart"] for row in only_tables["charts"]),
+	"'Table only' returns nothing that has a chart built on it")
+report("q-buried" not in [row["chart"] for row in only_tables["charts"]],
+	"...and specifically excludes the one that does")
+
+# A filter narrows what is LISTED. It must not reach anything the unfiltered
+# list could not, which is the only way this could become a permission problem.
+report("q-secret" not in [row["chart"] for row in
+		tab_charts.search("", limit=50, kind="tables")["charts"]]
+	and "q-secret" not in [row["chart"] for row in
+		tab_charts.search("", limit=50, kind="charts")["charts"]],
+	"neither filter reaches a query this user cannot read")
+report(tab_charts.search("", limit=5, kind="nonsense")["kind"] == "all",
+	"an unknown kind falls back to All rather than returning an empty list")
+report(tab_charts.search("", limit=5)["kind"] == "all",
+	"...and the default is All, so the picker opens showing everything")
+report(bool(only_charts["charts"]) and bool(everything["charts"])
+	and set(only_charts["charts"][0]) == set(everything["charts"][0]),
+	"a filtered row has exactly the same shape as an unfiltered one")
+
+
 # --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------
 #
 # Found while checking whether any of the nine controls was worth wiring, and

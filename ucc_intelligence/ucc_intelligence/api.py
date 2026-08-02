@@ -200,14 +200,16 @@ def get_monitoring_findings(status="Open", limit=100):
 
 
 @frappe.whitelist()
-def search_insights_charts(term=None, limit=20):
+def search_insights_charts(term=None, limit=20, kind="all"):
 	"""The "+ Add chart" picker: Insights queries this user can read.
 
 	No only_for -- what comes back is exactly what frappe.get_list allows this
 	user to see, so the endpoint cannot show anyone a chart they could not
-	already open in Insights itself.
+	already open in Insights itself. `kind` narrows the LIST to charts or to
+	chart-less queries; it is applied after that permission-scoped read, so it
+	can only ever show fewer rows, never more.
 	"""
-	return _tab_charts.search(term, limit)
+	return _tab_charts.search(term, limit, kind)
 
 
 @frappe.whitelist()
