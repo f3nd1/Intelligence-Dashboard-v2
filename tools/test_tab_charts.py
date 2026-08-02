@@ -1450,12 +1450,23 @@ report(len(tab_charts.get_tab("criterion_1", "overview")["charts"]) == 1,
 tab_charts.set_dashboard("criterion_1", "overview", "dash-ok")
 report(raises(ValidationError_, tab_charts.add, "criterion_1", "overview", "q-agents"),
 	"...and REFUSED once the tab embeds a dashboard, on the server")
-kept = tab_charts.get_tab("criterion_1", "overview")
-report(len(kept["charts"]) == 1 and kept["embedded_dashboard"] == "dash-ok",
-	"the chart added before embedding is KEPT, not deleted (option A)")
+# EMBEDDING DELETES THE PAINTED CHARTS (decided 2026-08-04). They used to be
+# kept and hidden so that clearing the field restored them. That fallback is
+# retired, so the charts go -- and "gone" has to mean gone from STORAGE, not
+# merely absent from what get_tab chooses to return.
+after = tab_charts.get_tab("criterion_1", "overview")
+report(after["charts"] == [] and after["embedded_dashboard"] == "dash-ok",
+	"embedding a dashboard DELETES the tab's painted charts")
+stored = json.loads(State.tabs["criterion_1::overview"]["charts"])
+report(stored == [],
+	"...from the stored record itself, not just from what the tab returns")
 tab_charts.set_dashboard("criterion_1", "overview", "")
-report(len(tab_charts.get_tab("criterion_1", "overview")["charts"]) == 1,
-	"...and comes back when embedding stops -- the migration is reversible")
+report(tab_charts.get_tab("criterion_1", "overview")["charts"] == [],
+	"...and clearing the dashboard does NOT bring them back -- there is no fallback")
+deleted = [line for line in State.audit if line["action"] == "charts_deleted"]
+report(len(deleted) == 1 and "q-open" in deleted[0]["summary"]
+	and "q-open" in deleted[0]["before_value"],
+	"the deletion is recorded in the tab's history, naming what was removed")
 
 
 # --- the dashboard picker: same shape, same guarantees ----------------------

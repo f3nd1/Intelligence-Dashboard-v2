@@ -621,15 +621,18 @@ _actions = region(ported, "function renderTabActions(dashboard,tab){",
 checks.append(report('class="ucc-add-chart" data-add-chart=' not in ported,
 	'the "+ Add chart" button is rendered on no tab state at all'))
 checks.append(report("Embed a dashboard" in _actions,
-	"an empty tab is offered a dashboard, and only that"))
-checks.append(report("editing&&!embedded&&!hasCharts" in _actions,
-	"...and that offer is conditional on the tab having neither"))
-checks.append(report("Change dashboard" in _actions and "Stop embedding" in _actions,
-	"an embedded tab is offered change and stop"))
-checks.append(report("editing&&embedded" in _actions,
-	"...and those two only when a dashboard is actually set"))
-checks.append(report("Embed a dashboard instead" in _actions,
-	"a tab that already has charts is offered the migration, worded as a move"))
+	"a tab without a dashboard is offered one, and only that"))
+checks.append(report("Change dashboard" in _actions,
+	"an embedded tab is offered a different dashboard"))
+# THE FALLBACK IS GONE (2026-08-04). "Stop embedding" restored charts kept
+# underneath an embed; those charts are deleted now, so a button offering to
+# bring them back would be offering something that no longer exists.
+checks.append(report('data-clear-dashboard' not in ported,
+	'the "Stop embedding" control is gone from the page entirely'))
+checks.append(report("Embed a dashboard instead" not in ported,
+	"...and so is the separate migration wording -- every tab offers the same one thing"))
+checks.append(report("hasCharts" not in _actions,
+	"the action bar no longer branches on whether a tab has painted charts"))
 
 # The gate is the server, not the missing button.
 _add = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "analytics"
@@ -646,8 +649,29 @@ checks.append(report('let workbook="";' in _dash and "if(!workbook)return;" in _
 	"the dashboard picker also opens with no workbook, and refuses to list without one"))
 checks.append(report("workbook:workbook" in _dash,
 	"...and scopes every search server-side"))
-checks.append(report("This tab also has " in ported and "kept, not deleted" in ported,
-	"an embedded tab SAYS that charts saved before it are kept, not deleted"))
+checks.append(report("This tab also has " not in ported and "kept, not deleted" not in ported,
+	"no notice about charts kept underneath an embed -- there are none to keep"))
+
+# #2 and #3: an embedded tab is the dashboard and nothing above it.
+_intro = region(ported, "function renderTabIntro(", "function openIntroEditor(",
+	"the tab intro")
+checks.append(report('if(state&&state.embeddedDashboard){mount.innerHTML="";return;}' in _intro,
+	"an embedded tab renders no intro block above its dashboard"))
+checks.append(report("<h2>Charts</h2>" not in ported,
+	'and the "Charts" section heading is gone'))
+
+# #5, on the server: embedding DELETES the painted charts rather than hiding
+# them, and the deletion is recorded.
+checks.append(report('config["charts"] = []' in _add and "charts_deleted" in _add,
+	"embedding a dashboard deletes the tab's painted charts, and audits the deletion"))
+_patch = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "patches" / "v1_0"
+	/ "delete_charts_under_embedded_dashboards.py", encoding="utf-8").read()
+checks.append(report('filters={"embedded_dashboard": ["!=", ""]}' in _patch,
+	"the cleanup patch touches only tabs that embed a dashboard"))
+_patches_txt = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "patches.txt",
+	encoding="utf-8").read()
+checks.append(report("delete_charts_under_embedded_dashboards" in _patches_txt,
+	"...and it is registered, so a migrate actually runs it"))
 
 
 # --- A DASHBOARD, NEVER A WORKBOOK ROUTE ------------------------------------

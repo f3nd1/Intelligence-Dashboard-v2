@@ -314,7 +314,9 @@ return tabChartState[tabChartKey(dashboard.dataset.demoDashboard,tab)]||null;
 
 function tabChartAreaMarkup(tab){
 return`<section class="ucc-tab-charts" data-tab-charts="${esc(tab)}">`
-+`<div class="ucc-tab-charts-head"><h2>Charts</h2>`
+// No "Charts" heading: the dashboard below carries its own title, and a
+// section label above it only repeated that the panel exists.
++`<div class="ucc-tab-charts-head">`
 +`<div class="ucc-tab-charts-actions" data-tab-actions="${esc(tab)}"></div></div>`
 +`<div class="ucc-tab-charts-grid" data-tab-charts-grid="${esc(tab)}"></div></section>`;
 }
@@ -330,15 +332,16 @@ const canEdit=!!(state&&state.canEdit);
 const editing=isEditing(dashboard,tab);
 // A TAB IS ONE SHAPE, AND EDIT MODE OFFERS ONLY THAT SHAPE'S CONTROLS.
 //
-// Individual chart-adding is retired going forward (decided 2026-08-03): a tab
-// shows one Insights dashboard, and a dashboard already holds everything the
-// per-card system composed by hand. So "+ Add chart" is gone from every tab,
-// including empty ones -- there is no longer a choice to present.
+// ONE SHAPE, ONE CONTROL (decided 2026-08-04).
 //
-// Tabs that ALREADY carry charts keep rendering them, untouched, so nothing
-// existing breaks. They simply cannot gain more.
+// Every tab is an embedded Insights dashboard. The Option A fallback -- charts
+// kept hidden underneath an embed, restorable by "Stop embedding" -- is gone:
+// the charts themselves were deleted, so there is nothing to restore and a
+// button offering to restore it would be a lie. The separate "Embed a
+// dashboard instead" migration wording is gone with it; a tab without a
+// dashboard offers exactly one thing, whether it is empty or still painting
+// charts from before.
 const embedded=!!(state&&state.embeddedDashboard);
-const hasCharts=!!(state&&state.charts&&state.charts.length);
 mount.innerHTML=
 `<button type="button" class="ucc-tab-action" data-tab-history="${esc(tab)}">History</button>`
 +(editing?"":`<button type="button" class="ucc-tab-action" data-export-pdf="${esc(tab)}">Export PDF</button>`)
@@ -346,19 +349,10 @@ mount.innerHTML=
 ?`<button type="button" class="ucc-tab-action ucc-tab-mode${editing?" is-editing":""}" `
 +`data-toggle-edit="${esc(tab)}" aria-pressed="${editing}">${editing?"Done editing":"Edit tab"}</button>`
 :"")
-+(editing&&embedded
++(editing
+?(embedded
 ?`<button type="button" class="ucc-tab-action" data-pick-dashboard="${esc(tab)}">Change dashboard</button>`
-+`<button type="button" class="ucc-tab-action" data-clear-dashboard="${esc(tab)}">Stop embedding</button>`
-:"")
-// An empty tab has exactly one thing it can become, so it is offered as the
-// primary action rather than one of two.
-+(editing&&!embedded&&!hasCharts
-?`<button type="button" class="ucc-add-chart" data-pick-dashboard="${esc(tab)}">Embed a dashboard</button>`
-:"")
-// A tab that already has charts can migrate, but the wording says what it is:
-// a move to the shape everything else now uses, not a second option.
-+(editing&&!embedded&&hasCharts
-?`<button type="button" class="ucc-tab-action" data-pick-dashboard="${esc(tab)}">Embed a dashboard instead</button>`
+:`<button type="button" class="ucc-add-chart" data-pick-dashboard="${esc(tab)}">Embed a dashboard</button>`)
 :"");
 area.classList.toggle("is-editing",editing);
 }
@@ -501,18 +495,22 @@ return"no sidebar or header matched. #app children: "
 // with nothing saying more existed. A frame that is nearly tall enough reads as
 // a broken dashboard, not as a scrollable one.
 //
-// So the frame is sized to the dashboard's OWN content when that can be
-// measured -- no cut-off, and no empty space under a short dashboard either.
-// A very tall dashboard is capped at EMBED_MAX_SCREENS of the window, because
-// a 4,000px frame pushes the Records strip somewhere nobody will find it; past
-// the cap it scrolls inside the frame, with a real scrollbar and a line of
-// text saying so.
+// So the frame is sized to the dashboard's OWN content -- no cut-off, and no
+// empty space under a short dashboard either.
+//
+// UNCAPPED, decided 2026-08-04. A 1.6-window cap was tried and still forced
+// scrolling on a real dashboard, which is the thing being fixed. Seeing the
+// whole dashboard beats keeping the page short. The cost is real and worth
+// stating: on a very tall dashboard the Records strip and the caption sit far
+// below the fold, reachable only by scrolling the Sophia page. That is a
+// normal long page, not a cut-off panel -- the failure this replaces was
+// content that looked absent rather than content that is further down.
 //
 // The window-filling calculation stays as the fallback: it needs nothing from
 // inside the frame, so a dashboard still gets a sensible height even if
 // same-origin measuring fails entirely.
 const EMBED_MIN_HEIGHT=520,EMBED_BOTTOM_GAP=88,CHROME_CHECK_DELAY=2500,
-EMBED_MAX_SCREENS=1.6,EMBED_CONTENT_PAD=36;
+EMBED_CONTENT_PAD=36;
 
 // Insights' scroll container, and the grid inside it. The GRID is what gets
 // measured, not the container: the container is as tall as the frame, so
@@ -531,8 +529,7 @@ const top=frame.getBoundingClientRect().top;
 const window_height=window.innerHeight||0;
 const room=Math.round(window_height-top-EMBED_BOTTOM_GAP);
 const content=insightsContentHeight(frame);
-const cap=Math.round(window_height*EMBED_MAX_SCREENS)||room;
-const height=Math.max(EMBED_MIN_HEIGHT,content?Math.min(content,cap):room);
+const height=Math.max(EMBED_MIN_HEIGHT,content||room);
 frame.style.height=height+"px";
 // Clipped only when the dashboard is genuinely taller than the frame it got.
 // Unmeasurable content counts as clipped: the notice is a hint either way,
@@ -858,17 +855,10 @@ if(!state){grid.innerHTML=tabChartNotice("Loading your charts…");loadTabCharts
 if(state.loading){grid.innerHTML=tabChartNotice("Loading your charts…");return;}
 if(state.error){grid.innerHTML=tabChartNotice(state.error);return;}
 if(state.embeddedDashboard){
-grid.innerHTML=embeddedDashboardMarkup(state)
-// Option A, stated rather than silent. Charts saved before this tab was
-// embedded are kept and hidden, not deleted -- so "stop embedding" really
-// does put the tab back. A tab quietly holding configuration nobody can
-// see is the cost, and this line is what stops it being quiet.
-+((state.charts&&state.charts.length)
-?'<p class="ucc-embed-note">This tab also has '+state.charts.length
-+(state.charts.length===1?" individual chart":" individual charts")
-+" saved from before it was embedded. They are kept, not deleted — "
-+"stop embedding to bring them back.</p>"
-:"");
+// The dashboard, and nothing else. There is no longer a notice about charts
+// kept underneath, because there are none: embedding DELETES them (see
+// set_dashboard in tab_charts.py) rather than hiding them.
+grid.innerHTML=embeddedDashboardMarkup(state);
 loadVisibleEmbeds(dashboard);
 loadRecordsStrip(dashboard,tab);
 return;
@@ -1406,6 +1396,11 @@ if(!mount)return;
 const state=tabConfig(dashboard,tab);
 const text=(state&&state.intro)||"";
 if(mount.dataset.editing==="1")return;
+// An embedded tab shows the dashboard and nothing above it. The stored intro
+// text is left alone in the database -- this hides the block, it does not
+// erase anyone's writing -- but a tab whose content comes from Insights does
+// not also need a hand-written preamble repeating it.
+if(state&&state.embeddedDashboard){mount.innerHTML="";return;}
 const canEdit=isEditing(dashboard,tab);
 if(!text&&!canEdit){mount.innerHTML="";return;}
 mount.innerHTML=(text
@@ -3260,18 +3255,13 @@ if(exportButton){
 event.preventDefault();event.stopPropagation();
 exportTabPdf(dashboard,config,exportButton.dataset.exportPdf);return;
 }
-// data-add-chart is no longer rendered anywhere. The handler stays so a
-// browser tab left open on the old markup opens the picker rather than
-// silently doing nothing -- and tab_charts.add() refuses on an embedded tab,
-// which is the actual gate.
-const addChart=event.target.closest("[data-add-chart]");
-if(addChart){event.preventDefault();event.stopPropagation();openChartPicker(dashboard,config,addChart.dataset.addChart);return;}
+// The data-add-chart handler is gone too (2026-08-04). Chart-adding is
+// retired, so a browser left open on the old markup now does nothing rather
+// than opening a picker for a path that no longer exists. tab_charts.add()
+// refuses on an embedded tab regardless -- that was always the real gate.
 const pickDashboard=event.target.closest("[data-pick-dashboard]");
 if(pickDashboard){event.preventDefault();event.stopPropagation();
 openDashboardPicker(dashboard,config,pickDashboard.dataset.pickDashboard);return;}
-const clearDashboard=event.target.closest("[data-clear-dashboard]");
-if(clearDashboard){event.preventDefault();event.stopPropagation();
-setTabDashboard(dashboard,config,clearDashboard.dataset.clearDashboard,"");return;}
 // The Records strip. The panel it opens is the SAME one the cards used --
 // same API, same paging, same record links, same permission chain. Only the
 // entry point moved, which is the whole reason drilldown.py is untouched.

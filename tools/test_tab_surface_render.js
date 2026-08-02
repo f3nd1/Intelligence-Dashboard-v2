@@ -639,13 +639,16 @@ assert.strictEqual(tallDash.frame.style.height, "936px",
 assert.strictEqual(tallDash.note.textContent, "",
 	"...and still says nothing about scrolling, because nothing is cut off");
 
-// Past the cap the frame stops growing, and THAT is when the notice appears.
+// UNCAPPED (2026-08-04). A 1.6-window cap was tried and a real dashboard still
+// needed scrolling, which is the thing being fixed. Show everything; the page
+// gets longer, and the Records strip moves below the fold with it.
 const hugeDash = sizedFrame(4000);
 exported.sizeEmbedFrame(hugeDash.frame);
-assert.strictEqual(hugeDash.frame.style.height, "1440px",
-	"a huge dashboard is capped at 1.6 windows, so the Records strip stays findable");
-assert.ok(hugeDash.note.textContent.includes("scroll inside it"),
-	"...and the caption SAYS the rest is below, rather than leaving a silent cut-off");
+assert.strictEqual(hugeDash.frame.style.height, "4036px",
+	"even a very tall dashboard gets a frame its own size -- nothing is cut off");
+assert.strictEqual(hugeDash.note.textContent, "",
+	"...and nothing tells anyone to scroll inside it, because nothing is hidden");
+assert.ok(!/EMBED_MAX_SCREENS/.test(SRC), "the height cap is gone from the page");
 
 // Unmeasurable: fall back to filling the window, and warn rather than assume
 // it all fits. This path needs nothing from inside the frame.

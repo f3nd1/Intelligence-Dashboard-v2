@@ -207,8 +207,16 @@ for method in ("search_insights_charts", "get_tab_charts", "add_tab_chart",
 		"set_tab_question"):
 	report("def %s(" % method in api_source and "ucc_intelligence.api.%s" % method in page_source,
 		"%s is whitelisted and called by the page" % method)
-report('data-add-chart' in page_source and "+ Add chart" in page_source,
-	'every tab area carries a "+ Add chart" button')
+# Chart-adding is retired: every tab is one embedded Insights dashboard. The
+# endpoints above stay whitelisted -- tabs that still paint charts read and
+# resize them -- but nothing in the page opens a chart picker any more.
+# The MARKUP and the HANDLER, not the phrase: the phrase survives in a comment
+# recording what was retired, and a comment is documentation, not a control.
+report('data-add-chart="' not in page_source
+	and 'closest("[data-add-chart]")' not in page_source,
+	'no "+ Add chart" control or handler survives in the page')
+report("data-pick-dashboard" in page_source and "Embed a dashboard" in page_source,
+	"a tab is set up by embedding a dashboard, and only that")
 report("data-remove-chart" in page_source and "removeTabChart" in page_source,
 	"each embedded chart carries a remove control")
 report("openChartPicker" in page_source and "data-chart-picker-search" in page_source,
