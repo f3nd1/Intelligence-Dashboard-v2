@@ -556,7 +556,11 @@ def chart_data(chart, criterion=None, tab=None):
 		# who put the card on the tab, for the person reading the tab.
 		"title": _display_title(criterion, tab, chart) or chart_presentation.label_for(
 			chart, doc.get("title"), record=presentation),
-		"series": rows_to_chart_series(rows),
+		# The resolved axes, not a guess at which column is the measure. The
+		# guess drew every value as 0 for any chart not measuring `count`.
+		"series": rows_to_chart_series(rows,
+			label_column=presentation.get("x_column"),
+			value_column=(presentation.get("y_columns") or [None])[0]),
 		"columns": columns,
 		"rows": rows,
 		"presentation": presentation,

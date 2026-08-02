@@ -102,21 +102,45 @@ def run_chart_query(title):
 		return {"status": "query_error", "message": clean_text(error), "rows": []}
 
 
-def rows_to_chart_series(rows):
+def rows_to_chart_series(rows, label_column=None, value_column=None):
 	"""An Insights execute() result row looks like {dimension_field: value,
 	"count": n} (or {..., "avg_duration": n, "count": n} for the duration
 	chart) -- convert to the {label, value} shape sophia_analytics.js's
 	metricRows() already expects (criterion_4.py's group_count_rows()
-	produces the same shape, so the frontend needs no changes)."""
+	produces the same shape, so the frontend needs no changes).
+
+	PASS THE COLUMNS WHEN YOU KNOW THEM (added 2026-08-03).
+
+	Guessing was correct for the six admission charts this was written for --
+	they all measure `count`, and every row has exactly one dimension. It is
+	wrong for a chart someone builds themselves:
+
+	    a chart measuring anything else   every value became 0, because
+	                                      value_key fell back to "count" and
+	                                      no row had one. A flat chart, drawn
+	                                      confidently, with the real numbers
+	                                      sitting in the table view beside it.
+	    a chart with two dimensions       the FIRST key won, whichever it was,
+	                                      not the one set as the x axis.
+
+	chart_presentation.presentation_for() already resolves both columns AND
+	refuses any that the query does not return, so a caller that has a
+	presentation has better information than this function can infer. The
+	arguments default to None so the admission path keeps its exact previous
+	behaviour.
+	"""
 	if not rows:
 		return []
 	first_row = rows[0]
-	value_key = "avg_duration" if "avg_duration" in first_row else "count"
-	dimension_key = next((key for key in first_row.keys() if key not in KNOWN_MEASURE_KEYS), None)
+	if not (value_column and value_column in first_row):
+		value_column = "avg_duration" if "avg_duration" in first_row else "count"
+	if not (label_column and label_column in first_row):
+		label_column = next(
+			(key for key in first_row.keys() if key not in KNOWN_MEASURE_KEYS), None)
 	series = []
 	for row in rows:
-		label = clean_text(row.get(dimension_key)) or "Not specified"
-		series.append({"label": label, "value": row.get(value_key) or 0})
+		label = clean_text(row.get(label_column)) or "Not specified"
+		series.append({"label": label, "value": row.get(value_column) or 0})
 	return series
 
 
