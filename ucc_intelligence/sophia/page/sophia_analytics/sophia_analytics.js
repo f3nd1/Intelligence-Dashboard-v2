@@ -661,6 +661,8 @@ return segmentButton(card,row,index,
 // One conic-gradient, and a legend of buttons beside it. The gradient is the
 // browser drawing a pie; the clickable part is the legend, so every segment is
 // still reachable by keyboard as well as mouse.
+const DONUT_LABEL_MIN_SHARE=8;
+
 function paintDonutSeries(card,node,series){
 const total=series.reduce((sum,row)=>sum+(Number(row.value)||0),0)||1;
 // legend_position is READ from the Insights Chart record and now DRAWN. The
@@ -669,13 +671,45 @@ const total=series.reduce((sum,row)=>sum+(Number(row.value)||0),0)||1;
 // person can choose in Insights and expect to see honoured.
 const legend=((card&&card._chartData&&card._chartData.presentation)||{}).legend_position||"right";
 let cursor=0;
-const stops=series.map((row,index)=>{
+// The share each slice occupies, kept alongside the gradient stop so the
+// on-ring label sits at the middle of its OWN slice rather than at an angle
+// worked out a second time from the same numbers.
+const slices=series.map((row,index)=>{
 const share=((Number(row.value)||0)/total)*100;
 const start=cursor;cursor+=share;
-return esc(seriesColour(card,index))+" "+start.toFixed(2)+"% "+cursor.toFixed(2)+"%";
-}).join(",");
+return {index:index,start:start,end:cursor,share:share,
+colour:seriesColour(card,index)};
+});
+const stops=slices.map(slice=>
+esc(slice.colour)+" "+slice.start.toFixed(2)+"% "+slice.end.toFixed(2)+"%").join(",");
+// #2: the percentage ON the ring, not only in the list beside it. A conic
+// gradient cannot carry text, so each label is a positioned span rotated onto
+// the middle of its slice and rotated back upright -- CSS transforms on real
+// DOM nodes, no SVG.
+//
+// Only slices with room for it. Below about a twelfth of the ring the labels
+// collide with their neighbours and the chart becomes less readable, not more,
+// and every value is in the legend and the table regardless.
+//
+// NOT gated on show_inline_labels. That key exists on DonutChartConfig, but
+// what it does is still unproven, and gating on an unproven key means an
+// unproven key can hide data. Felix asked for "visible if unset" and for a
+// Donut it is always unset in the sense that matters: show_data_labels is an
+// AXIS-chart key and a Donut has no axes. One line to gate it later.
+const marks=slices.filter(slice=>slice.share>=DONUT_LABEL_MIN_SHARE).map(function(slice){
+const angle=(slice.start+slice.end)/2*3.6;
+return'<span class="ucc-insights-donut-mark" style="transform:translate(-50%,-50%) '
++"rotate("+angle.toFixed(2)+"deg) translateY(-50px) rotate("+(-angle).toFixed(2)+'deg)">'
++Math.round(slice.share)+"%</span>";
+}).join("");
 node.innerHTML='<div class="ucc-insights-donut-wrap" data-legend="'+esc(legend)+'">'
++'<div class="ucc-insights-donut-plot">'
 +'<div class="ucc-insights-donut" style="background:conic-gradient('+stops+')" aria-hidden="true"></div>'
+// aria-hidden: the legend buttons already carry every label and value as real
+// text, so announcing the ring's percentages again is duplication for a screen
+// reader, not extra information.
++(marks?'<div class="ucc-insights-donut-marks" aria-hidden="true">'+marks+"</div>":"")
++"</div>"
 +(legend==="none"?"":'<div class="ucc-insights-donut-legend">'+series.map((row,index)=>{
 const value=Number(row.value)||0;
 return segmentButton(card,row,index,
@@ -718,6 +752,27 @@ node.innerHTML='<div class="ucc-insights-number"><strong>'+esc(value.toLocaleStr
 const CHART_PAINTERS={bar:paintBarSeries,line:paintLineSeries,donut:paintDonutSeries,
 number:paintNumberSeries,funnel:paintFunnelSeries};
 
+// A donut's slices have no natural order, so the query's row order is an
+// accident of the GROUP BY rather than a decision anyone made -- largest first
+// is what makes a ring readable. Everything else keeps the order it arrived in:
+// a line sorted by value stops being a time series, and a bar chart's order is
+// something its author chose in Insights.
+//
+// This runs AFTER the `limit` slice, deliberately. Sorting first would change
+// WHICH rows a "top 10" chart shows -- from the ten Insights picked to the ten
+// with the largest values -- and that is a change to the data on an evidence
+// card, not a change to its appearance. Same rows, better order.
+const SORTED_BY_VALUE=["donut"];
+
+function sortForDisplay(renderAs,series){
+if(SORTED_BY_VALUE.indexOf(renderAs)<0)return series;
+// Copied, not sorted in place: `series` is the card's own data, and the table
+// view beside it shows the query's real order.
+return series.slice().sort(function(a,b){
+return (Number(b.value)||0)-(Number(a.value)||0);
+});
+}
+
 function paintChartSeries(node,series,card){
 const presentation=((card&&card._chartData)||{}).presentation||{};
 // Unsupported or unresolvable -> the table, LABELLED. chart_type is a free
@@ -733,7 +788,7 @@ return;
 const limit=Number(presentation.limit)||0;
 const shown=(limit&&series.length>limit)?series.slice(0,limit):series;
 const painter=CHART_PAINTERS[presentation.render_as]||paintBarSeries;
-painter(card,node,shown);
+painter(card,node,sortForDisplay(presentation.render_as,shown));
 // #4: a drawable chart OPENS as the diagram. Table stays one click away and
 // stays the automatic state only when nothing can be drawn -- which is what
 // paintTableOnly() does. Set explicitly rather than relying on the markup's
@@ -2078,6 +2133,17 @@ style.textContent=`
 .ucc-insights-donut-wrap[data-legend="bottom"]{flex-direction:column;align-items:flex-start}
 .ucc-insights-donut-wrap[data-legend="top"] .ucc-insights-donut-legend,
 .ucc-insights-donut-wrap[data-legend="bottom"] .ucc-insights-donut-legend{width:100%}
+/* The ring and its on-ring labels share one positioned box, so a label's
+   angle is measured from the same centre the gradient sweeps around. */
+.ucc-insights-donut-plot{position:relative;width:132px;height:132px;flex:none}
+.ucc-insights-donut-marks{position:absolute;inset:0;pointer-events:none}
+/* A pill, not bare white text. The palette runs from mid-blue to yellow, and
+   white on #EAB308 is unreadable however heavy the shadow -- found by
+   screenshot, on the light-green and yellow slices. The pill reads on every
+   colour the palette can produce, including one someone pastes in later. */
+.ucc-insights-donut-mark{position:absolute;left:50%;top:50%;font-size:10px;font-weight:700;
+ color:#fff;background:rgba(15,23,42,.62);border-radius:999px;padding:1px 5px;
+ line-height:1.3;white-space:nowrap}
 .ucc-insights-donut{width:132px;height:132px;border-radius:50%;flex:none;
  -webkit-mask:radial-gradient(circle,transparent 54%,#000 55%);
  mask:radial-gradient(circle,transparent 54%,#000 55%)}
