@@ -358,6 +358,40 @@ function syncTabChartVisibility(dashboard,tab){
 dashboard.querySelectorAll("[data-tab-charts]").forEach(function(area){
 area.hidden=area.dataset.tabCharts!==tab;
 });
+loadVisibleEmbeds(dashboard);
+}
+
+// EVERY SUB-CRITERION PANEL IS IN THE DOM AT ONCE.
+//
+// analyticsPanelMarkup() builds them all up front and switching tabs only
+// toggles `hidden`. A hidden iframe with a src STILL LOADS, so putting the URL
+// straight into the markup would boot one Insights SPA per sub-criterion the
+// moment a criterion opens -- eight at once on Criterion 4. Measured on the
+// live bench: four together took 3,823 ms and completed one after another,
+// because same-origin frames share the parent's main thread.
+//
+// So the URL waits in data-embed-src and is promoted to src when the tab is
+// actually shown. Promoted ONCE: the flag is removed with the attribute, so
+// returning to a tab reuses the frame someone already waited for.
+function loadVisibleEmbeds(root){
+(root||document).querySelectorAll("iframe[data-embed-src]").forEach(function(frame){
+const area=frame.closest("[data-tab-charts]");
+if(area&&area.hidden)return;
+const url=frame.dataset.embedSrc;
+delete frame.dataset.embedSrc;
+const started=(window.performance&&performance.now)?performance.now():0;
+frame.addEventListener("load",function(){
+const ms=started?Math.round(performance.now()-started):0;
+const note=frame.parentNode&&frame.parentNode.querySelector("[data-embed-timing]");
+if(note)note.textContent="Loaded in "+ms+" ms";
+// Into the diagnostics log too, so the number survives the page being
+// used rather than living only in a caption nobody screenshots.
+const card=frame.closest("[data-dashboard-panel],.ucc-criterion-dashboard");
+if(card)logEvent(card,"INFO","embed_loaded",
+frame.dataset.embedName+" · "+ms+" ms");
+},{once:true});
+frame.src=url;
+});
 }
 
 
@@ -493,6 +527,33 @@ return`<article class="ucc-embedded-chart${editing?" is-editable":""}" data-embe
 +`</article>`;
 }
 
+// PHASE 1 PILOT. One Insights dashboard, embedded, instead of the painted
+// cards. Nothing about the painted path changes: a tab without
+// embedded_dashboard set behaves exactly as before, and clearing the field
+// puts this tab back too.
+//
+// The URL is built here rather than sent by the server, so nothing but an id
+// crosses the wire. `/insights/dashboards/<id>` is the AUTHENTICATED route --
+// the frame carries the viewer's own session and Insights runs its own
+// permission query. The `/insights/shared/...` route is never used: it is
+// is_public-only and would need a permission bypass to work at all.
+function embeddedDashboardMarkup(state){
+const id=state.embeddedDashboard;
+if(!state.embeddedDashboardReadable){
+return tabChartNotice("This tab is set to show the Insights dashboard "
++esc(id)+", which your account cannot open. Ask whoever owns it in Insights "
++"to share it with you.");
+}
+return'<div class="ucc-embed-dashboard">'
++'<iframe class="ucc-embed-frame" title="Insights dashboard '+esc(id)+'" '
++'loading="lazy" data-embed-name="'+esc(id)+'" '
++'data-embed-src="/insights/dashboards/'+encodeURIComponent(id)+'"></iframe>'
++'<p class="ucc-embed-note"><span data-embed-timing>Loading…</span> · '
++'Drawn by Frappe Insights, with your own permissions. '
++'<a href="/insights/dashboards/'+encodeURIComponent(id)+'" target="_blank" '
++'rel="noopener">Open in Insights</a></p></div>';
+}
+
 function renderTabCharts(dashboard,config,tab){
 const area=ensureTabChartArea(dashboard,config,tab);
 if(!area)return;
@@ -501,6 +562,11 @@ const state=tabConfig(dashboard,tab);
 if(!state){grid.innerHTML=tabChartNotice("Loading your charts…");loadTabCharts(dashboard,config,tab);return;}
 if(state.loading){grid.innerHTML=tabChartNotice("Loading your charts…");return;}
 if(state.error){grid.innerHTML=tabChartNotice(state.error);return;}
+if(state.embeddedDashboard){
+grid.innerHTML=embeddedDashboardMarkup(state);
+loadVisibleEmbeds(dashboard);
+return;
+}
 if(!state.charts.length){
 grid.innerHTML=tabChartNotice(isEditing(dashboard,tab)
 ?"No charts on this tab yet. Use “+ Add chart” to embed one from Frappe Insights."
@@ -525,6 +591,8 @@ sizes:(response&&response.sizes)||["small","medium","large","full"],
 // every write endpoint checks again, so a hidden button is a courtesy and
 // never the gate (CLAUDE.md §3.3: hiding is interface composition).
 canEdit:!!(response&&response.can_edit),
+embeddedDashboard:(response&&response.embedded_dashboard)||"",
+embeddedDashboardReadable:!!(response&&response.embedded_dashboard_readable),
 loading:false,error:null};
 renderTabCharts(dashboard,config,tab);
 renderTabActions(dashboard,tab);
@@ -2309,6 +2377,13 @@ style.textContent=`
 .ucc-chart-picker-back:hover{text-decoration:underline}
 .ucc-chart-picker-where{margin:0 0 10px;font-size:14px;color:#172554}
 .ucc-chart-picker-result.is-all{border-color:#172554;font-weight:600;color:#172554}
+/* PHASE 1 PILOT: the embedded Insights dashboard. A fixed height, because an
+   iframe does not size to its content and there is no same-origin-safe way to
+   ask it how tall it is without coupling to Insights' internals. */
+.ucc-embed-dashboard{grid-column:1/-1}
+.ucc-embed-frame{display:block;width:100%;height:620px;border:1px solid #E6EBF3;
+ border-radius:12px;background:#fff}
+.ucc-embed-note{margin:6px 0 0;font-size:11px;color:#64748B}
 .ucc-chart-picker-kinds{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
 .ucc-chart-picker-kind{border:1px solid #D8E0EC;background:#fff;color:#475569;border-radius:999px;
  min-height:30px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}

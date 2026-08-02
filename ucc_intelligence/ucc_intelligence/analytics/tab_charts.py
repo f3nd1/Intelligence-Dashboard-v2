@@ -147,8 +147,12 @@ def _span(item):
 	return max(1, min(span, GRID_COLUMNS))
 
 
+DASHBOARD_DOCTYPE = "Insights Dashboard v3"
+
+
 def _blank():
-	return {"charts": [], "intro": "", "questions": {"hidden": []}}
+	return {"charts": [], "intro": "", "questions": {"hidden": []},
+		"embedded_dashboard": ""}
 
 
 def _json_list(value):
@@ -189,6 +193,12 @@ def _stored(criterion, tab):
 		"intro": record.get("intro") or "",
 		"questions": {"hidden": _json_list(record.get("hidden_questions"))},
 	}
+	# Phase 1 pilot: when set, this tab shows one Insights dashboard embedded
+	# instead of Sophia's painted charts. Read here so it travels with the rest
+	# of the tab's configuration; NOT validated on read, because a dashboard
+	# this user cannot open should still let the tab load and say so, rather
+	# than making the whole tab fail.
+	config["embedded_dashboard"] = clean_text(record.get("embedded_dashboard"))
 
 	for item in (stored.get("charts") or [])[:MAX_PER_TAB]:
 		if isinstance(item, str) and item:
@@ -234,6 +244,7 @@ def _store(criterion, tab, config):
 		"charts": json.dumps(config["charts"][:MAX_PER_TAB]),
 		"intro": (config.get("intro") or "")[:MAX_INTRO_LENGTH],
 		"hidden_questions": json.dumps(config["questions"]["hidden"][:MAX_QUESTION_IDS]),
+		"embedded_dashboard": clean_text(config.get("embedded_dashboard")),
 	}
 	if frappe.db.exists(CONFIG_DOCTYPE, name):
 		record = frappe.get_doc(CONFIG_DOCTYPE, name)
@@ -440,6 +451,70 @@ def search(term=None, limit=20, kind="all", workbook=None):
 		"total": len(charts), "charts": charts[:limit]}
 
 
+def _dashboard_readable(dashboard):
+	"""Can THIS user open that Insights dashboard?
+
+	Read through get_list, so the answer is the viewer's own permission rather
+	than a claim about it. Used only to decide what the page SAYS -- the iframe
+	is what actually loads, and Insights checks again for itself. Two checks
+	rather than one is the point: without this, a dashboard the viewer cannot
+	open would render as a silent blank rectangle with no explanation.
+	"""
+	dashboard = clean_text(dashboard)
+	if not dashboard:
+		return False
+	try:
+		return bool(frappe.get_list(DASHBOARD_DOCTYPE, filters={"name": dashboard},
+			fields=["name"], limit_page_length=1))
+	except Exception:
+		return False
+
+
+def set_dashboard(criterion, tab, dashboard):
+	"""Embed one Insights dashboard on this tab, or clear it with "".
+
+	PHASE 1 PILOT, and deliberately additive: a tab with this set shows the
+	embedded dashboard, a tab without it is unchanged. Nothing about the
+	painted charts is removed, so the whole thing reverts by clearing a field.
+
+	The dashboard must be one this user can read. That is not the security
+	boundary -- the iframe's own session is -- but refusing here means a typo
+	is caught while someone is looking at it, rather than becoming an empty
+	frame that everybody assumes is a bug in the embed.
+	"""
+	criterion, tab = _validated(criterion, tab)
+	_require_edit()
+	dashboard = clean_text(dashboard)
+	if dashboard and not _dashboard_readable(dashboard):
+		frappe.throw(frappe._(
+			"No Insights dashboard %s is readable by your account." % dashboard))
+	config = _stored(criterion, tab)
+	before = config["embedded_dashboard"]
+	if before == dashboard:
+		return get_tab(criterion, tab)
+	config["embedded_dashboard"] = dashboard
+	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab,
+		"dashboard_embedded" if dashboard else "dashboard_unembedded",
+		tab_audit.dashboard_embedded(_dashboard_title(dashboard), dashboard),
+		before=before, after=dashboard)
+	return get_tab(criterion, tab)
+
+
+def _dashboard_title(dashboard):
+	"""Its title if this user may read it, else "" -- the audit line says what
+	was embedded, and an id is not what a person recognises."""
+	dashboard = clean_text(dashboard)
+	if not dashboard:
+		return ""
+	try:
+		rows = frappe.get_list(DASHBOARD_DOCTYPE, filters={"name": dashboard},
+			fields=["title"], limit_page_length=1) or []
+	except Exception:
+		return ""
+	return clean_text(rows[0].get("title")) if rows else ""
+
+
 def get_tab(criterion, tab):
 	"""Everything this tab holds, for one render."""
 	criterion, tab = _validated(criterion, tab)
@@ -455,6 +530,12 @@ def get_tab(criterion, tab):
 		],
 		"intro": config["intro"],
 		"questions": config["questions"],
+		# PHASE 1 PILOT. The id only -- the page builds the /insights/dashboards
+		# URL itself and the iframe carries the viewer's own session, so Insights
+		# applies its own permission check to whoever is looking. Sophia never
+		# fetches the dashboard's contents and never sees its data.
+		"embedded_dashboard": config["embedded_dashboard"],
+		"embedded_dashboard_readable": _dashboard_readable(config["embedded_dashboard"]),
 		# The page renders the same tab for everyone and shows the edit
 		# controls only when this is true. It is a UI signal, not the gate --
 		# every write endpoint checks again.

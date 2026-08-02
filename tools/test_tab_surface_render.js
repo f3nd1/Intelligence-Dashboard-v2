@@ -53,7 +53,7 @@ const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown"
 	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId",
 	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
 	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
-	"paintTableOnly", "sortForDisplay"];
+	"paintTableOnly", "sortForDisplay", "embeddedDashboardMarkup", "loadVisibleEmbeds"];
 // Module-level consts, which lift() cannot reach because it looks for
 // `function <name>(`. Taken from the real source VERBATIM rather than retyped,
 // so a painter or a threshold changed on the page cannot silently disagree
@@ -73,7 +73,7 @@ const exported = new Function("window", "document", "frappe", "CSS",
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
 	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
 	paintBarSeries, paintLineSeries, paintDonutSeries, paintNumberSeries, sortForDisplay,
-	paintFunnelSeries, paintChartSeries } = exported;
+	paintFunnelSeries, paintChartSeries, embeddedDashboardMarkup } = exported;
 
 // --- the tab intro's Markdown subset (#4) ----------------------------------
 // Escaped FIRST, formatted after, so nothing a person types can become markup.
@@ -376,6 +376,89 @@ paintChartSeries(limited, [{ label: "First", value: 1 }, { label: "Second", valu
 	cardWith({ status: "available", render_as: "donut", palette: ["#111111"], limit: 1 }));
 assert.ok(limited.innerHTML.includes("First") && !limited.innerHTML.includes("Second"),
 	"a limited donut keeps the rows Insights chose, not the largest ones");
+
+// --- PHASE 1 PILOT: the lazy embed --------------------------------------
+//
+// THE property. Every sub-criterion panel is in the DOM at once and switching
+// tabs only toggles `hidden`, so an iframe carrying a src in the markup would
+// boot one Insights SPA per sub-criterion the moment a criterion opens. The
+// URL therefore waits in data-embed-src until the tab is actually shown.
+const embedOk = embeddedDashboardMarkup({ embeddedDashboard: "dash-1",
+	embeddedDashboardReadable: true });
+assert.ok(!/\ssrc=/.test(embedOk),
+	"the embed markup carries NO src -- a hidden iframe with one still loads");
+assert.ok(embedOk.includes('data-embed-src="/insights/dashboards/dash-1"'),
+	"the URL waits in data-embed-src");
+assert.ok(!embedOk.includes("/insights/shared/"),
+	"and it is the AUTHENTICATED route, never the is_public shared one");
+
+const embedDenied = embeddedDashboardMarkup({ embeddedDashboard: "dash-2",
+	embeddedDashboardReadable: false });
+assert.ok(!embedDenied.includes("<iframe"),
+	"a dashboard this user cannot open renders no frame at all...");
+assert.ok(embedDenied.includes("cannot open"),
+	"...and says so, rather than leaving a blank rectangle");
+
+// A DOM small enough to hand-build and real enough to prove the promotion.
+function el(tag, attrs) {
+	const node = { tag, dataset: {}, hidden: false, children: [], listeners: {},
+		parentNode: null, src: "",
+		addEventListener(name, fn) { (this.listeners[name] = this.listeners[name] || []).push(fn); },
+		closest(sel) {
+			let at = this;
+			while (at) {
+				if (sel === "[data-tab-charts]" && at.dataset.tabCharts !== undefined) return at;
+				at = at.parentNode;
+			}
+			return null;
+		},
+		querySelector() { return null; },
+		querySelectorAll(sel) {
+			const out = [];
+			(function walk(n) {
+				if (sel === "iframe[data-embed-src]"
+					&& n.tag === "iframe" && n.dataset.embedSrc !== undefined) out.push(n);
+				n.children.forEach(walk);
+			})(this);
+			return out;
+		} };
+	Object.assign(node.dataset, attrs || {});
+	return node;
+}
+function area(tab, hidden, url) {
+	const a = el("section", { tabCharts: tab });
+	a.hidden = hidden;
+	const frame = el("iframe", { embedSrc: url, embedName: tab });
+	frame.parentNode = a;
+	a.children.push(frame);
+	return { area: a, frame };
+}
+const shown = area("4.1.1", false, "/insights/dashboards/dash-1");
+const stillHidden = area("4.1.2", true, "/insights/dashboards/dash-2");
+const root = el("div", {});
+root.children.push(shown.area, stillHidden.area);
+shown.area.parentNode = root;
+stillHidden.area.parentNode = root;
+
+exported.loadVisibleEmbeds(root);
+assert.strictEqual(shown.frame.src, "/insights/dashboards/dash-1",
+	"the VISIBLE tab's frame gets its src and loads");
+assert.strictEqual(stillHidden.frame.src, "",
+	"the HIDDEN tab's frame does not -- this is the whole point of the step");
+assert.strictEqual(stillHidden.frame.dataset.embedSrc, "/insights/dashboards/dash-2",
+	"...and its URL is still waiting for the tab to be opened");
+
+// Promoted once. Returning to a tab must reuse the frame someone waited for.
+shown.frame.src = "";
+exported.loadVisibleEmbeds(root);
+assert.strictEqual(shown.frame.src, "",
+	"a second pass does not re-set src -- switching back never reloads the dashboard");
+
+// ...and the hidden one loads when it is finally shown.
+stillHidden.area.hidden = false;
+exported.loadVisibleEmbeds(root);
+assert.strictEqual(stillHidden.frame.src, "/insights/dashboards/dash-2",
+	"showing the tab is what loads it, and only then");
 
 // The labelled fallback: never blank, never broken, always says why.
 const fallback = node();

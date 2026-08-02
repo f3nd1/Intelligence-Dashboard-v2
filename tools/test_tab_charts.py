@@ -60,6 +60,8 @@ class State:
 	executed = []
 	query_workbook = {}    # query name -> its Insights Workbook, "" for none
 	workbook_titles = {}   # workbook name -> title, absent = unreadable record
+	dashboards = {}          # Insights Dashboard v3 name -> title
+	readable_dashboards = set()   # of those, what THIS user may read
 
 
 class FakeDoc:
@@ -134,6 +136,12 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 	# Workbook TITLES. Only the ones asked for, and only ones that exist -- a
 	# workbook record this user cannot read simply is not returned, which is
 	# what makes the id-as-label fallback reachable.
+	if doctype == "Insights Dashboard v3":
+		wanted = (filters or {}).get("name")
+		names = [n for n in sorted(State.dashboards) if n in State.readable_dashboards]
+		if wanted:
+			names = [n for n in names if n == wanted]
+		return [{"name": n, "title": State.dashboards[n]} for n in names]
 	if doctype == "Insights Workbook":
 		wanted = set(((filters or {}).get("name") or ["in", []])[1])
 		return [{"name": name, "title": title}
@@ -296,6 +304,8 @@ def reset():
 	State.executed = []
 	State.query_workbook = {}
 	State.workbook_titles = {}
+	State.dashboards = {}
+	State.readable_dashboards = set()
 
 
 def source_of(function_name):
@@ -1322,6 +1332,60 @@ report(tab_charts.search("", limit=50, workbook="")["counts"]["all"]
 	"...while a BLANK workbook means 'not narrowed', same as omitting it")
 report(tab_charts.search("", limit=50, workbook="wb-quality")["workbook"] == "wb-quality",
 	"the response says which workbook it answered for")
+
+
+# --- PHASE 1 PILOT: one embedded Insights dashboard per tab -----------------
+#
+# Additive by construction. A tab without the field set must behave exactly as
+# it did, and clearing the field must put an embedded tab back -- that is what
+# makes this reversible without a migration.
+reset()
+State.dashboards = {"dash-ok": "Sophia Pilot", "dash-hidden": "Payroll dashboard"}
+State.readable_dashboards = {"dash-ok"}
+
+report(tab_charts.get_tab("criterion_1", "overview")["embedded_dashboard"] == "",
+	"a tab with nothing embedded says so, rather than omitting the field")
+
+tab_charts.set_dashboard("criterion_1", "overview", "dash-ok")
+after = tab_charts.get_tab("criterion_1", "overview")
+report(after["embedded_dashboard"] == "dash-ok", "the dashboard id is stored and returned")
+report(after["embedded_dashboard_readable"] is True,
+	"...with whether THIS user can open it, so the page can say why it is blank")
+report(after["charts"] == [], "the painted chart list is untouched by embedding")
+
+# The write refuses an id this user cannot read. Not the security boundary --
+# the iframe's own session is -- but a typo caught here beats an empty frame
+# everyone assumes is a bug in the embed.
+report(raises(ValidationError_, tab_charts.set_dashboard,
+	"criterion_1", "overview", "dash-hidden"),
+	"a dashboard this user cannot read is refused on write")
+report(raises(ValidationError_, tab_charts.set_dashboard,
+	"criterion_1", "overview", "dash-does-not-exist"),
+	"...and so is one that does not exist")
+report(tab_charts.get_tab("criterion_1", "overview")["embedded_dashboard"] == "dash-ok",
+	"...and neither refusal disturbed what was already set")
+
+# Read is deliberately softer than write: a dashboard that STOPS being readable
+# must not make the whole tab fail to load.
+State.readable_dashboards = set()
+soft = tab_charts.get_tab("criterion_1", "overview")
+report(soft["embedded_dashboard"] == "dash-ok" and soft["embedded_dashboard_readable"] is False,
+	"a dashboard that became unreadable still loads the tab, flagged not readable")
+State.readable_dashboards = {"dash-ok"}
+
+report(any(entry["action"] == "dashboard_embedded" for entry in State.audit),
+	"embedding is written to the tab's audit trail")
+tab_charts.set_dashboard("criterion_1", "overview", "")
+report(tab_charts.get_tab("criterion_1", "overview")["embedded_dashboard"] == "",
+	"clearing the field reverts the tab -- no migration to undo")
+report(any(entry["action"] == "dashboard_unembedded" for entry in State.audit),
+	"...and that is audited too")
+
+State.may_write = False
+report(raises(PermissionError_, tab_charts.set_dashboard,
+	"criterion_1", "overview", "dash-ok"),
+	"embedding needs the same tab edit permission as every other tab setting")
+State.may_write = True
 
 
 # --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------

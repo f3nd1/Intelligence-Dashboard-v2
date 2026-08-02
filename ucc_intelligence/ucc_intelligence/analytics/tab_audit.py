@@ -45,6 +45,8 @@ ACTIONS = (
 	"intro_edited",
 	"question_hidden",
 	"question_shown",
+	"dashboard_embedded",
+	"dashboard_unembedded",
 )
 
 MAX_VALUE_LENGTH = 4000
@@ -143,3 +145,10 @@ def intro_edited(before, after):
 
 def question_visibility(question, visible):
 	return "%s the management question %r" % ("Showed" if visible else "Hid", question)
+
+
+def dashboard_embedded(title, dashboard):
+	"""Which Insights dashboard this tab now embeds, or that it stopped."""
+	if not dashboard:
+		return "Stopped embedding an Insights dashboard on this tab"
+	return "Embedded the Insights dashboard %s" % chart_label(title, dashboard)
