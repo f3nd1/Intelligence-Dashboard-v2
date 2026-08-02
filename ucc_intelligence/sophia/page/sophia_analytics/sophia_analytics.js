@@ -1948,15 +1948,26 @@ const PICKER_KINDS=[["all","All"],["charts","Charts only"],["tables","Table only
 // know are somewhere else. "All workbooks" stays as the first entry: the
 // charts already on the tabs were picked from a flat list, so someone
 // re-adding one has no workbook to remember, and that case still has to work.
-const ALL_WORKBOOKS="__all__";
+// STEP 1 IS WORKBOOKS AND NOTHING ELSE.
+//
+// It previously carried an "All workbooks" row at the top, offering the whole
+// flat list in one click. Felix saw it on the bench and had it removed: a
+// step-one entry that skips step one is not a two-step flow, it is a one-step
+// flow with a detour, and its total sat next to a workbook's own count with
+// nothing to tell the two numbers apart.
+//
+// The server still accepts an unscoped search -- settings/status.py uses it --
+// so nothing was deleted, only stopped being offered here.
 openModal("Add a chart to this tab",
 '<div class="ucc-chart-picker">'
 +'<div data-picker-step1>'
-+'<p class="ucc-chart-picker-note">Which workbook is it in?</p>'
++'<p class="ucc-chart-picker-note">Charts and queries live in workbooks in '
++'Frappe Insights. Choose the workbook first.</p>'
 +'<div class="ucc-chart-picker-results" data-workbook-list>'+tabChartNotice("Loading…")+"</div></div>"
 +'<div data-picker-step2 hidden>'
-+'<button type="button" class="ucc-chart-picker-back" data-picker-back>&#8592; All workbooks</button>'
++'<button type="button" class="ucc-chart-picker-back" data-picker-back>&#8592; Choose a different workbook</button>'
 +'<h4 class="ucc-chart-picker-where" data-picker-where></h4>'
++'<p class="ucc-chart-picker-note" data-picker-summary></p>'
 +'<div class="ucc-chart-picker-kinds" role="group" aria-label="Filter the list">'
 +PICKER_KINDS.map(function(entry){
 return'<button type="button" class="ucc-chart-picker-kind'+(entry[0]==="all"?" is-on":"")
@@ -1966,7 +1977,7 @@ return'<button type="button" class="ucc-chart-picker-kind'+(entry[0]==="all"?" i
 }).join("")+"</div>"
 +'<input type="search" class="ucc-chart-picker-search" data-chart-picker-search '
 +'placeholder="Search Frappe Insights charts…" autocomplete="off" aria-label="Search Insights charts">'
-+'<p class="ucc-chart-picker-note">Only charts you can already open in Frappe Insights are listed. Ones marked <em>Table only</em> have no Insights chart built yet and will show their rows as a table.</p>'
++'<p class="ucc-chart-picker-note">Only things you can already open in Frappe Insights are listed.</p>'
 +'<div class="ucc-chart-picker-results" data-chart-picker-results>'+tabChartNotice("Loading…")+"</div>"
 +"</div></div>");
 const modal=ensureModal();
@@ -1974,12 +1985,28 @@ const step1=modal.querySelector("[data-picker-step1]");
 const step2=modal.querySelector("[data-picker-step2]");
 const bookList=modal.querySelector("[data-workbook-list]");
 const where=modal.querySelector("[data-picker-where]");
+const summary=modal.querySelector("[data-picker-summary]");
 const input=modal.querySelector("[data-chart-picker-search]");
 const results=modal.querySelector("[data-chart-picker-results]");
 if(!input||!results||!step1||!step2||!bookList)return;
 let timer=null;
 let kind="all";
-let workbook=ALL_WORKBOOKS;
+// No workbook chosen yet. Step 2 never renders until this is set, so the
+// picker cannot open onto a list of charts.
+let workbook="";
+
+// EVERY NUMBER SAYS WHAT IT COUNTS.
+//
+// A bare "11" beside an "All 2" reads as a contradiction, because neither says
+// what it is counting. These spell it out in words, and the workbook's name
+// sits above its own numbers so a count is never orphaned from its subject.
+function countPhrase(counts){
+const parts=[];
+if(counts.charts)parts.push(counts.charts+(counts.charts===1?" chart":" charts"));
+if(counts.tables)parts.push(counts.tables
++(counts.tables===1?" query with no chart":" queries with no chart"));
+return parts.join(" · ")||"nothing you can read";
+}
 
 function listWorkbooks(){
 if(!(window.frappe&&frappe.call)){bookList.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
@@ -1991,22 +2018,15 @@ const books=data.workbooks||[];
 if(!books.length){
 bookList.innerHTML=tabChartNotice(data.message
 ||"No Insights workbook holds anything you can read.");return;}
-const total=data.total_counts||{};
-// "All workbooks" first and marked as the escape hatch, not buried under
-// the individual ones -- someone who does not know where a thing lives
-// should not have to guess before they can search.
-bookList.innerHTML=
-'<button type="button" class="ucc-chart-picker-result is-all" data-pick-workbook="'+esc(ALL_WORKBOOKS)+'">'
-+"All workbooks"
-+'<span class="ucc-chart-picker-type">'+esc(total.all==null?"":total.all+" items")+"</span></button>"
-+books.map(function(book){
-return'<button type="button" class="ucc-chart-picker-result" data-pick-workbook="'
-+esc(book.workbook)+'" data-workbook-title="'+esc(book.title)+'">'
-+esc(book.title)
-+'<span class="ucc-chart-picker-type">'+esc(book.counts.all+" items")+"</span>"
-+(book.counts.charts
-?'<span class="ucc-chart-picker-type">'+esc(book.counts.charts)+" with a chart</span>"
-:"")
+// Workbooks and nothing else. The name on its own line, what is inside it
+// underneath in words -- so no number on this screen is a bare figure a
+// reader has to attribute to something.
+bookList.innerHTML=books.map(function(book){
+return'<button type="button" class="ucc-chart-picker-result ucc-chart-picker-book" '
++'data-pick-workbook="'+esc(book.workbook)+'" data-workbook-title="'+esc(book.title)+'" '
++'data-workbook-counts="'+esc(JSON.stringify(book.counts))+'">'
++'<span class="ucc-chart-picker-book-name">'+esc(book.title)+"</span>"
++'<span class="ucc-chart-picker-book-what">'+esc(countPhrase(book.counts))+"</span>"
 +"</button>";
 }).join("");
 },
@@ -2018,12 +2038,19 @@ function showStep(which,title){
 step1.hidden=which!==1;
 step2.hidden=which!==2;
 if(which===2){
-where.textContent=title||"All workbooks";
+// The workbook's name is a HEADING above its own numbers, so "All 2" can
+// only be read as "2 in this workbook" -- there is no other subject on
+// screen for it to belong to.
+where.textContent="In " + (title||"this workbook");
 input.focus();
 }
 }
 
 function search(term){
+// No workbook, no list. Enforced here rather than trusted to the call sites,
+// so the picker cannot be made to open onto a flat cross-workbook list by
+// some future caller reaching search() before a workbook is chosen.
+if(!workbook)return;
 if(!(window.frappe&&frappe.call)){results.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
 frappe.call({
 method:"ucc_intelligence.api.search_insights_charts",
@@ -2038,6 +2065,11 @@ PICKER_KINDS.forEach(function(entry){
 const badge=modal.querySelector('[data-kind-count="'+entry[0]+'"]');
 if(badge)badge.textContent=counts[entry[0]]==null?"":" "+counts[entry[0]];
 });
+// Says what the pills are counting, in words, once. Without it the three
+// figures are the only numbers on screen and nothing states their subject.
+if(summary)summary.textContent=counts.all==null?""
+:("This workbook holds "+countPhrase(counts)+". Ones marked Table only have no "
++"Insights chart built yet and will show their rows as a table.");
 if(!charts.length){
 results.innerHTML=tabChartNotice(data.message
 ||(kind==="charts"?"No Insights chart is built on anything here."
@@ -2091,11 +2123,14 @@ other.setAttribute("aria-pressed",String(on));
 });
 input.value="";
 results.innerHTML=tabChartNotice("Loading…");
-showStep(2,pick.dataset.workbookTitle||"All workbooks");
+if(summary)summary.textContent="";
+showStep(2,pick.dataset.workbookTitle);
 search("");
 });
+// Back to step 1 clears the chosen workbook, so the picker cannot be left
+// holding a scope that is no longer on screen.
 const back=modal.querySelector("[data-picker-back]");
-if(back)back.addEventListener("click",function(){showStep(1);});
+if(back)back.addEventListener("click",function(){workbook="";showStep(1);});
 results.addEventListener("click",function(event){
 const pick=event.target.closest("[data-pick-chart]");
 if(!pick)return;
@@ -2376,7 +2411,9 @@ style.textContent=`
  cursor:pointer;padding:0;margin:0 0 8px}
 .ucc-chart-picker-back:hover{text-decoration:underline}
 .ucc-chart-picker-where{margin:0 0 10px;font-size:14px;color:#172554}
-.ucc-chart-picker-result.is-all{border-color:#172554;font-weight:600;color:#172554}
+.ucc-chart-picker-book{display:flex;flex-direction:column;gap:2px;padding:10px 12px}
+.ucc-chart-picker-book-name{font-weight:600;color:#172554}
+.ucc-chart-picker-book-what{font-size:11px;color:#64748B}
 /* PHASE 1 PILOT: the embedded Insights dashboard. A fixed height, because an
    iframe does not size to its content and there is no same-origin-safe way to
    ask it how tall it is without coupling to Insights' internals. */
