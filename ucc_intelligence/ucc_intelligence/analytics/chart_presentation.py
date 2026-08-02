@@ -69,6 +69,24 @@ WHAT THE 2026-08-03 CONFIG PROBE SETTLED (probe_insights_chart_config.py)
         Y-Max              y_axis.max                 number
         Split Series       split_by  {dimension, max_split_values}
 
+    CONFIRMED ON THE LIVE DATABASE, 2026-08-03, chart o2kvutcfld: every one of
+    those paths held the value Felix set in Chrome. Not candidates.
+
+    Y-MIN AND Y-MAX ARE STORED AS STRINGS. He read back `"0"` and `"200"`, not
+    0 and 200. Whoever wires them must coerce, and must not test them for
+    truthiness on the way: `"0"` is truthy in Python while `0` is falsy, so
+    `if config["y_axis"].get("min"):` and `if min is not None:` disagree on
+    exactly the value someone sets deliberately to stop a truncated axis
+    exaggerating a difference. Coerce with `frappe.utils.flt`, test with
+    `is not None`.
+
+    A CHART'S CONFIG KEEPS KEYS FROM ITS PREVIOUS TYPE. o2kvutcfld was a Donut
+    when it was probed on 2026-08-02 and a Bar the next day, and it still
+    carried `label_column` and `label_position` alongside its new x_axis/y_axis.
+    This is why axis resolution is ordered BY THE CURRENT chart_type rather than
+    by which key happens to be populated -- the Donut fix was not a special
+    case, it was the general one.
+
     Note `y_axis.min`/`y_axis.max`, NOT `y_min`/`y_max`. And note that ALL NINE
     are AXIS-CHART keys: only Bar, Line and Row declare x_axis/y_axis at all.
     DonutChartConfig declares label_column, value_column, legend_position,

@@ -1161,5 +1161,44 @@ report(any(row["chart"] == "q-open" for row in rows)
 report(all(row["title"] != row["chart"] for row in rows),
 	"no surviving row is labelled with its own id")
 
+
+# --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------
+#
+# Found while checking whether any of the nine controls was worth wiring, and
+# it is worse than any of them: chart_presentation resolved the axes, validated
+# them against the columns the query really returns, put them in the contract
+# -- and the series builder ignored all of that and picked the measure by
+# NAME. Correct for the six admission charts it was written for, which all
+# measure `count`. For a chart measuring anything else, every value came out 0
+# and the card drew a flat chart, with the real numbers sitting in the table
+# view beside it. 259 checks passed while it did that.
+from ucc_intelligence.analytics.admission_intelligence_embed import (  # noqa: E402
+	rows_to_chart_series)
+
+report(rows_to_chart_series([{"status": "Open", "count": 12}, {"status": "Shut", "count": 5}])
+	== [{"label": "Open", "value": 12}, {"label": "Shut", "value": 5}],
+	"the admission path, with no columns passed, is exactly as it was")
+report(rows_to_chart_series([{"status": "Open", "total_fees": 9800}],
+	label_column="status", value_column="total_fees") == [{"label": "Open", "value": 9800}],
+	"a measure that is not `count` is READ, not silently drawn as zero")
+report(rows_to_chart_series([{"status": "Open", "total_fees": 9800}])
+	== [{"label": "Open", "value": 0}],
+	"...and without the columns it still guesses, which is the bug being fixed")
+report(rows_to_chart_series([{"programme": "BSc", "status": "Open", "count": 12}],
+	label_column="status", value_column="count") == [{"label": "Open", "value": 12}],
+	"with two dimensions the X AXIS wins, not whichever key came first")
+report(rows_to_chart_series([{"status": "Open", "count": 12}],
+	label_column="gone", value_column="also_gone") == [{"label": "Open", "value": 12}],
+	"a column the query no longer returns falls back rather than drawing blanks")
+
+# And the caller passes them. Asserted at the call site, because the parameter
+# existing is worth nothing if chart_data() never fills it in.
+import inspect as _inspect  # noqa: E402
+
+chart_data_source = _inspect.getsource(tab_charts.chart_data)
+report("label_column=presentation" in chart_data_source
+	and "value_column=" in chart_data_source,
+	"chart_data() passes the resolved axes into the series builder")
+
 print(("PASS" if all(checks) else "FAIL") + ": %d/%d checks" % (sum(checks), len(checks)))
 sys.exit(0 if all(checks) else 1)
