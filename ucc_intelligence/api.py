@@ -361,6 +361,22 @@ def reindex_knowledge(source=None):
 
 
 @frappe.whitelist()
+def get_platform_settings():
+	"""Every institution-wide setting, for the one settings surface.
+
+	System Manager only. No secret is returned: the AI provider key lives in
+	site config and this never reads it.
+	"""
+	return _operations.platform_settings()
+
+
+@frappe.whitelist()
+def save_platform_settings(values):
+	"""Save the settings above. Allowlisted field names only, System Manager."""
+	return _operations.save_platform_settings(values)
+
+
+@frappe.whitelist()
 def get_access_overview():
 	"""Who can see what, for the settings page. Existing permissions only."""
 	return _operations.access_overview()

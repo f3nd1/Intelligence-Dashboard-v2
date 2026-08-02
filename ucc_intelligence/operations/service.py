@@ -72,6 +72,17 @@ The real fields, from the JSON:
 `tools/test_operations.py` now reads those JSON files and asserts every field
 this module requests really exists, so the next wrong name fails here rather
 than on Felix's screen.
+
+DOCUMENT KNOWLEDGE IS NOT A SIDE FEATURE (framing corrected 2026-08-03)
+An earlier version of this module and its UI described the knowledge base as
+one screen's index. That is wrong, and Felix corrected it. Document Search is
+one of the three pillars of the original design -- reasoning (OpenAI),
+memory (Zep/Graphiti, deferred and not built), and Document Search -- which
+together form the brain behind a single AI Gateway serving the criterion
+dashboards, Ask UCC, monitoring and agents, reports and alerts. A document
+registered here becomes part of what the WHOLE platform can draw on. The
+on-page copy now says so. Whether it deserves its own place in the main
+navigation rather than a panel inside Operations is Felix's call, not mine.
 """
 
 import json
@@ -87,6 +98,25 @@ CHUNK_DOCTYPE = "UCC Knowledge Chunk"
 FINDING_STATUSES = ("Open", "Resolved", "Suppressed")
 SEVERITIES = ("High", "Medium", "Low")
 MAX_ROWS = 200
+
+SETTINGS_DOCTYPE = "UCC Intelligence Settings"
+# The gear used to make you CHOOSE between a Sophia page and the Frappe form,
+# which meant three of the five sections were always somewhere you were not.
+# This is the allowlist behind the one surface that now serves all five.
+# Only the FIELD NAMES are stated here. Their types come from the DocType's own
+# meta, for the same reason the monitoring field names now do: a type restated
+# in a second place is a type that can drift, and `ai_provider` is a Select,
+# which the first version of this list had confidently written down as Data.
+SETTINGS_SECTIONS = (
+	("ai", "AI and providers", ("enable_ai", "ai_provider", "ai_model",
+		"max_output_tokens", "default_temperature", "ai_request_timeout_seconds")),
+	("presentation", "Presentation", ("chart_palette",)),
+	("knowledge", "Document knowledge", ("enable_document_knowledge",
+		"enable_persistent_conversations")),
+	("monitoring", "Monitoring", ("enable_monitoring",)),
+)
+SETTINGS_FIELDS = tuple(field for _key, _label, fields in SETTINGS_SECTIONS
+	for field in fields)
 
 
 def _text(value):
@@ -486,3 +516,83 @@ def set_rule_config(rule_id, enabled=None, severity=None):
 	doc.save() if existing else doc.insert()
 	return {"ok": True, "rule_id": rule_id,
 		"enabled": bool(doc.enabled), "severity": doc.severity}
+
+
+# --- one settings surface, all five sections --------------------------------
+
+def platform_settings():
+	"""Everything set once for the whole institution, in one call.
+
+	System Manager only. These are institution-wide switches -- which provider
+	answers, how warm the model runs, what the charts are coloured with, and
+	whether monitoring runs at all. None of it is per-user, so nothing here is
+	scoped to the caller; the gate is simply who may see it.
+	"""
+	frappe.only_for("System Manager")
+	doc = frappe.get_single(SETTINGS_DOCTYPE)
+	meta = frappe.get_meta(SETTINGS_DOCTYPE)
+	sections = []
+	for key, label, fields in SETTINGS_SECTIONS:
+		rendered = []
+		for fieldname in fields:
+			df = meta.get_field(fieldname)
+			if not df:
+				# The field was renamed or removed. Skipping beats throwing:
+				# the other four sections are still worth showing.
+				continue
+			rendered.append({
+				"fieldname": fieldname,
+				"fieldtype": df.fieldtype,
+				"options": df.options or "",
+				"value": doc.get(fieldname),
+			})
+		if rendered:
+			sections.append({"key": key, "label": label, "fields": rendered})
+	return {"ok": True, "sections": sections}
+
+
+def save_platform_settings(values):
+	"""Write the allowlisted settings, and only those.
+
+	The allowlist is the whole point. A settings endpoint that writes whatever
+	key it is handed is a write-any-field-on-a-Single endpoint, and this one is
+	reachable from a browser. Anything not in SETTINGS_FIELDS is ignored in
+	silence -- not an error, because a stale open tab sending an old field name
+	should not fail the four that are still valid.
+	"""
+	frappe.only_for("System Manager")
+	if isinstance(values, str):
+		try:
+			values = json.loads(values)
+		except ValueError:
+			frappe.throw(frappe._("Settings could not be read."))
+	if not isinstance(values, dict):
+		frappe.throw(frappe._("Settings could not be read."))
+
+	doc = frappe.get_single(SETTINGS_DOCTYPE)
+	meta = frappe.get_meta(SETTINGS_DOCTYPE)
+	written = []
+	for fieldname, value in values.items():
+		if fieldname not in SETTINGS_FIELDS:
+			continue
+		df = meta.get_field(fieldname)
+		if not df:
+			continue
+		if df.fieldtype == "Check":
+			value = 1 if _text(value).lower() in ("1", "true", "yes", "on") else 0
+		elif df.fieldtype == "Int":
+			value = frappe.utils.cint(value)
+		elif df.fieldtype == "Float":
+			value = frappe.utils.flt(value)
+		else:
+			value = _text(value)
+		doc.set(fieldname, value)
+		written.append(fieldname)
+	if written:
+		doc.save()
+		# Who changed an institution-wide switch is worth knowing later. The
+		# names only -- the values are on the record itself, and one of these
+		# fields sits next to a provider credential.
+		frappe.logger("ucc_intelligence").info(
+			"platform settings changed by %s: %s" % (frappe.session.user, ", ".join(written)))
+	return {"ok": True, "written": written}
