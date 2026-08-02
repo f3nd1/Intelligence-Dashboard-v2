@@ -53,12 +53,14 @@ const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown"
 	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId",
 	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
 	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
-	"paintTableOnly", "sortForDisplay", "embeddedDashboardMarkup", "loadVisibleEmbeds"];
+	"paintTableOnly", "sortForDisplay", "embeddedDashboardMarkup", "loadVisibleEmbeds",
+	"hideInsightsChrome"];
 // Module-level consts, which lift() cannot reach because it looks for
 // `function <name>(`. Taken from the real source VERBATIM rather than retyped,
 // so a painter or a threshold changed on the page cannot silently disagree
 // with what this harness tests.
-const CONSTS = ["CHART_PAINTERS", "DONUT_LABEL_MIN_SHARE", "SORTED_BY_VALUE"]
+const CONSTS = ["CHART_PAINTERS", "DONUT_LABEL_MIN_SHARE", "SORTED_BY_VALUE",
+	"INSIGHTS_CHROME_CSS"]
 	.map(function (name) {
 		const found = (SRC.match(new RegExp("const " + name + "=[\\s\\S]*?;\\n")) || [])[0];
 		assert.ok(found, "the page declares " + name);
@@ -68,7 +70,8 @@ const CONSTS = ["CHART_PAINTERS", "DONUT_LABEL_MIN_SHARE", "SORTED_BY_VALUE"]
 const exported = new Function("window", "document", "frappe", "CSS",
 	"const tabChartState={};let lastView=null;function setChartView(c,v){lastView=v;}\n"
 	+ CONSTS + "\n" + NEEDED.map(lift).join("\n")
-	+ "\n;return { " + NEEDED.join(", ") + ", tabChartState, viewAfterPaint: () => lastView };"
+	+ "\n;return { " + NEEDED.join(", ")
+	+ ", INSIGHTS_CHROME_CSS, tabChartState, viewAfterPaint: () => lastView };"
 )(win, doc, frappe, { escape: (s) => s });
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
 	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
@@ -459,6 +462,57 @@ stillHidden.area.hidden = false;
 exported.loadVisibleEmbeds(root);
 assert.strictEqual(stillHidden.frame.src, "/insights/dashboards/dash-2",
 	"showing the tab is what loads it, and only then");
+
+// --- Insights' own app shell, hidden from the frame ------------------------
+// App.vue wraps every authenticated route in <AppSidebar/>, and Dashboard.vue
+// adds a breadcrumb header, so an embed arrives carrying Insights' navigation.
+// The frame is same-origin, so it is hidden with a stylesheet in the frame's
+// own document. Nothing here touches permissions -- the route still runs as
+// the signed-in user.
+function fakeFrame(contentDocument) {
+	const frame = el("iframe", { embedSrc: "/insights/dashboards/dash-3", embedName: "4.2.1" });
+	Object.defineProperty(frame, "contentDocument", { get: contentDocument });
+	return frame;
+}
+const appended = [];
+const sameOrigin = fakeFrame(() => ({
+	head: { appendChild: (n) => appended.push(n) },
+	createElement: () => ({ setAttribute() {}, textContent: "" }),
+}));
+assert.strictEqual(exported.hideInsightsChrome(sameOrigin), true,
+	"a same-origin frame accepts the stylesheet");
+assert.strictEqual(appended.length, 1, "...exactly one, appended to its head");
+assert.ok(/#app > div > div\.border-r:first-child\{display:none!important\}/
+	.test(appended[0].textContent), "the AppSidebar wrapper is what gets hidden");
+assert.ok(/#app > div > div > header\{display:none!important\}/
+	.test(appended[0].textContent), "...and Dashboard.vue's breadcrumb header too");
+assert.ok(!/insights\/shared|is_public/.test(exported.INSIGHTS_CHROME_CSS),
+	"hiding chrome is a stylesheet, never a switch to the public/shared route");
+
+// Cross-origin, or Insights not yet parsed: refuse quietly, never throw. A
+// dashboard nobody can see because the injection blew up is far worse than a
+// dashboard with a menu beside it.
+const crossOrigin = fakeFrame(() => { throw new Error("SecurityError"); });
+assert.strictEqual(exported.hideInsightsChrome(crossOrigin), false,
+	"a frame whose document cannot be reached returns false rather than throwing");
+assert.strictEqual(exported.hideInsightsChrome(fakeFrame(() => ({ head: null }))), false,
+	"...and so does one with no head yet");
+
+// And the loader is what calls it: promoting src without stripping the chrome
+// would pass every assertion above and still ship the sidebar.
+const chromeArea = area("4.2.2", false, "/insights/dashboards/dash-4");
+const chromeRoot = el("div", {});
+chromeRoot.children.push(chromeArea.area);
+chromeArea.area.parentNode = chromeRoot;
+const injected = [];
+Object.defineProperty(chromeArea.frame, "contentDocument", { get: () => ({
+	head: { appendChild: (n) => injected.push(n) },
+	createElement: () => ({ setAttribute() {}, textContent: "" }),
+}) });
+exported.loadVisibleEmbeds(chromeRoot);
+(chromeArea.frame.listeners.load || []).forEach((fn) => fn.call(chromeArea.frame));
+assert.strictEqual(injected.length, 1,
+	"the frame's load handler is what hides the chrome, on the real path");
 
 // The labelled fallback: never blank, never broken, always says why.
 const fallback = node();

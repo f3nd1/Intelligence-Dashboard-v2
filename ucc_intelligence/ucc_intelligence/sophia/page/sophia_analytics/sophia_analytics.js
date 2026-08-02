@@ -403,6 +403,41 @@ loadVisibleEmbeds(dashboard);
 // So the URL waits in data-embed-src and is promoted to src when the tab is
 // actually shown. Promoted ONCE: the flag is removed with the attribute, so
 // returning to a tab reuses the frame someone already waited for.
+// Insights' own app shell, hidden from the frame -- NOT bypassed.
+//
+// App.vue renders <AppSidebar/> (account switcher, Dashboards / Workbooks /
+// Data Sources / Settings) around every route that does not set
+// meta.hideSidebar, and Dashboard.vue adds a breadcrumb + refresh header.
+// /dashboards/:name sets no such flag, so an embed shows both. There is no
+// authenticated chrome-free route: /workbook/:wb sets hideSidebar but
+// substitutes the workbook EDITOR's own navbar and sidebar, and only
+// /shared/* is genuinely bare -- and that one is is_public-gated, which is
+// the bypass this build refuses.
+//
+// The frame is same-origin, so the chrome can be hidden with a stylesheet
+// appended to the frame's OWN document. This changes nothing about who may
+// read what: the route still runs as the signed-in user and Insights still
+// runs its own permission query. It only stops Sophia's page carrying a
+// second navigation menu inside a panel.
+//
+// The coupling is real but bounded: if Insights restructures its shell the
+// selectors stop matching and the chrome comes back. Nothing breaks, and the
+// caption never promises the chrome is gone.
+const INSIGHTS_CHROME_CSS=
+"#app > div > div.border-r:first-child{display:none!important}"
++"#app > div > div > header{display:none!important}";
+function hideInsightsChrome(frame){
+try{
+const doc=frame.contentDocument;
+if(!doc||!doc.head)return false;
+const style=doc.createElement("style");
+style.setAttribute("data-ucc-embed-chrome","");
+style.textContent=INSIGHTS_CHROME_CSS;
+doc.head.appendChild(style);
+return true;
+}catch(error){return false;}
+}
+
 function loadVisibleEmbeds(root){
 (root||document).querySelectorAll("iframe[data-embed-src]").forEach(function(frame){
 const area=frame.closest("[data-tab-charts]");
@@ -412,13 +447,19 @@ delete frame.dataset.embedSrc;
 const started=(window.performance&&performance.now)?performance.now():0;
 frame.addEventListener("load",function(){
 const ms=started?Math.round(performance.now()-started):0;
+const stripped=hideInsightsChrome(frame);
 const note=frame.parentNode&&frame.parentNode.querySelector("[data-embed-timing]");
 if(note)note.textContent="Loaded in "+ms+" ms";
 // Into the diagnostics log too, so the number survives the page being
 // used rather than living only in a caption nobody screenshots.
 const card=frame.closest("[data-dashboard-panel],.ucc-criterion-dashboard");
-if(card)logEvent(card,"INFO","embed_loaded",
+if(card){logEvent(card,"INFO","embed_loaded",
 frame.dataset.embedName+" · "+ms+" ms");
+// Silent when it works. A failure is worth a line, because the symptom --
+// Insights' menu inside a Sophia panel -- otherwise reads as a bug with no
+// trail back to a version change in Insights.
+if(!stripped)logEvent(card,"WARNING","embed_chrome",
+frame.dataset.embedName+" · Insights' own menu could not be hidden");}
 },{once:true});
 frame.src=url;
 });
@@ -576,20 +617,23 @@ return`<article class="ucc-embedded-chart${editing?" is-editable":""}" data-embe
 //                                  editing only, Cmd+S saves, import handlers
 //   /workbook/:wb/chart/:id        ChartBuilder -- the chart EDITOR
 //   /workbook/:wb/query/:id        the query editor
-//   /dashboards/:name              Dashboard.vue -- grid disabled, no sidebar,
-//                                  no navbar, no editor
-//   /shared/*                      clean, but is_public-only: a permission
-//                                  bypass, forbidden here
+//   /dashboards/:name              Dashboard.vue -- grid disabled, read-only
+//   /shared/*                      no chrome at all, but is_public-only: a
+//                                  permission bypass, forbidden here
 //
-// Only /dashboards/:name is both clean and permission-correct. So a dashboard
-// it is -- which costs nothing, because an Insights dashboard IS a named set
-// of a workbook's charts. The UI says "dashboard" everywhere and explains that
-// relationship, rather than letting the two words blur.
+// Only /dashboards/:name is both read-only and permission-correct. So a
+// dashboard it is -- which costs nothing, because an Insights dashboard IS a
+// named set of a workbook's charts. The UI says "dashboard" everywhere and
+// explains that relationship, rather than letting the two words blur.
 //
-// What still renders inside the frame: Insights' breadcrumb and a small
-// refresh/menu header. NOT stripped -- hiding it would mean injecting CSS
-// against Insights' internal DOM, which breaks on their next release and is
-// exactly the coupling this migration exists to escape.
+// CORRECTION, 2026-08-04. An earlier note here claimed this route has "no
+// sidebar, no navbar". That was wrong, and Felix's screenshot is what proved
+// it. The sidebar is not rendered by Dashboard.vue at all -- App.vue wraps
+// EVERY route in <AppSidebar/> unless route.meta.isGuestView ||
+// route.meta.hideSidebar, and /dashboards/:name sets neither. Dashboard.vue
+// then adds its own breadcrumb header. Reading the leaf component and
+// concluding something about the whole tree is how that error happened.
+// See hideInsightsChrome() below for what is done about it.
 function embeddedDashboardMarkup(state){
 const id=state.embeddedDashboard;
 const name=state.embeddedDashboardTitle||id;
