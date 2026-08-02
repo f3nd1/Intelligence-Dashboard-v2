@@ -161,6 +161,20 @@ def run():
 				print("      -> no LABEL column resolves from any key. The card will")
 				print("         show its rows and say why.")
 
+		# FILTERS -- printed raw, then counted by the code that decides.
+		#
+		# The withholding check used to test the value against (None, "", [],
+		# {}), shapes taken from assumption. Insights stores a filter GROUP:
+		# {"filters": [], "logical_operator": "And"}, which is a dict with two
+		# keys, so an unfiltered chart was withheld as filtered. Printing the
+		# raw value NEXT TO the count is the point -- a probe that reports
+		# "populated: True" tells you nothing about what the code concluded.
+		raw_filters = config.get("filters")
+		print("      raw filters config: %s" % json.dumps(raw_filters, default=str)[:160])
+		print("      filter_count() says: %d" % chart_presentation.filter_count(raw_filters))
+		if not chart_presentation.filter_count(raw_filters):
+			print("      -> NOT withheld for filters. An empty group is not a filter.")
+
 		# What the query really returns, since a config column that is not a
 		# real column is also withheld -- and looks identical from the outside.
 		try:

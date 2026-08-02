@@ -869,6 +869,43 @@ report(with_config(filters=[])["status"] == "available",
 	"an EMPTY filter list is not a filter -- that chart still draws")
 report(with_config(filters={})["status"] == "available", "...nor is an empty object")
 
+# THE SHAPE INSIGHTS ACTUALLY WRITES.
+#
+# The two checks above tested `[]` and `{}` -- both shapes I assumed, neither
+# the one on the bench. Insights stores a filter GROUP, and an empty group is a
+# dict with two keys, so it counted as "has filters" and withheld every chart.
+#
+# These are the VERBATIM values Felix read out of the database, by direct
+# console query, for the three charts on his Sophia tabs. Not a fixture shaped
+# to match the fix -- the live rows, chart id and all. He had set no filters on
+# any of them.
+LIVE_EMPTY_FILTERS = {
+	"noe64v5472": {"filters": [], "logical_operator": "And"},
+	"o80uuu7v3d": {"filters": [], "logical_operator": "And"},
+	"o2kvutcfld": {"filters": [], "logical_operator": "And"},
+}
+for chart_id, live in LIVE_EMPTY_FILTERS.items():
+	report(chart_presentation.filter_count(live) == 0,
+		"live chart %s: its empty filter GROUP counts as 0 filters" % chart_id)
+	report(with_config(filters=live)["status"] == "available",
+		"...so it draws, instead of being withheld as filtered")
+
+# ...and a group that really does hold one still withholds, so the fix did not
+# simply switch the guard off.
+real_group = {"filters": [{"column": "status", "operator": "=", "value": "Open"}],
+	"logical_operator": "And"}
+report(chart_presentation.filter_count(real_group) == 1,
+	"a filter group holding ONE filter counts as 1")
+report(with_config(filters=real_group)["status"] == "table_only",
+	"...and that chart is still withheld")
+nested = {"filters": [{"filters": [], "logical_operator": "Or"}, real_group],
+	"logical_operator": "And"}
+report(chart_presentation.filter_count(nested) == 1,
+	"a nested group counts only the filters inside it, not the groups")
+report(chart_presentation.filter_count({"filters": [], "logical_operator": "And"}) == 0
+	and chart_presentation.filter_count("something unrecognised") == 1,
+	"an unknown non-empty shape still withholds -- ADR-016, refuse rather than infer")
+
 # The keys whose MEANING is unconfirmed are not read at all. Asserted as an
 # absence so nobody quietly wires one later on the strength of its name.
 unconfirmed = with_config(order_by="count desc", value_column="count",

@@ -41,6 +41,15 @@ WHAT THE 2026-08-03 CONFIG PROBE SETTLED (probe_insights_chart_config.py)
                 same chart. On a dashboard used as EduTrust evidence that is
                 not a cosmetic difference. See "filters" below.
 
+                THE STORED SHAPE IS A GROUP, NOT A LIST. Confirmed by direct
+                database query on the live site:
+
+                    {"filters": [], "logical_operator": "And"}
+
+                is what a chart with NO filters carries. Counting it as "has
+                filters" withheld every chart on the platform. filter_count()
+                walks the group; nothing here tests the value's shape.
+
   A NOTE ON NAMES
     The contract calls the resolved axes `x_column` and `y_columns`, NOT
     `label_column`/`value_columns`. Insights has its own `label_column` and
@@ -330,6 +339,40 @@ def axis_keys_for(render_as):
 	return LABELLED_AXIS_KEYS if render_as in LABELLED_RENDERERS else CATEGORY_AXIS_KEYS
 
 
+def filter_count(node):
+	"""How many REAL filter entries a chart's `filters` config holds.
+
+	Public so the bench probe can call the same code the verdict uses.
+
+	Insights does not store a bare list. It stores a filter GROUP:
+
+	    {"filters": [], "logical_operator": "And"}
+
+	confirmed by direct database query on all three of Felix's tab charts,
+	every one of which he had set no filters on. The previous check asked
+	whether the value was one of (None, "", [], {}) -- shapes taken from my own
+	assumption, never from the bench -- so an empty group, being a dict with two
+	keys, counted as "has filters" and withheld all three charts. The mutation
+	test that was supposed to cover this tested `filters=[]` and `filters={}`:
+	both of the shapes I had imagined, neither of the one Insights writes.
+
+	So the count walks the tree instead of testing a shape. A group recurses
+	into its own `filters`; a leaf entry counts as one. Anything unrecognised
+	and non-empty counts as one too -- withholding a chart whose filter shape
+	is unknown is the ADR-016 answer, and the failure that gets noticed rather
+	than the one that quietly shows wrong figures.
+	"""
+	if isinstance(node, dict):
+		if "filters" in node:
+			return filter_count(node["filters"])
+		return 1 if node else 0
+	if isinstance(node, (list, tuple)):
+		return sum(filter_count(item) for item in node)
+	if node in (None, "", 0):
+		return 0
+	return 1
+
+
 def resolve_axes(config, render_as):
 	"""(label column, value columns) as presentation_for resolves them.
 
@@ -567,8 +610,7 @@ def presentation_for(query, columns=None, palette=None):
 	# Withheld rather than approximated. Applying the filters here would mean
 	# reproducing a filter shape that has not been proven on this bench, which
 	# is the mistake ADR-016 exists to prevent.
-	chart_filters = config.get("filters")
-	if chart_filters not in (None, "", [], {}):
+	if filter_count(config.get("filters")):
 		blank["chart_type"] = raw_type
 		blank["reason"] = ("This chart applies its own filters in Insights, which are "
 			"not applied to these rows -- so the figures would not match. The rows "
