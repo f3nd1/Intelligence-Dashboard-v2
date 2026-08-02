@@ -724,8 +724,19 @@ if(presentation.status==="table_only"){
 paintTableOnly(card,node,presentation);
 return;
 }
+// The chart's own `limit` -- "top 10" means ten, and drawing forty bars on a
+// card configured for ten shows something its author did not ask for. Said out
+// loud on the card, because a truncated chart that looks complete is worse
+// than one that admits it.
+const limit=Number(presentation.limit)||0;
+const shown=(limit&&series.length>limit)?series.slice(0,limit):series;
 const painter=CHART_PAINTERS[presentation.render_as]||paintBarSeries;
-painter(card,node,series);
+painter(card,node,shown);
+if(limit&&series.length>limit){
+node.insertAdjacentHTML("beforeend",
+'<p class="ucc-insights-axis-label">Top '+limit+" of "+series.length
++" — this chart is limited in Insights. The table shows all rows.</p>");
+}
 if(presentation.axis_label){
 node.insertAdjacentHTML("beforeend",
 '<p class="ucc-insights-axis-label">'+esc(presentation.axis_label)+"</p>");
