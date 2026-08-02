@@ -58,6 +58,8 @@ class State:
 	insights_charts = []   # Insights Chart v3 records this user may read
 	palette = None         # UCC Intelligence Settings.chart_palette
 	executed = []
+	query_workbook = {}    # query name -> its Insights Workbook, "" for none
+	workbook_titles = {}   # workbook name -> title, absent = unreadable record
 
 
 class FakeDoc:
@@ -129,6 +131,13 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 			else:
 				rows.append(dict(row))
 		return rows[: (limit_page_length or 20)] if limit_page_length else rows
+	# Workbook TITLES. Only the ones asked for, and only ones that exist -- a
+	# workbook record this user cannot read simply is not returned, which is
+	# what makes the id-as-label fallback reachable.
+	if doctype == "Insights Workbook":
+		wanted = set(((filters or {}).get("name") or ["in", []])[1])
+		return [{"name": name, "title": title}
+			for name, title in sorted(State.workbook_titles.items()) if name in wanted]
 	names = sorted(State.readable)
 	wanted = (filters or {}).get("name")
 	if wanted:
@@ -137,7 +146,9 @@ def fake_get_list(doctype, filters=None, fields=None, order_by=None, limit_page_
 	if like:
 		term = like[1].strip("%").lower()
 		names = [n for n in names if term in State.charts[n].lower()]
-	return [{"name": n, "title": State.charts[n]} for n in names[: (limit_page_length or 20)]]
+	return [{"name": n, "title": State.charts[n],
+			"workbook": State.query_workbook.get(n, "")}
+		for n in names[: (limit_page_length or 20)]]
 
 
 def fake_get_doc(doctype, name):
@@ -283,6 +294,8 @@ def reset():
 	State.insights_charts = []
 	State.palette = None
 	State.executed = []
+	State.query_workbook = {}
+	State.workbook_titles = {}
 
 
 def source_of(function_name):
@@ -1218,6 +1231,97 @@ report(tab_charts.search("", limit=5)["kind"] == "all",
 report(bool(only_charts["charts"]) and bool(everything["charts"])
 	and set(only_charts["charts"][0]) == set(everything["charts"][0]),
 	"a filtered row has exactly the same shape as an unfiltered one")
+
+
+# --- STEP 1: WORKBOOKS ------------------------------------------------------
+#
+# Same three failure classes as the kind filter, one level up: narrowing after
+# the page is cut, counting after narrowing, and an unknown value returning an
+# empty list instead of falling back. The fixture buries the chart-bearing
+# workbook's contents past the page size for the first of those.
+reset()
+State.doctypes.add("Insights Chart v3")
+for index in range(30):
+	name = "q-wb1-%02d" % index
+	State.charts[name] = "Finance query %02d" % index
+	State.readable.add(name)
+	State.query_workbook[name] = "wb-finance"
+for name, title in (("q-qa-1", "Quality Actions open"), ("q-qa-2", "Quality Actions closed")):
+	State.charts[name] = title
+	State.readable.add(name)
+	State.query_workbook[name] = "wb-quality"
+State.charts["q-loose"] = "A query in no workbook"
+State.readable.add("q-loose")
+State.charts["q-secret-wb"] = "Payroll detail"          # NOT readable
+State.query_workbook["q-secret-wb"] = "wb-payroll"
+State.workbook_titles = {"wb-finance": "Finance", "wb-quality": "Quality",
+	"wb-payroll": "Payroll"}
+State.insights_charts = [{"name": "chart-qa", "title": "Quality Actions open",
+	"chart_type": "Bar", "query": "q-qa-1", "data_query": None, "config": "{}"}]
+
+books = tab_charts.workbooks()
+by_name = {entry["workbook"]: entry for entry in books["workbooks"]}
+report(set(by_name) == {"wb-finance", "wb-quality", ""},
+	"step 1 lists exactly the workbooks holding something readable: %s" % sorted(by_name))
+report("wb-payroll" not in by_name,
+	"a workbook whose ONLY query this user cannot read is not listed at all")
+report(by_name[""]["title"] == "Not in a workbook",
+	"a query belonging to no workbook gets its own honest bucket, not someone else's")
+report(by_name["wb-finance"]["title"] == "Finance"
+	and by_name["wb-quality"]["title"] == "Quality",
+	"workbooks are titled, not shown as ids")
+report(by_name["wb-finance"]["counts"]["all"] == 30,
+	"the per-workbook count covers all 30, not the %d-row page"
+	% len(tab_charts.search("", limit=5)["charts"]))
+report(by_name["wb-quality"]["counts"]["charts"] == 1
+	and by_name["wb-quality"]["counts"]["tables"] == 1,
+	"...and splits into charts and tables, the same buckets as the pills")
+report(books["total_counts"]["all"]
+	== sum(entry["counts"]["all"] for entry in books["workbooks"]),
+	"the All-workbooks total equals the sum of the parts -- nothing is double-counted")
+report([entry["workbook"] for entry in books["workbooks"]][0] == "wb-finance",
+	"the fullest workbook is listed first, so the likely one is not last")
+
+# An unreadable workbook RECORD, with readable queries inside it. The title
+# lookup returns nothing and the picker must still list it.
+State.workbook_titles.pop("wb-quality")
+report({entry["workbook"]: entry["title"] for entry in tab_charts.workbooks()["workbooks"]}
+	.get("wb-quality") == "wb-quality",
+	"a workbook whose own record is unreadable keeps its id as a label, never vanishes")
+State.workbook_titles["wb-quality"] = "Quality"
+
+# --- STEP 2: SCOPED TO ONE WORKBOOK -----------------------------------------
+scoped = tab_charts.search("", limit=5, workbook="wb-quality")
+report({row["chart"] for row in scoped["charts"]} == {"q-qa-1", "q-qa-2"},
+	"step 2 shows that workbook's items and no others")
+report(scoped["counts"]["all"] == 2 and scoped["counts"]["charts"] == 1,
+	"the pills count THIS workbook (%s), not the whole site" % scoped["counts"])
+report(tab_charts.search("", limit=5, workbook="wb-quality", kind="charts")["counts"]["all"] == 2,
+	"...and are counted before the kind narrows it, so the pills stay stable")
+report([row["chart"] for row in
+		tab_charts.search("", limit=5, workbook="wb-quality", kind="charts")["charts"]]
+	== ["q-qa-1"],
+	"workbook AND kind compose: one row, in that workbook, with a chart")
+
+# Buried past the page size, in a workbook that is not the first listed.
+report(len(tab_charts.search("", limit=5, workbook="wb-finance")["charts"]) == 5
+	and tab_charts.search("", limit=5, workbook="wb-finance")["counts"]["all"] == 30,
+	"a 5-row page of a 30-item workbook still reports 30")
+
+report({row["chart"] for row in tab_charts.search("", limit=50,
+		workbook=tab_charts.ALL_WORKBOOKS)["charts"]}
+	== {row["chart"] for row in tab_charts.search("", limit=50)["charts"]},
+	"'All workbooks' is exactly the unscoped list -- the escape hatch is not a third behaviour")
+report("q-secret-wb" not in [row["chart"] for row in
+		tab_charts.search("", limit=50, workbook="wb-payroll")["charts"]],
+	"naming a workbook directly does NOT reach a query inside it this user cannot read")
+report(tab_charts.search("", limit=50, workbook="wb-does-not-exist")["charts"] == [],
+	"an unknown workbook shows nothing rather than silently falling back to everything")
+report(tab_charts.search("", limit=50, workbook="")["counts"]["all"]
+	== tab_charts.search("", limit=50)["counts"]["all"],
+	"...while a BLANK workbook means 'not narrowed', same as omitting it")
+report(tab_charts.search("", limit=50, workbook="wb-quality")["workbook"] == "wb-quality",
+	"the response says which workbook it answered for")
 
 
 # --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------

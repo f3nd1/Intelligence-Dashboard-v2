@@ -200,16 +200,26 @@ def get_monitoring_findings(status="Open", limit=100):
 
 
 @frappe.whitelist()
-def search_insights_charts(term=None, limit=20, kind="all"):
-	"""The "+ Add chart" picker: Insights queries this user can read.
+def search_insights_charts(term=None, limit=20, kind="all", workbook=None):
+	"""The "+ Add chart" picker, step 2: what one workbook holds.
 
 	No only_for -- what comes back is exactly what frappe.get_list allows this
 	user to see, so the endpoint cannot show anyone a chart they could not
-	already open in Insights itself. `kind` narrows the LIST to charts or to
-	chart-less queries; it is applied after that permission-scoped read, so it
-	can only ever show fewer rows, never more.
+	already open in Insights itself. `kind` and `workbook` narrow the LIST;
+	both are applied after that permission-scoped read, so they can only ever
+	show fewer rows, never more.
 	"""
-	return _tab_charts.search(term, limit, kind)
+	return _tab_charts.search(term, limit, kind, workbook)
+
+
+@frappe.whitelist()
+def list_insights_workbooks(term=None):
+	"""The "+ Add chart" picker, step 1: workbooks with something to offer.
+
+	Derived from the same permission-scoped read as step 2, so a workbook is
+	listed only when this user can see something inside it.
+	"""
+	return _tab_charts.workbooks(term)
 
 
 @frappe.whitelist()
