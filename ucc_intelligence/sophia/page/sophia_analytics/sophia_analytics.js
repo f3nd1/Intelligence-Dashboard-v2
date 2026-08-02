@@ -1817,8 +1817,18 @@ if(window.UCCExplore&&window.UCCExplore.rebuild)window.UCCExplore.rebuild();
 // click to embed. No preview step: the chart appears on the tab immediately,
 // which is a faster way to find out it was the wrong one than a preview pane.
 function openChartPicker(dashboard,config,tab){
+// Three buttons, not a dropdown: there are three choices and they fit on one
+// line, so a dropdown would hide two of them behind a click for no gain.
+const PICKER_KINDS=[["all","All"],["charts","Charts only"],["tables","Table only"]];
 openModal("Add a chart to this tab",
 '<div class="ucc-chart-picker">'
++'<div class="ucc-chart-picker-kinds" role="group" aria-label="Filter the list">'
++PICKER_KINDS.map(function(entry){
+return'<button type="button" class="ucc-chart-picker-kind'+(entry[0]==="all"?" is-on":"")
++'" data-picker-kind="'+esc(entry[0])+'" aria-pressed="'+(entry[0]==="all")+'">'
++esc(entry[1])+'<span class="ucc-chart-picker-count" data-kind-count="'+esc(entry[0])+'"></span>'
++"</button>";
+}).join("")+"</div>"
 +'<input type="search" class="ucc-chart-picker-search" data-chart-picker-search '
 +'placeholder="Search Frappe Insights charts…" autocomplete="off" aria-label="Search Insights charts">'
 +'<p class="ucc-chart-picker-note">Only charts you can already open in Frappe Insights are listed. Ones marked <em>Table only</em> have no Insights chart built yet and will show their rows as a table.</p>'
@@ -1828,16 +1838,27 @@ const input=modal.querySelector("[data-chart-picker-search]");
 const results=modal.querySelector("[data-chart-picker-results]");
 if(!input||!results)return;
 let timer=null;
+let kind="all";
 function search(term){
 if(!(window.frappe&&frappe.call)){results.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
 frappe.call({
 method:"ucc_intelligence.api.search_insights_charts",
-args:{term:term||"",limit:20},
+args:{term:term||"",limit:20,kind:kind},
 callback(response){
 const data=(response&&response.message)||{};
 const charts=data.charts||[];
+// The counts describe the whole search, not this page, so a button never
+// promises rows the filter will not produce.
+const counts=data.counts||{};
+PICKER_KINDS.forEach(function(entry){
+const badge=modal.querySelector('[data-kind-count="'+entry[0]+'"]');
+if(badge)badge.textContent=counts[entry[0]]==null?"":" "+counts[entry[0]];
+});
 if(!charts.length){
-results.innerHTML=tabChartNotice(data.message||"No Insights chart matched that search.");return;}
+results.innerHTML=tabChartNotice(data.message
+||(kind==="charts"?"No Insights chart is built on any query matching that search."
+:kind==="tables"?"Every query matching that search already has a chart built on it."
+:"No Insights chart matched that search."));return;}
 // BOTH kinds are listed, each marked. The probe found 52 queries and only
 // 7 charts -- offering charts only would have hidden 45 things that work,
 // since a chart-less query still shows its real rows as a table, exports,
@@ -1856,6 +1877,20 @@ error(error){results.innerHTML=tabChartNotice(apiErrorMessage(error));},
 input.addEventListener("input",function(){
 clearTimeout(timer);
 timer=setTimeout(function(){search(input.value);},250);
+});
+const kinds=modal.querySelector(".ucc-chart-picker-kinds");
+if(kinds)kinds.addEventListener("click",function(event){
+const button=event.target.closest("[data-picker-kind]");
+if(!button||button.dataset.pickerKind===kind)return;
+kind=button.dataset.pickerKind;
+kinds.querySelectorAll("[data-picker-kind]").forEach(function(other){
+const on=other.dataset.pickerKind===kind;
+other.classList.toggle("is-on",on);
+other.setAttribute("aria-pressed",String(on));
+});
+// The search term is kept. Narrowing the kind is not a reason to lose what
+// someone already typed.
+search(input.value);
 });
 results.addEventListener("click",function(event){
 const pick=event.target.closest("[data-pick-chart]");
@@ -2123,6 +2158,12 @@ style.textContent=`
 .ucc-qa-hidden-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto}
 .ucc-qa-hidden-item{text-align:left;border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:38px;padding:8px 10px;font-size:13px;cursor:pointer}
 .ucc-qa-hidden-item:hover{background:#F1F5F9}
+.ucc-chart-picker-kinds{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
+.ucc-chart-picker-kind{border:1px solid #D8E0EC;background:#fff;color:#475569;border-radius:999px;
+ min-height:30px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}
+.ucc-chart-picker-kind:hover{background:#F1F5F9}
+.ucc-chart-picker-kind.is-on{background:#172554;border-color:#172554;color:#fff}
+.ucc-chart-picker-count{opacity:.65;font-weight:600}
 .ucc-chart-picker-search{box-sizing:border-box;width:100%;padding:8px 10px;border:1px solid #D8E0EC;border-radius:8px;font-size:13px}
 .ucc-chart-picker-note{margin:8px 0 4px;font-size:11px;color:#64748B}
 .ucc-chart-picker-results{display:flex;flex-direction:column;gap:4px;max-height:340px;overflow-y:auto}

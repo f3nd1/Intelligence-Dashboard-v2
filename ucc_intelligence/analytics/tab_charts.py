@@ -259,16 +259,36 @@ def readable(names):
 	return {row["name"]: row.get("title") or row["name"] for row in rows}
 
 
-def search(term=None, limit=20):
+SEARCH_KINDS = ("all", "charts", "tables")
+
+# How many rows are classified before the page is cut. The DB limit used to be
+# the page size, which was fine when every row was shown and wrong the moment
+# anything filters: "Charts only" would have searched 20 rows for the 7 charts
+# among 52 queries and reported however few happened to fall in that window.
+# A filter that finds nothing when matches exist is worse than no filter.
+# ponytail: a flat 500-row scan, because this site has 52 queries. If some site
+# ever has thousands, push the kind into the SQL rather than raising this.
+MAX_SEARCH_SCAN = 500
+
+
+def search(term=None, limit=20, kind="all"):
 	"""Insights queries this user can read, for the picker.
 
 	Empty term lists the most recently modified, so the picker is useful before
 	anyone types. Titles only: the query's internal name is a hash and means
 	nothing to the person choosing.
+
+	`kind` narrows to "charts" (an Insights chart is built on it) or "tables"
+	(none is, so the card shows rows). It filters what is LISTED and nothing
+	else -- how a chart resolves, what it draws and what it is permitted to
+	show are all untouched.
 	"""
 	limit = max(1, min(int(limit or 20), 50))
+	kind = clean_text(kind).lower() or "all"
+	if kind not in SEARCH_KINDS:
+		kind = "all"
 	if not frappe.db.exists("DocType", CHART_DOCTYPE):
-		return {"ok": False, "charts": [], "message":
+		return {"ok": False, "charts": [], "counts": {}, "kind": kind, "message":
 			"Frappe Insights is not installed on this site, so there are no charts to add."}
 	filters = {}
 	term = clean_text(term)
@@ -276,7 +296,7 @@ def search(term=None, limit=20):
 		filters["title"] = ["like", "%%%s%%" % term]
 	rows = frappe.get_list(
 		CHART_DOCTYPE, filters=filters, fields=["name", "title"],
-		order_by="modified desc", limit_page_length=limit)
+		order_by="modified desc", limit_page_length=MAX_SEARCH_SCAN)
 	# BOTH kinds are listed, each marked -- not charts only.
 	#
 	# The probe found 52 queries and 7 charts. Listing only the 7 would hide 45
@@ -314,7 +334,21 @@ def search(term=None, limit=20):
 			"chart_type": chart.get("chart_type") or "",
 			"has_chart": bool(chart),
 		})
-	return {"ok": True, "charts": charts}
+	# Counted over EVERY classified row, then filtered, then cut to the page.
+	# The counts are what the buttons show, so they have to describe the whole
+	# result rather than the slice -- a button reading "Charts only (2)" beside
+	# seven charts is a filter lying about its own contents.
+	counts = {
+		"all": len(charts),
+		"charts": len([row for row in charts if row["has_chart"]]),
+		"tables": len([row for row in charts if not row["has_chart"]]),
+	}
+	if kind == "charts":
+		charts = [row for row in charts if row["has_chart"]]
+	elif kind == "tables":
+		charts = [row for row in charts if not row["has_chart"]]
+	return {"ok": True, "kind": kind, "counts": counts,
+		"total": len(charts), "charts": charts[:limit]}
 
 
 def get_tab(criterion, tab):
