@@ -105,6 +105,57 @@ report(tokens_of("y_axis.series[0].show_data_labels")
 	== ["y", "axis", "series", "show", "data", "labels"],
 	"tokens_of() splits on dots, brackets and underscores and drops the index")
 
+
+# --- HOW THE CHART ID GETS IN -------------------------------------------
+#
+# The first version read UCC_PROBE_CHART out of globals(). Under `bench
+# console` the name typed at the prompt lands in a namespace that is NOT the
+# dict exec() is handed, so Felix's variable was genuinely set, printable by
+# name, and invisible to the probe at the same time. It printed "NO CHART
+# CHOSEN" at someone who had chosen one.
+#
+# The fix is that the id is an ARGUMENT -- an argument cannot be looked up in
+# the wrong namespace. The frame walk stays only so the older instructions are
+# not silently ignored, and it is checked HERE, from a namespace the probe's
+# globals() genuinely cannot see. Asserting that precondition is the point: a
+# test that put the variable in the exec globals would pass against the bug.
+ucc_probe = probe["ucc_probe"]
+chart_id_from_caller = probe["chart_id_from_caller"]
+seen = {}
+probe["frappe"].get_list = lambda doctype, **kwargs: [
+	{"name": "o2kvutcfld", "title": "Innovation type mix", "chart_type": "Donut",
+		"modified": "2026-08-03", "config": '{"chart_type": "Donut"}'}]
+
+
+def capture(*args):
+	"""Run the probe and return what it printed."""
+	import io
+	import contextlib
+	buffer = io.StringIO()
+	with contextlib.redirect_stdout(buffer):
+		ucc_probe(*args)
+	return buffer.getvalue()
+
+
+report("NO CHART CHOSEN" in capture(), "with no id at all, it lists the charts")
+report("o2kvutcfld" in capture("o2kvutcfld") and "NO CHART CHOSEN" not in capture("o2kvutcfld"),
+	"an id passed as an ARGUMENT is used -- the path that cannot be looked up wrong")
+
+
+def like_an_ipython_cell():
+	UCC_PROBE_CHART = "o2kvutcfld"  # noqa: F841  -- local, as at the prompt
+	assert "UCC_PROBE_CHART" not in probe, "precondition: not in the exec globals"
+	return chart_id_from_caller(), capture()
+
+
+found, output = like_an_ipython_cell()
+report(found == "o2kvutcfld",
+	"the old variable is still honoured from a namespace globals() cannot see")
+report("NO CHART CHOSEN" not in output,
+	"...so someone following the earlier instructions is not told they chose nothing")
+report("UCC_PROBE_CHART" not in probe,
+	"and the probe never wrote the name into its own globals to make that work")
+
 # The probe must not write. Asserted by source, because a probe that edits the
 # thing it is measuring is the worst possible tool.
 source = PROBE.read_text()

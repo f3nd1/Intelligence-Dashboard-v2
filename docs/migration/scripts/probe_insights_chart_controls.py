@@ -28,13 +28,27 @@ compared against every OTHER chart. A key that exists here and nowhere else,
 or holds a different value here, is a key Felix just changed. That is evidence
 from the data, not from the English.
 
-RUN -- see the report for the exact copy-paste steps.
+RUN
+    bench --site <site> console
+    >>> exec(open("/home/felixoking/ucc-sms-v2/docs/migration/scripts/probe_insights_chart_controls.py").read(), globals())
+    ...prints the list of charts...
+    >>> ucc_probe("the-id-from-the-first-column")
+
+THE ID IS AN ARGUMENT, NOT A VARIABLE, AND THAT IS THE POINT
+The first version read UCC_PROBE_CHART out of globals(). Under `bench console`
+the name typed at the prompt can land in a namespace that is NOT the dict
+exec() is handed, so the variable was genuinely set, printable by name, and
+invisible to this script at the same time. An argument cannot be looked up in
+the wrong place. chart_id_from_caller() still honours the old variable so
+nobody following the earlier instructions is silently ignored, but it is a
+courtesy, not the mechanism.
 
 SAFETY
 Read-only. Creates nothing, changes nothing, executes nothing, writes nothing
 back to any record.
 """
 
+import inspect
 import json
 
 import frappe
@@ -157,35 +171,63 @@ def leaf_paths(config):
 		if not isinstance(value, (dict, list, tuple))]
 
 
-def run():
+def chart_id_from_caller():
+	"""UCC_PROBE_CHART, wherever the console actually put it.
+
+	globals() alone was NOT enough, and this cost Felix a round trip. Under
+	`bench console` the name typed at the prompt can land in a namespace that
+	is not the dict exec() is handed, so the variable was genuinely set,
+	printable by name, and invisible to this script at the same time -- three
+	facts that look contradictory and are not.
+
+	So it looks in every namespace up the call stack rather than reasoning
+	about which dict IPython uses in which version. And the real fix is not
+	this function at all: ucc_probe("the-id") takes the id as an ARGUMENT,
+	which cannot be looked up in the wrong place. This exists only so that
+	someone following the older instructions is not silently ignored.
+	"""
+	value = globals().get("UCC_PROBE_CHART")
+	if value:
+		return value
+	frame = inspect.currentframe()
+	while frame:
+		for namespace in (frame.f_locals, frame.f_globals):
+			value = namespace.get("UCC_PROBE_CHART")
+			if value:
+				return value
+		frame = frame.f_back
+	return ""
+
+
+def ucc_probe(chart_id=""):
+	"""Run the probe. Pass the chart id: ucc_probe("o2kvutcfld")."""
 	if not frappe.db.exists("DocType", CHART_DOCTYPE):
 		print("STOP -- %s is not installed on this site." % CHART_DOCTYPE)
 		return
 
-	chart_id = (globals().get("UCC_PROBE_CHART") or "").strip()
+	chart_id = (chart_id or chart_id_from_caller() or "").strip()
 	all_rows = frappe.get_list(CHART_DOCTYPE,
 		fields=["name", "title", "chart_type", "config", "modified"],
 		order_by="modified desc", limit_page_length=0) or []
 
 	if not chart_id:
-		head(0, "NO CHART CHOSEN -- pick one from this list and re-run")
-		print("   Set UCC_PROBE_CHART to the chart you toggled the controls on,")
-		print("   then run the exec line again. Most recently changed first, so")
-		print("   the one you just saved is almost certainly at the top.\n")
+		head(0, "NO CHART CHOSEN -- pick one from this list")
+		print("   Most recently changed first, so the chart you just saved is")
+		print("   almost certainly at the top.\n")
 		for row in all_rows[:15]:
 			print("   %-14s %-40s %-9s %s" % (row["name"],
 				(row.get("title") or "(untitled)")[:38],
 				row.get("chart_type") or "?", row.get("modified")))
-		print("\n   Copy its id from the first column, then:")
-		print('       UCC_PROBE_CHART = "the-id-you-copied"')
-		print("   and run the exec line again.")
+		print("\n   Copy its id from the FIRST column, then run ONE line -- no")
+		print("   need to paste the long exec line again:\n")
+		print('       ucc_probe("paste-the-id-here")')
 		return
 
 	found = next((row for row in all_rows if row["name"] == chart_id), None)
 	if not found:
 		print("STOP -- no chart %r is readable by this user." % chart_id)
 		print("       Either the id is wrong, or your account cannot read it.")
-		print("       Re-run without UCC_PROBE_CHART set to list what you can see.")
+		print("       Run ucc_probe() with no id to list what you can see.")
 		return
 
 	config = config_of(found)
@@ -297,4 +339,4 @@ def run():
 	print("   reading can be wrong in a way the raw record cannot.")
 
 
-run()
+ucc_probe()
