@@ -1820,8 +1820,20 @@ function openChartPicker(dashboard,config,tab){
 // Three buttons, not a dropdown: there are three choices and they fit on one
 // line, so a dropdown would hide two of them behind a click for no gain.
 const PICKER_KINDS=[["all","All"],["charts","Charts only"],["tables","Table only"]];
+// STEP 1 is a workbook, STEP 2 is its contents. Insights organises everything
+// by workbook, so a flat cross-workbook list makes you scan past things you
+// know are somewhere else. "All workbooks" stays as the first entry: the
+// charts already on the tabs were picked from a flat list, so someone
+// re-adding one has no workbook to remember, and that case still has to work.
+const ALL_WORKBOOKS="__all__";
 openModal("Add a chart to this tab",
 '<div class="ucc-chart-picker">'
++'<div data-picker-step1>'
++'<p class="ucc-chart-picker-note">Which workbook is it in?</p>'
++'<div class="ucc-chart-picker-results" data-workbook-list>'+tabChartNotice("Loading…")+"</div></div>"
++'<div data-picker-step2 hidden>'
++'<button type="button" class="ucc-chart-picker-back" data-picker-back>&#8592; All workbooks</button>'
++'<h4 class="ucc-chart-picker-where" data-picker-where></h4>'
 +'<div class="ucc-chart-picker-kinds" role="group" aria-label="Filter the list">'
 +PICKER_KINDS.map(function(entry){
 return'<button type="button" class="ucc-chart-picker-kind'+(entry[0]==="all"?" is-on":"")
@@ -1832,18 +1844,67 @@ return'<button type="button" class="ucc-chart-picker-kind'+(entry[0]==="all"?" i
 +'<input type="search" class="ucc-chart-picker-search" data-chart-picker-search '
 +'placeholder="Search Frappe Insights charts…" autocomplete="off" aria-label="Search Insights charts">'
 +'<p class="ucc-chart-picker-note">Only charts you can already open in Frappe Insights are listed. Ones marked <em>Table only</em> have no Insights chart built yet and will show their rows as a table.</p>'
-+'<div class="ucc-chart-picker-results" data-chart-picker-results>'+tabChartNotice("Loading…")+"</div></div>");
++'<div class="ucc-chart-picker-results" data-chart-picker-results>'+tabChartNotice("Loading…")+"</div>"
++"</div></div>");
 const modal=ensureModal();
+const step1=modal.querySelector("[data-picker-step1]");
+const step2=modal.querySelector("[data-picker-step2]");
+const bookList=modal.querySelector("[data-workbook-list]");
+const where=modal.querySelector("[data-picker-where]");
 const input=modal.querySelector("[data-chart-picker-search]");
 const results=modal.querySelector("[data-chart-picker-results]");
-if(!input||!results)return;
+if(!input||!results||!step1||!step2||!bookList)return;
 let timer=null;
 let kind="all";
+let workbook=ALL_WORKBOOKS;
+
+function listWorkbooks(){
+if(!(window.frappe&&frappe.call)){bookList.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
+frappe.call({
+method:"ucc_intelligence.api.list_insights_workbooks",
+callback(response){
+const data=(response&&response.message)||{};
+const books=data.workbooks||[];
+if(!books.length){
+bookList.innerHTML=tabChartNotice(data.message
+||"No Insights workbook holds anything you can read.");return;}
+const total=data.total_counts||{};
+// "All workbooks" first and marked as the escape hatch, not buried under
+// the individual ones -- someone who does not know where a thing lives
+// should not have to guess before they can search.
+bookList.innerHTML=
+'<button type="button" class="ucc-chart-picker-result is-all" data-pick-workbook="'+esc(ALL_WORKBOOKS)+'">'
++"All workbooks"
++'<span class="ucc-chart-picker-type">'+esc(total.all==null?"":total.all+" items")+"</span></button>"
++books.map(function(book){
+return'<button type="button" class="ucc-chart-picker-result" data-pick-workbook="'
++esc(book.workbook)+'" data-workbook-title="'+esc(book.title)+'">'
++esc(book.title)
++'<span class="ucc-chart-picker-type">'+esc(book.counts.all+" items")+"</span>"
++(book.counts.charts
+?'<span class="ucc-chart-picker-type">'+esc(book.counts.charts)+" with a chart</span>"
+:"")
++"</button>";
+}).join("");
+},
+error(error){bookList.innerHTML=tabChartNotice(apiErrorMessage(error));},
+});
+}
+
+function showStep(which,title){
+step1.hidden=which!==1;
+step2.hidden=which!==2;
+if(which===2){
+where.textContent=title||"All workbooks";
+input.focus();
+}
+}
+
 function search(term){
 if(!(window.frappe&&frappe.call)){results.innerHTML=tabChartNotice("Frappe API client unavailable.");return;}
 frappe.call({
 method:"ucc_intelligence.api.search_insights_charts",
-args:{term:term||"",limit:20,kind:kind},
+args:{term:term||"",limit:20,kind:kind,workbook:workbook},
 callback(response){
 const data=(response&&response.message)||{};
 const charts=data.charts||[];
@@ -1856,9 +1917,9 @@ if(badge)badge.textContent=counts[entry[0]]==null?"":" "+counts[entry[0]];
 });
 if(!charts.length){
 results.innerHTML=tabChartNotice(data.message
-||(kind==="charts"?"No Insights chart is built on any query matching that search."
-:kind==="tables"?"Every query matching that search already has a chart built on it."
-:"No Insights chart matched that search."));return;}
+||(kind==="charts"?"No Insights chart is built on anything here."
+:kind==="tables"?"Everything here already has a chart built on it."
+:"Nothing here matched that search."));return;}
 // BOTH kinds are listed, each marked. The probe found 52 queries and only
 // 7 charts -- offering charts only would have hidden 45 things that work,
 // since a chart-less query still shows its real rows as a table, exports,
@@ -1892,6 +1953,26 @@ other.setAttribute("aria-pressed",String(on));
 // someone already typed.
 search(input.value);
 });
+bookList.addEventListener("click",function(event){
+const pick=event.target.closest("[data-pick-workbook]");
+if(!pick)return;
+workbook=pick.dataset.pickWorkbook;
+// A new workbook is a new scope, so the kind resets to All. Carrying
+// "Charts only" across would land someone in an empty list and leave them
+// to work out that the filter, not the workbook, was the reason.
+kind="all";
+modal.querySelectorAll("[data-picker-kind]").forEach(function(other){
+const on=other.dataset.pickerKind==="all";
+other.classList.toggle("is-on",on);
+other.setAttribute("aria-pressed",String(on));
+});
+input.value="";
+results.innerHTML=tabChartNotice("Loading…");
+showStep(2,pick.dataset.workbookTitle||"All workbooks");
+search("");
+});
+const back=modal.querySelector("[data-picker-back]");
+if(back)back.addEventListener("click",function(){showStep(1);});
 results.addEventListener("click",function(event){
 const pick=event.target.closest("[data-pick-chart]");
 if(!pick)return;
@@ -1907,10 +1988,9 @@ modal.hidden=true;
 error(error){pick.disabled=false;results.innerHTML=tabChartNotice(apiErrorMessage(error));},
 });
 });
-// An empty search lists the most recently modified, so the picker is useful
-// before anyone types anything.
-search("");
-input.focus();
+// Opens on step 1, the workbook list. Step 2's own empty search lists the
+// most recently modified, so it is useful before anyone types anything.
+listWorkbooks();
 }
 
 function removeTabChart(dashboard,config,tab,chart){
@@ -2158,6 +2238,11 @@ style.textContent=`
 .ucc-qa-hidden-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto}
 .ucc-qa-hidden-item{text-align:left;border:1px solid #D8E0EC;background:#fff;border-radius:8px;min-height:38px;padding:8px 10px;font-size:13px;cursor:pointer}
 .ucc-qa-hidden-item:hover{background:#F1F5F9}
+.ucc-chart-picker-back{border:0;background:none;color:#2563EB;font-size:12px;font-weight:600;
+ cursor:pointer;padding:0;margin:0 0 8px}
+.ucc-chart-picker-back:hover{text-decoration:underline}
+.ucc-chart-picker-where{margin:0 0 10px;font-size:14px;color:#172554}
+.ucc-chart-picker-result.is-all{border-color:#172554;font-weight:600;color:#172554}
 .ucc-chart-picker-kinds{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
 .ucc-chart-picker-kind{border:1px solid #D8E0EC;background:#fff;color:#475569;border-radius:999px;
  min-height:30px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer}

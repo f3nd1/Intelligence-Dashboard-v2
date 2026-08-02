@@ -271,31 +271,50 @@ SEARCH_KINDS = ("all", "charts", "tables")
 MAX_SEARCH_SCAN = 500
 
 
-def search(term=None, limit=20, kind="all"):
-	"""Insights queries this user can read, for the picker.
+# Step 1 of the picker is "which workbook", and this is the entry that means
+# "do not narrow by one". It is a real scope, not a bypass: the charts already
+# on the tabs were picked from a flat list, so anyone re-adding one has no
+# workbook to remember. Felix's own reason for wanting step 1 -- "harder to
+# find something you know is in that workbook" -- says nothing about the case
+# where you do not know, and that case still has to work.
+ALL_WORKBOOKS = "__all__"
 
-	Empty term lists the most recently modified, so the picker is useful before
-	anyone types. Titles only: the query's internal name is a hash and means
-	nothing to the person choosing.
+WORKBOOK_DOCTYPE = "Insights Workbook"
 
-	`kind` narrows to "charts" (an Insights chart is built on it) or "tables"
-	(none is, so the card shows rows). It filters what is LISTED and nothing
-	else -- how a chart resolves, what it draws and what it is permitted to
-	show are all untouched.
+
+def _workbook_titles(names):
+	"""{workbook: title} for the handful in play, in ONE call.
+
+	Read through get_list, so a workbook whose record this user cannot read
+	simply keeps its id as its label rather than raising. That case should not
+	arise -- the names come from queries the user CAN read -- but a picker that
+	throws while listing is worse than one that shows an id.
 	"""
-	limit = max(1, min(int(limit or 20), 50))
-	kind = clean_text(kind).lower() or "all"
-	if kind not in SEARCH_KINDS:
-		kind = "all"
-	if not frappe.db.exists("DocType", CHART_DOCTYPE):
-		return {"ok": False, "charts": [], "counts": {}, "kind": kind, "message":
-			"Frappe Insights is not installed on this site, so there are no charts to add."}
+	names = [name for name in names if name]
+	if not names:
+		return {}
+	try:
+		rows = frappe.get_list(WORKBOOK_DOCTYPE, filters={"name": ["in", names]},
+			fields=["name", "title"], limit_page_length=len(names))
+	except Exception:
+		return {}
+	return {row["name"]: clean_text(row.get("title")) or row["name"] for row in rows}
+
+
+def _classified(term=None):
+	"""Every query this user can read, deduped and marked -- the shared basis.
+
+	Step 1 counts the workbooks and step 2 lists their contents, and both are
+	derived from THIS list rather than from two separate reads. If they were
+	read separately they could disagree, and a workbook promising 12 items that
+	then shows 9 is the same class of lie as a count computed after a filter.
+	"""
 	filters = {}
 	term = clean_text(term)
 	if term:
 		filters["title"] = ["like", "%%%s%%" % term]
 	rows = frappe.get_list(
-		CHART_DOCTYPE, filters=filters, fields=["name", "title"],
+		CHART_DOCTYPE, filters=filters, fields=["name", "title", "workbook"],
 		order_by="modified desc", limit_page_length=MAX_SEARCH_SCAN)
 	# BOTH kinds are listed, each marked -- not charts only.
 	#
@@ -333,21 +352,91 @@ def search(term=None, limit=20, kind="all"):
 				row["name"], row.get("title"), record=chart or None),
 			"chart_type": chart.get("chart_type") or "",
 			"has_chart": bool(chart),
+			"workbook": row.get("workbook") or "",
 		})
-	# Counted over EVERY classified row, then filtered, then cut to the page.
-	# The counts are what the buttons show, so they have to describe the whole
-	# result rather than the slice -- a button reading "Charts only (2)" beside
-	# seven charts is a filter lying about its own contents.
-	counts = {
-		"all": len(charts),
-		"charts": len([row for row in charts if row["has_chart"]]),
-		"tables": len([row for row in charts if not row["has_chart"]]),
+	return charts
+
+
+def _counts_of(rows):
+	"""The three pill counts, over whatever set is handed in."""
+	return {
+		"all": len(rows),
+		"charts": len([row for row in rows if row["has_chart"]]),
+		"tables": len([row for row in rows if not row["has_chart"]]),
 	}
+
+
+def workbooks(term=None):
+	"""Step 1: the workbooks holding something this user can read.
+
+	DERIVED from the readable queries, not read from Insights Workbook
+	independently. Listing workbooks separately would offer names that open
+	onto nothing -- a user can be permitted to see a workbook record while
+	being permitted none of its queries, and a step 1 entry that leads to an
+	empty step 2 is a dead end the flat list never had. Deriving makes that
+	impossible rather than merely unlikely.
+	"""
+	if not frappe.db.exists("DocType", CHART_DOCTYPE):
+		return {"ok": False, "workbooks": [], "message":
+			"Frappe Insights is not installed on this site, so there are no charts to add."}
+	rows = _classified(term)
+	grouped = {}
+	for row in rows:
+		grouped.setdefault(row["workbook"], []).append(row)
+	titles = _workbook_titles(grouped.keys())
+	listed = []
+	for workbook, items in grouped.items():
+		listed.append({
+			"workbook": workbook,
+			# A query with no workbook is real -- Insights allows it -- and it
+			# has to be reachable, so it gets its own honest bucket instead of
+			# being dropped or filed under someone else's name.
+			"title": titles.get(workbook) or workbook or "Not in a workbook",
+			"counts": _counts_of(items),
+		})
+	listed.sort(key=lambda entry: (-entry["counts"]["all"], entry["title"].lower()))
+	return {"ok": True, "all_workbooks": ALL_WORKBOOKS,
+		"total_counts": _counts_of(rows), "workbooks": listed}
+
+
+def search(term=None, limit=20, kind="all", workbook=None):
+	"""Step 2: what one workbook holds, or everything if none is chosen.
+
+	Empty term lists the most recently modified, so the picker is useful before
+	anyone types. Titles only: the query's internal name is a hash and means
+	nothing to the person choosing.
+
+	`kind` narrows to "charts" (an Insights chart is built on it) or "tables"
+	(none is, so the card shows rows). `workbook` narrows to one workbook, or
+	to everything when it is ALL_WORKBOOKS or blank. Both filter what is
+	LISTED and nothing else -- how a chart resolves, what it draws and what it
+	is permitted to show are all untouched.
+	"""
+	limit = max(1, min(int(limit or 20), 50))
+	kind = clean_text(kind).lower() or "all"
+	if kind not in SEARCH_KINDS:
+		kind = "all"
+	workbook = clean_text(workbook)
+	if not frappe.db.exists("DocType", CHART_DOCTYPE):
+		return {"ok": False, "charts": [], "counts": {}, "kind": kind,
+			"workbook": workbook, "message":
+			"Frappe Insights is not installed on this site, so there are no charts to add."}
+	charts = _classified(term)
+	# WORKBOOK FIRST, then the counts, then the kind, then the page.
+	#
+	# That order is the whole discipline of the last round applied one level
+	# up. The pills belong to the CHOSEN workbook, so they are counted after
+	# the workbook narrows the set and before the kind narrows it further --
+	# count too early and "Charts only 7" appears over a workbook holding one,
+	# count too late and every pill reads the same number.
+	if workbook and workbook != ALL_WORKBOOKS:
+		charts = [row for row in charts if row["workbook"] == workbook]
+	counts = _counts_of(charts)
 	if kind == "charts":
 		charts = [row for row in charts if row["has_chart"]]
 	elif kind == "tables":
 		charts = [row for row in charts if not row["has_chart"]]
-	return {"ok": True, "kind": kind, "counts": counts,
+	return {"ok": True, "kind": kind, "workbook": workbook, "counts": counts,
 		"total": len(charts), "charts": charts[:limit]}
 
 
