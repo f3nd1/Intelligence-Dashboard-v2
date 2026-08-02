@@ -571,6 +571,41 @@ checks.append(report("global." not in explore_block_src,
 	"no bare `global.` references survive in the ported Explore (its IIFE parameter is gone)"))
 checks.append(report('data-ucc-explore' in ported, "the Explore panel markup is present in the shell"))
 
+
+# --- THE PICKER IS TWO STEPS, NOT A FILTER ON A FLAT LIST -------------------
+#
+# Felix opened it on the bench and saw a chart list immediately. The properties
+# below are what "workbook first" has to mean structurally, asserted against
+# openChartPicker's own source rather than its appearance.
+_picker = region(ported, "function openChartPicker(",
+	"function removeTabChart(", "the chart picker")
+
+checks.append(report('let workbook="";' in _picker,
+	"the picker opens with NO workbook chosen"))
+checks.append(report("if(!workbook)return;" in _picker,
+	"...and search() refuses to run without one, so it cannot open onto a chart list"))
+checks.append(report("ALL_WORKBOOKS" not in _picker,
+	'the "All workbooks" entry is gone -- a step-one row that skips step one'))
+checks.append(report('data-picker-step2 hidden' in _picker,
+	"step 2 starts hidden, so the chart list is not merely empty but absent"))
+checks.append(report(_picker.index("data-workbook-list") < _picker.index("data-chart-picker-search"),
+	"the workbook list comes before the search box in the markup"))
+checks.append(report('workbook:workbook' in _picker,
+	"every search is scoped to the chosen workbook, server-side"))
+
+# Every number has to name what it counts. A bare figure next to another bare
+# figure is what made "11" and "All 2" read as contradictory.
+checks.append(report("function countPhrase(counts){" in _picker,
+	"counts are rendered as words, not bare figures"))
+checks.append(report('" chart":" charts"' in _picker and '" query with no chart"' in _picker,
+	"...naming charts and chart-less queries separately, and singular vs plural"))
+checks.append(report('"In " + (title||"this workbook")' in _picker,
+	"step 2 heads its numbers with the workbook they belong to"))
+checks.append(report("This workbook holds " in _picker,
+	"...and says in words what the three pills are counting"))
+checks.append(report('workbook="";showStep(1)' in _picker,
+	"going back clears the workbook, so no scope survives off screen"))
+
 passed = all(checks)
 print()
 print(f"{'PASS' if passed else 'FAIL'}: {sum(checks)}/{len(checks)} checks")
