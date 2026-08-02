@@ -1505,69 +1505,22 @@ report(all(row["title"] != row["dashboard"] for row in
 	"no dashboard is offered labelled with its own id")
 
 
-# --- THE RECORDS STRIP: the drill-down chain, and its permission hops -------
+# --- the Records strip is GONE ---------------------------------------------
 #
-# Four hops: the dashboard (check_permission), its linked_charts (child rows of
-# a document just proven readable), each chart (get_list), the records
-# (drilldown.py, untouched). The strip can only offer what a person could
-# already open in Insights.
-reset()
-State.doctypes.add("Insights Dashboard v3")
-State.doctypes.add("Insights Chart v3")
-State.dashboards = {"d-1": "Applicants"}
-State.readable_dashboards = {"d-1"}
-State.dashboard_charts = {"d-1": ["chart-open", "chart-sql", "chart-hidden"]}
-State.insights_charts = [
-	{"name": "chart-open", "title": "Applicants by status", "chart_type": "Bar",
-		"query": "q-open", "data_query": None, "config": "{}"},
-	{"name": "chart-sql", "title": "Written as SQL", "chart_type": "Bar",
-		"query": "q-agents", "data_query": None, "config": "{}"},
-	# On the dashboard, but this user cannot read it -- get_list drops it.
-	{"name": "chart-hidden", "title": "Payroll", "chart_type": "Bar",
-		"query": "q-secret", "data_query": None, "config": "{}"},
-]
-State.unreadable_charts = {"chart-hidden"}
-State.drilldowns = {
-	"q-open": {"status": "available", "doctype": "Student Applicant",
-		"columns": ["status"], "message": ""},
-	"q-agents": {"status": "unsupported", "doctype": "", "columns": [],
-		"message": "This chart is written as SQL rather than built from a table."},
-}
-
-strip = tab_charts.dashboard_drilldowns("d-1")
-titles = [row["title"] for row in strip["charts"]]
-report(strip["ok"] and len(strip["charts"]) == 2,
-	"the strip lists the dashboard's charts this user can read (%s)" % titles)
-report("Payroll" not in titles,
-	"a chart ON the dashboard that this user cannot read is not listed at all")
-report(len(strip["charts"]) == 2 and strip["charts"][0]["status"] == "available",
-	"drillable charts are listed first, so the buttons are not hunted for")
-report(len(strip["charts"]) == 2 and strip["charts"][1]["status"] != "available"
-	and "written as SQL" in strip["charts"][1]["message"],
-	"...and one that cannot be drilled carries its REASON, rather than vanishing")
-report(bool(strip["charts"]) and strip["charts"][0]["doctype"] == "Student Applicant"
-	and strip["charts"][0]["chart"] == "q-open",
-	"each button carries the query drilldown.py needs and the DocType it opens")
-
-State.readable_dashboards = set()
-denied = tab_charts.dashboard_drilldowns("d-1")
-report(denied["ok"] is False and "not available" in denied["message"],
-	"a dashboard this user cannot read yields no chart list, with a reason")
-State.readable_dashboards = {"d-1"}
-
-State.dashboard_charts = {"d-1": []}
-empty = tab_charts.dashboard_drilldowns("d-1")
-report(empty["ok"] and empty["charts"] == [] and empty["source"] == "linked_charts",
-	"an empty linked_charts says which field was empty, not just 'no charts'")
-
-# The MESSAGE, not just the refusal. Without the guard a blank id still fails
-# -- by reaching get_doc("") and being reported as "no longer in Insights",
-# which is a different and wrong explanation.
-blank = tab_charts.dashboard_drilldowns("")
-report(blank["ok"] is False and "No dashboard given" in blank["message"],
-	"a blank dashboard id is refused BEFORE any lookup, and says so: %r"
-	% blank["message"])
-
+# Felix removed it on 2026-08-04, having been told what it cost: Insights' own
+# chart click only re-runs the query with a filter, and its execute() path is
+# permission-blind, so nothing equivalent remains. Recorded here rather than
+# in a commit message alone, because a future reader will otherwise assume the
+# capability was replaced.
+report(not hasattr(tab_charts, "dashboard_drilldowns"),
+	"dashboard_drilldowns() is gone from the service")
+_api_source = open(ROOT / "ucc_intelligence" / "ucc_intelligence" / "api.py",
+	encoding="utf-8").read()
+report("get_dashboard_drilldowns" not in _api_source,
+	"...and so is the endpoint that called it")
+report((ROOT / "ucc_intelligence" / "ucc_intelligence" / "analytics"
+	/ "drilldown.py").exists(),
+	"drilldown.py itself STAYS -- the per-card records path still uses it")
 
 # --- THE SERIES USES THE RESOLVED AXES, NOT A GUESS -------------------------
 #

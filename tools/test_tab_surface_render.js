@@ -409,6 +409,13 @@ assert.ok(embedOk.includes('data-embed-src="/insights/dashboards/dash-1"'),
 assert.ok(!embedOk.includes("/insights/shared/"),
 	"and it is the AUTHENTICATED route, never the is_public shared one");
 
+// THE RECORDS STRIP IS GONE (Felix, 2026-08-04), and gone means the markup
+// too: a strip that renders and then fails to load would be worse than none.
+assert.ok(!/ucc-records-strip|data-records-strip|data-ask-dashboard/.test(embedOk),
+	"the embed renders no Records strip and no Ask link");
+assert.ok(!/ucc-records-strip|data-records-chart|data-ask-dashboard/.test(SRC),
+	"...and nothing anywhere in the page renders or handles one");
+
 const embedDenied = embeddedDashboardMarkup({ embeddedDashboard: "dash-2",
 	embeddedDashboardReadable: false });
 assert.ok(!embedDenied.includes("<iframe"),
@@ -518,6 +525,14 @@ function fakeInsights(opts) {
 		getBoundingClientRect: () => ({ height: o.contentHeight }) };
 	const scroller = o.content === false ? null
 		: { className: "flex-1 overflow-y-auto p-4", firstElementChild: o.emptyGrid ? null : grid };
+	// AppSidebar.vue wraps its link list in an overflow-y-auto too, and it comes
+	// FIRST in document order. This is the element that broke the sizing twice:
+	// querySelector returned it, so the "dashboard height" was a hidden menu's.
+	// Kept in the fake, in the real order, so the bug cannot come back unseen.
+	const sidebarScroller = { className: "flex flex-col overflow-y-auto",
+		firstElementChild: { tagName: "DIV", className: "sidebar-links",
+			getBoundingClientRect: () => ({ height: o.sidebarHeight === undefined ? 0 : o.sidebarHeight }) } };
+	const scrollers = [sidebarScroller].concat(scroller ? [scroller] : []);
 	return { styles, observed, head: { appendChild: (n) => styles.push(n) },
 		createElement: () => ({ setAttribute() {}, textContent: "" }),
 		defaultView: { getComputedStyle: (n) => n.style,
@@ -527,9 +542,12 @@ function fakeInsights(opts) {
 			if (sel === "style[data-ucc-embed-chrome]") return styles[0] || null;
 			if (sel === "div.border-r.bg-gray-50") return sidebar;
 			if (sel === "#app header") return header;
-			if (sel === "#app .overflow-y-auto") return scroller;
+			if (sel === "#app .overflow-y-auto") return scrollers[0] || null;
 			if (sel === "#app") return o.appRoot === false ? null : appRoot;
 			return null;
+		},
+		querySelectorAll(sel) {
+			return sel === "#app .overflow-y-auto" ? scrollers : [];
 		} };
 }
 const insightsDoc = fakeInsights({});
@@ -600,6 +618,14 @@ assert.strictEqual(win.deferred.length, 1,
 assert.ok(win.deferred[0].ms >= 1000,
 	"the check waits long enough for the shell to render");
 win.deferred[0].fn();
+// The NUMBERS, logged every time -- not only when watching fails. Two rounds
+// were spent asking why the frame was short when the log could have said what
+// it measured.
+const heightLog = exported.uccLog.filter((row) => row.event === "embed_height");
+assert.strictEqual(heightLog.length, 1, "the measured height is logged on every embed");
+assert.ok(/dashboard content \d+px, frame \d+px/.test(heightLog[0].detail),
+	"...as both numbers, so a content height of 0 is the diagnosis rather than a mystery");
+
 const chromeLog = exported.uccLog.filter((row) => row.event === "embed_chrome");
 assert.strictEqual(chromeLog.length, 1, "the check logs its result once");
 assert.strictEqual(chromeLog[0].level, "WARNING",
@@ -683,14 +709,28 @@ assert.ok(/::-webkit-scrollbar-thumb\{background:#94A3B8/.test(exported.INSIGHTS
 const watched = sizedFrame(900);
 assert.strictEqual(exported.watchEmbedContent(watched.frame), true,
 	"the frame watches its dashboard's grid for changes");
-assert.strictEqual(watched.doc.observed.length, 1, "...observing exactly one element");
-assert.strictEqual(watched.doc.observed[0].target.className, "h-fit w-full",
-	"...the GRID, whose height is its rows -- not the scroll container, which is "
-	+ "as tall as the frame and would pin the frame to whatever it already was");
+assert.ok(watched.doc.observed.every((row) => row.target.className !== "flex-1 overflow-y-auto p-4"),
+	"...observing the GRID inside each candidate, whose height is its rows -- not "
+	+ "the scroll container, which is as tall as the frame and would pin the frame "
+	+ "to whatever it already was");
+assert.ok(watched.doc.observed.some((row) => row.target.className === "h-fit w-full"),
+	"...and the dashboard's grid is among them");
 assert.strictEqual(exported.watchEmbedContent(sizedFrame(900, { noObserver: true }).frame), false,
 	"a browser without ResizeObserver reports the failure rather than pretending");
-assert.strictEqual(exported.watchEmbedContent(sizedFrame(0, { emptyGrid: true }).frame), false,
-	"...and so does a dashboard with nothing in it yet");
+
+// THE BUG THAT SURVIVED TWO ROUNDS. AppSidebar.vue's link list is also an
+// `#app .overflow-y-auto`, and it comes first, so querySelector handed the
+// sizing a hidden menu's height and every dashboard fell back to the floor.
+const sidebarFirst = sizedFrame(1400, { sidebarHeight: 40 });
+assert.strictEqual(exported.insightsContentHeight(sidebarFirst.frame), 1436,
+	"the DASHBOARD's grid is measured, not the sidebar's link list that precedes it");
+exported.sizeEmbedFrame(sidebarFirst.frame);
+assert.strictEqual(sidebarFirst.frame.style.height, "1436px",
+	"...so a tall dashboard gets a tall frame instead of collapsing to the floor");
+assert.strictEqual(exported.watchEmbedContent(sidebarFirst.frame), true,
+	"and the observer watches every candidate, not only the first");
+assert.ok(sidebarFirst.doc.observed.some((row) => row.target.className === "h-fit w-full"),
+	"...including the dashboard grid, which is the one that changes as charts arrive");
 
 // A frame someone loaded in a narrow window is re-sized when its tab is shown
 // again -- the sizing pass must not be gated on the src promotion.

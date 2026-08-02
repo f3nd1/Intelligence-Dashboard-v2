@@ -685,7 +685,7 @@ checks.append(report("delete_charts_under_embedded_dashboards" in _patches_txt,
 # These assertions exist because "just point the iframe at the workbook" is a
 # reasonable-sounding change someone could make in one line, and it would embed
 # the editor into an EduTrust evidence dashboard.
-_embed = region(ported, "function embeddedDashboardMarkup(", "function renderRecordsStrip(",
+_embed = region(ported, "function embeddedDashboardMarkup(", "function renderTabCharts(",
 	"the dashboard embed")
 checks.append(report("/insights/dashboards/" in _embed,
 	"the embed points at the clean read-only dashboard route"))
