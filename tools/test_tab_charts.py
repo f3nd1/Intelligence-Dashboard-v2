@@ -885,6 +885,42 @@ for key in ("order_by", "value_column", "label_column", "label_position",
 report(unconfirmed["status"] == "available",
 	"...and their presence does not stop the chart drawing")
 
+# THE 2026-08-03 BUG: x_axis as a LIST.
+# _column_of's docstring said it read "a plain string, a dict, or a list of
+# either" from the day it was written. It never handled the list. So
+# bool(config["x_axis"]) was True -- every diagnostic said the axis was set --
+# while the parse returned "" and the card said "no X Axis Column set".
+for shape, label in (
+		([{"column_name": "status"}], "a list of dicts"),
+		(["status"], "a list of strings"),
+		([{}, {"column_name": "status"}], "a list whose first entry is empty")):
+	listed = with_config(x_axis=shape, y_axis=[{"measure_name": "count"}])
+	report(listed["status"] == "available" and listed["x_column"] == "status",
+		"an x_axis written as %s resolves (was the 'no X Axis' bug)" % label)
+report(with_config(x_axis=[], y_axis=["count"])["status"] == "table_only",
+	"an EMPTY list is still no axis")
+report(chart_presentation._column_of(
+	[{"aggregation": "", "column_name": "", "data_type": ""}]) == "",
+	"a list containing only the empty placeholder yields no column")
+
+# A misleading message is its own bug. These three situations are different
+# and must never share a sentence.
+no_rows = chart_presentation.presentation_for("q-open", columns=[])
+report(no_rows["status"] == "table_only" and "returned no rows" in no_rows["reason"]
+	and "X Axis" not in no_rows["reason"],
+	"a query with NO ROWS never blames the axis: %r" % no_rows["reason"])
+unreadable = with_config(x_axis={"mystery_key": "status"})
+report("could not read" in unreadable["reason"] and "not something to fix in Insights" in unreadable["reason"],
+	"an axis Sophia cannot PARSE says so, instead of sending Felix to set it again")
+# with_config() always merges the BASE x_axis in, so a genuinely-unset axis
+# needs the config written directly.
+State.insights_charts = [{"name": "chart-c", "title": "No axes at all",
+	"chart_type": "Bar", "query": "q-open", "data_query": None,
+	"config": json.dumps({"y_axis": ["count"]})}]
+missing = chart_presentation.presentation_for("q-open", columns=["status", "count"])
+report("no X Axis Column set" in missing["reason"],
+	"...and a genuinely unset axis still says to go and set it: %r" % missing["reason"])
+
 # xAxis/yAxis are the builder's unfilled scaffolding, never a fallback.
 PLACEHOLDER = {"aggregation": "", "column_name": "", "data_type": "", "dimension_name": ""}
 report(chart_presentation._column_of(PLACEHOLDER) == "",

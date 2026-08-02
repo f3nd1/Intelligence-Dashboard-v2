@@ -423,6 +423,70 @@ for constant, doctype in (("FINDING_DOCTYPE", "UCC Monitoring Finding"),
 		% (doctype, ", ".join(unknown) if unknown else "ok"))
 
 
+# --- SETTINGS sections 2 and 4 ---------------------------------------------
+reset()
+access_module = types.ModuleType("ucc_intelligence.permissions.access")
+access_module.build_response = lambda: {
+	"criteria": {"criterion_1": True, "criterion_4": False},
+	"ask_student_journey": True, "ask_quality_action": False}
+sys.modules["ucc_intelligence.permissions.access"] = access_module
+
+overview = service.access_overview()
+report(overview["ok"] and len(overview["criteria"]) == 2,
+	"access settings list the criteria from UCC Dashboard Access")
+report(overview["criteria"][1]["visible"] is False,
+	"...with their real visibility, not a default")
+report(overview["modules"]["ask_quality_action"] is False,
+	"the Ask UCC modules come from the same place")
+report(set(overview) >= {"can_edit_tabs", "can_manage_findings", "can_manage_sources"},
+	"and the three DocType permissions are mirrored read-only")
+report("Role Permission Manager" in overview["note"],
+	"...with where they are actually changed, so this page invents no new concept")
+
+# Rule config: on/off and severity ONLY. The definition stays in code.
+State.rule_records = []
+saved_rules = []
+
+
+class FakeRule:
+	def __init__(self):
+		self.data = {}
+
+	def __setattr__(self, key, value):
+		if key == "data":
+			object.__setattr__(self, key, value)
+		else:
+			self.data[key] = value
+
+	def __getattr__(self, key):
+		return self.data.get(key)
+
+	def insert(self):
+		saved_rules.append(dict(self.data))
+
+	def save(self):
+		saved_rules.append(dict(self.data))
+
+
+sys.modules["frappe"].new_doc = lambda doctype: FakeRule()
+result = service.set_rule_config("student_log_background_required", enabled="1", severity="Low")
+report(result["ok"] and result["enabled"] and result["severity"] == "Low",
+	"a rule can be switched on and its severity changed")
+report(saved_rules and saved_rules[0].get("title"),
+	"a first-time record is seeded from the registry, so it describes the rule correctly")
+report(raises(ValidationError_, service.set_rule_config, "invented_rule", enabled="1"),
+	"an unknown rule id is refused, never used to reach code by name")
+State.may_write_findings = False
+State.may_write_sources = False
+report(raises(PermissionError_, service.set_rule_config,
+	"student_log_background_required", enabled="0"),
+	"a reader cannot change a rule")
+State.may_write_findings = True
+State.may_write_sources = True
+
+rule_body = inspect.getsource(service.set_rule_config) if "inspect" in dir() else ""
+
+
 # --- the gate must be EXPLICIT, not inherited from the DocType -------------
 # Removing the permission check from set_finding_status() passed every
 # behavioural check above, because FakeDoc.save() refuses anyway -- exactly as

@@ -1246,16 +1246,25 @@ return'<article class="ucc-ops-stat'+(count?" is-"+level.toLowerCase():"")+'"><s
 +(data.can_manage
 ?'<button type="button" class="ucc-ops-primary" data-run-monitoring>Run all rules now</button>'
 :"")+"</div>"
++'<p class="ucc-ops-help"><strong>Rules are built into Sophia and cannot be added here.</strong> '
++"Ask your developer to add a new one. You can turn each rule on or off, and change "
++"its severity, in the <em>UCC Monitoring Rule</em> list in Settings. "
++'<strong>“Run”</strong> checks that one rule against your live records straight away '
++"and updates its Open count and Last run. It only reads — it never changes a record.</p>"
 +(rules.length?'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
-+"<th>Rule</th><th>Looks at</th><th>Severity</th><th>State</th><th>Last run</th><th>Open</th>"
++'<th class="ucc-col-rule">Rule</th><th>Looks at</th><th>Severity</th><th>State</th>'
++'<th>Last run</th><th class="ucc-col-open">Open</th>' 
 +(data.can_manage?"<th></th>":"")+"</tr></thead><tbody>"
 +rules.map(function(rule){
 return"<tr><td><strong>"+esc(rule.title)+"</strong><br><small>"+esc(rule.purpose||"")+"</small></td>"
 +"<td>"+esc(rule.target_doctype||"—")+"</td>"
-+"<td>"+esc(rule.severity||"—")+"</td>"
++'<td><span class="ucc-ops-pill is-'+esc((rule.severity||"low").toLowerCase())+'">'
++esc(rule.severity||"—")+"</span></td>"
 // "Not configured" is not the same as "disabled". A rule with no record has
 // never been set up either way, and saying "disabled" would invent an intent.
-+"<td>"+(rule.configured?(rule.enabled?"Enabled":"Disabled"):"Not configured yet")+"</td>"
++'<td><span class="ucc-ops-state is-'
++(rule.configured?(rule.enabled?"on":"off"):"unset")+'">'
++(rule.configured?(rule.enabled?"Enabled":"Disabled"):"Not configured yet")+"</span></td>"
 +"<td>"+opsDate(rule.last_run)+"</td>"
 +"<td>"+esc(String(rule.open_findings||0))+"</td>"
 +(data.can_manage
@@ -1455,10 +1464,26 @@ const title=(ops.querySelector("[data-source-title]")||{}).value||"";
 const type=(ops.querySelector("[data-source-type]")||{}).value||"Policy";
 const text=(ops.querySelector("[data-source-text]")||{}).value||"";
 const status=ops.querySelector("[data-source-status]");
-if(!title.trim()||!text.trim()){
-if(status)status.textContent="A title and some text are both needed.";
+// #3: one combined message read as "something is not set up". It is form
+// validation, so it says WHICH field, beside that field. There is no
+// connector to configure here -- nothing external is involved.
+ops.querySelectorAll("[data-field-error]").forEach(function(node){node.remove();});
+let missing=false;
+[["[data-source-title]","Title is required."],
+["[data-source-text]","Text is required — paste the document's content here."]]
+.forEach(function(pair){
+const field=ops.querySelector(pair[0]);
+if(!field||field.value.trim())return;
+missing=true;
+field.insertAdjacentHTML("afterend",
+'<span class="ucc-field-error" data-field-error>'+esc(pair[1])+"</span>");
+field.setAttribute("aria-invalid","true");
+});
+if(missing){
+if(status)status.textContent="";
 return;
 }
+ops.querySelectorAll("[aria-invalid]").forEach(function(node){node.removeAttribute("aria-invalid");});
 if(status)status.textContent="Registering…";
 frappe.call({method:"ucc_intelligence.api.add_knowledge_source",
 args:{title:title,source_type:type,text:text},
@@ -1499,6 +1524,104 @@ ops.addEventListener("change",function(event){
 if(event.target.closest("[data-ops-status]")||event.target.closest("[data-ops-severity]"))loadFindings(root);
 });
 }
+
+
+// ===========================================================================
+// SETTINGS -- sections 2 and 4 of the agreed split
+//
+// 1 AI & providers, 3 presentation, 5 knowledge policy  -> the Frappe form
+// 2 access & visibility, 4 monitoring rules             -> here
+//
+// NO NEW PERMISSION CONCEPTS. Access shows what UCC Dashboard Access already
+// decides, plus a read-only mirror of the two DocType permissions that govern
+// editing tabs and closing findings -- so the whole model is legible in one
+// place without inventing a second one.
+// ===========================================================================
+window.UCCSettings={open:function(){
+openModal("Sophia settings",tabChartNotice("Loading…"));
+if(!(window.frappe&&frappe.call))return;
+frappe.call({method:"ucc_intelligence.api.get_access_overview",
+callback(response){
+const access=(response&&response.message)||{};
+frappe.call({method:"ucc_intelligence.api.get_monitoring_overview",
+callback(second){renderSettings(access,(second&&second.message)||{});},
+error(){renderSettings(access,{});}});
+},
+error(error){openModal("Sophia settings",tabChartNotice(apiErrorMessage(error)));}});
+}};
+
+function settingsRow(label,allowed,note){
+return'<tr><td>'+esc(label)+"</td>"
++'<td><span class="ucc-ops-state is-'+(allowed?"on":"off")+'">'
++(allowed?"Yes":"No")+"</span></td>"
++"<td><small>"+esc(note||"")+"</small></td></tr>";
+}
+
+function renderSettings(access,monitoring){
+const criteria=access.criteria||[];
+const rules=monitoring.rules||[];
+openModal("Sophia settings",
+'<p class="ucc-chart-picker-note">Institution-wide configuration. The AI provider, '
++"chart colours and document-knowledge policy are on the "
++'<a href="/app/ucc-intelligence-settings">UCC Intelligence Settings form</a>; '
++"what is shown here needs more room than a form field.</p>"
++'<h4 class="ucc-settings-heading">Access and visibility</h4>'
++(access.ok===false?tabChartNotice(access.message||"Access settings are unavailable.")
+:'<p class="ucc-ops-help">'+esc(access.note||"")+"</p>"
++'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
++"<th>What</th><th>You can see it</th><th>Decided by</th></tr></thead><tbody>"
++criteria.map(function(row){
+return settingsRow(row.key.replace("criterion_","Criterion "),row.visible,"UCC Dashboard Access");
+}).join("")
++Object.keys(access.modules||{}).map(function(key){
+return settingsRow("Ask UCC · "+key.replace("ask_","").replace(/_/g," "),
+access.modules[key],"UCC Dashboard Access");
+}).join("")
++settingsRow("Edit tabs (charts, intro, questions)",access.can_edit_tabs,
+"Write on UCC Analytics Tab — Role Permission Manager")
++settingsRow("Resolve or suppress findings",access.can_manage_findings,
+"Write on UCC Monitoring Finding — Role Permission Manager")
++settingsRow("Register knowledge documents",access.can_manage_sources,
+"Write on UCC Knowledge Source — Role Permission Manager")
++"</tbody></table></div>")
++'<h4 class="ucc-settings-heading">Monitoring rules</h4>'
++'<p class="ucc-ops-help"><strong>Rules are built into Sophia and cannot be added '
++"here.</strong> Ask your developer to add a new one. You can turn each rule on or "
++"off and change how serious it is — that is all that is editable, because a rule "
++"an auditor cannot trust is not worth running.</p>"
++(rules.length?'<div class="table-wrap"><table class="ucc-history-table"><thead><tr>'
++'<th class="ucc-col-rule">Rule</th><th>Looks at</th><th>On</th><th>Severity</th>'
++"</tr></thead><tbody>"
++rules.map(function(rule){
+return"<tr><td><strong>"+esc(rule.title)+"</strong></td>"
++"<td>"+esc(rule.target_doctype||"—")+"</td>"
++'<td><input type="checkbox" data-rule-enabled="'+esc(rule.rule_id)+'"'
++(rule.enabled?" checked":"")+"></td>"
++'<td><select data-rule-severity="'+esc(rule.rule_id)+'">'
++["High","Medium","Low"].map(function(level){
+return'<option'+(rule.severity===level?" selected":"")+">"+level+"</option>";
+}).join("")+"</select></td></tr>";
+}).join("")+"</tbody></table></div>"
+:tabChartNotice("No monitoring rules are registered."))
++'<p class="ucc-ops-hint" data-settings-status></p>');
+}
+
+// One delegated handler for both controls. The server re-checks the
+// permission; this only decides what is drawn.
+document.addEventListener("change",function(event){
+const toggle=event.target.closest("[data-rule-enabled]");
+const severity=event.target.closest("[data-rule-severity]");
+if(!toggle&&!severity)return;
+if(!(window.frappe&&frappe.call))return;
+const status=document.querySelector("[data-settings-status]");
+const args=toggle
+?{rule_id:toggle.dataset.ruleEnabled,enabled:toggle.checked?"1":"0"}
+:{rule_id:severity.dataset.ruleSeverity,severity:severity.value};
+if(status)status.textContent="Saving…";
+frappe.call({method:"ucc_intelligence.api.set_monitoring_rule",args:args,
+callback(){if(status)status.textContent="Saved.";},
+error(error){if(status)status.textContent=apiErrorMessage(error);}});
+});
 
 // --- #1: the change history, somewhere readable -----------------------------
 // The records are in Desk as UCC Analytics Tab Change, but "open the list view
@@ -1836,7 +1959,25 @@ style.textContent=`
  min-height:34px;padding:0 14px;font-size:12px;font-weight:600;cursor:pointer}
 .ucc-ops-primary:hover{background:#1E3A8A}
 .ucc-ops-hint{margin:8px 0 0;font-size:11px;color:#64748B}
+.ucc-field-error{display:block;margin-top:4px;font-size:11px;color:#B91C1C}
+.ucc-ops-form [aria-invalid="true"]{border-color:#EF4444}
 .ucc-ops-fix{color:#2563EB}
+/* #2: the rule names and their CLAUDE.md references were wrapping badly while
+   a one-digit count had a wide column to itself. */
+.ucc-col-rule{width:38%}
+.ucc-col-open{width:56px;text-align:right}
+.ucc-history-table td.ucc-col-open{text-align:right}
+.ucc-ops-help{margin:0 0 12px;font-size:12px;color:#475569;background:#F8FAFC;
+ border:1px solid #E6EBF3;border-left:3px solid #2563EB;border-radius:6px;padding:9px 12px;line-height:1.55}
+.ucc-ops-help strong{color:#172554}
+.ucc-settings-heading{margin:18px 0 8px;font-size:14px;color:#172554}
+.ucc-settings-heading:first-of-type{margin-top:8px}
+/* Same colour language as the severity pills and the findings table. */
+.ucc-ops-state{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;
+ border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+.ucc-ops-state.is-on{background:#DCFCE7;color:#15803D}
+.ucc-ops-state.is-off{background:#F1F5F9;color:#475569}
+.ucc-ops-state.is-unset{background:#FEF3C7;color:#92400E}
 @media(max-width:760px){.ucc-ops-head{flex-direction:column;align-items:flex-start}}
 
 /* #4: the intro renders Markdown, so it needs the elements Markdown makes. */
@@ -3696,8 +3837,15 @@ function initSettingsLink(platformRoot) {
 	if (!button || button.dataset.settingsReady === "1") return;
 	button.dataset.settingsReady = "1";
 
+	// The gear now opens a chooser rather than jumping straight to the form.
+	// Agreed split (2026-08-03): the AI provider, chart palette and knowledge
+	// policy are plain fields and Frappe's own form renders them fine; access
+	// is a MATRIX and monitoring rules are a TABLE, and neither is readable as
+	// a stack of form fields. So those two get a Sophia page, behind the same
+	// gear, and everything stays in one entry point.
 	button.addEventListener("click", () => {
-		frappe.set_route("Form", "UCC Intelligence Settings");
+		if (window.UCCSettings) window.UCCSettings.open();
+		else frappe.set_route("Form", "UCC Intelligence Settings");
 	});
 
 	// Only hide on a positive "no". If the perm API isn't there to ask, show

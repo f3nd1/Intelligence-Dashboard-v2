@@ -97,7 +97,7 @@ def run():
 		found = None
 		for field in ("query", "data_query"):
 			rows = frappe.get_list(CHART_DOCTYPE, filters={field: stored_id},
-				fields=["name", "title", "chart_type", "config"],
+				fields=["name", "title", "chart_type", "config", "query", "data_query"],
 				order_by="modified desc", limit_page_length=5) or []
 			print("      charts whose `%s` = this id: %s"
 				% (field, [r["name"] for r in rows] or "none"))
@@ -140,6 +140,12 @@ def run():
 				% (list(rows[0].keys()) if rows else "no rows"))
 		except Exception as error:
 			print("      could not execute the query: %s" % error)
+
+	head("1c", "NOTE ON A PREVIOUS RUN")
+	print("   The 2026-08-03 run printed 'Insights Query v3 None not found' for")
+	print("   every card. That was THIS SCRIPT's bug, not the app's: it asked")
+	print("   get_list for name/title/chart_type/config and then read `query`,")
+	print("   which it had never fetched. Fixed. It said nothing about Sophia.")
 
 	head(2, "WHICH CHARTS FELIX HAS EDITED MOST RECENTLY")
 	print("   If the chart he edited is NOT one of the records above, the tab")
