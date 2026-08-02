@@ -53,21 +53,26 @@ const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown"
 	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId",
 	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
 	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
-	"paintTableOnly"];
-// CHART_PAINTERS is a const, not a function, so lift() cannot reach it. It is
-// taken from the real source verbatim rather than retyped here, so a painter
-// added to the page cannot silently disagree with what this harness tests.
-const PAINTER_MAP = (SRC.match(/const CHART_PAINTERS=\{[\s\S]*?\};/) || [])[0];
-assert.ok(PAINTER_MAP, "the page declares CHART_PAINTERS");
+	"paintTableOnly", "sortForDisplay"];
+// Module-level consts, which lift() cannot reach because it looks for
+// `function <name>(`. Taken from the real source VERBATIM rather than retyped,
+// so a painter or a threshold changed on the page cannot silently disagree
+// with what this harness tests.
+const CONSTS = ["CHART_PAINTERS", "DONUT_LABEL_MIN_SHARE", "SORTED_BY_VALUE"]
+	.map(function (name) {
+		const found = (SRC.match(new RegExp("const " + name + "=[\\s\\S]*?;\\n")) || [])[0];
+		assert.ok(found, "the page declares " + name);
+		return found;
+	}).join("\n");
 
 const exported = new Function("window", "document", "frappe", "CSS",
 	"const tabChartState={};let lastView=null;function setChartView(c,v){lastView=v;}\n"
-	+ PAINTER_MAP + "\n" + NEEDED.map(lift).join("\n")
+	+ CONSTS + "\n" + NEEDED.map(lift).join("\n")
 	+ "\n;return { " + NEEDED.join(", ") + ", tabChartState, viewAfterPaint: () => lastView };"
 )(win, doc, frappe, { escape: (s) => s });
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
 	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
-	paintBarSeries, paintLineSeries, paintDonutSeries, paintNumberSeries,
+	paintBarSeries, paintLineSeries, paintDonutSeries, paintNumberSeries, sortForDisplay,
 	paintFunnelSeries, paintChartSeries } = exported;
 
 // --- the tab intro's Markdown subset (#4) ----------------------------------
@@ -311,6 +316,66 @@ const hostileChart = node();
 paintDonutSeries(CHART, hostileChart, [{ label: '<img src=x onerror=alert(1)>', value: 1 }]);
 assert.ok(!hostileChart.innerHTML.includes("<img"),
 	"a hostile label cannot become markup in a chart");
+
+// --- #1 legend_position, #2 labels on the ring, #3 largest slice first -----
+const DONUT = [{ label: "Diploma", value: 10 }, { label: "Advanced", value: 60 },
+	{ label: "Certificate", value: 30 }];
+
+// #1. The donut is the only shape with a legend, and it moves.
+for (const [position, expected] of [["bottom", 'data-legend="bottom"'],
+		["left", 'data-legend="left"'], ["top", 'data-legend="top"']]) {
+	const placed = node();
+	paintDonutSeries(cardWith({ palette: ["#111111"], legend_position: position }), placed, DONUT);
+	assert.ok(placed.innerHTML.includes(expected),
+		"legend_position " + position + " reaches the markup the CSS keys off");
+}
+const noLegend = node();
+paintDonutSeries(cardWith({ palette: ["#111111"], legend_position: "none" }), noLegend, DONUT);
+assert.ok(!noLegend.innerHTML.includes("ucc-insights-donut-legend"),
+	'legend_position "none" removes the legend rather than hiding it with CSS');
+const defaultLegend = node();
+paintDonutSeries(cardWith({ palette: ["#111111"] }), defaultLegend, DONUT);
+assert.ok(defaultLegend.innerHTML.includes('data-legend="right"'),
+	"...and an unset legend_position falls back to right, not to nothing");
+
+// #2. The percentage sits ON the ring, not only in the list beneath it.
+const ringed = node();
+paintDonutSeries(cardWith({ palette: ["#111111"] }), ringed, DONUT);
+assert.ok(ringed.innerHTML.includes("ucc-insights-donut-mark"),
+	"the donut draws its shares on the ring itself");
+assert.ok(/>60%</.test(ringed.innerHTML) && />30%</.test(ringed.innerHTML),
+	"...with each slice's own share: " + (ringed.innerHTML.match(/>\d+%</g) || []).join(" "));
+assert.ok(!ringed.innerHTML.includes("<svg"),
+	"...and still no SVG -- the marks are positioned spans");
+assert.ok(ringed.innerHTML.includes('aria-hidden="true"'),
+	"the ring marks are hidden from screen readers, which read the legend buttons instead");
+// A sliver would collide with its neighbours, and its value is in the legend
+// and the table regardless.
+const slivers = node();
+paintDonutSeries(cardWith({ palette: ["#111111"] }), slivers,
+	[{ label: "Big", value: 97 }, { label: "Tiny", value: 2 }, { label: "Tinier", value: 1 }]);
+assert.strictEqual((slivers.innerHTML.match(/class="ucc-insights-donut-mark"/g) || []).length, 1,
+	"only slices with room for a label get one");
+assert.ok(slivers.innerHTML.includes("Tiny"),
+	"...and the unlabelled slices are still in the legend, so nothing is lost");
+
+// #3. Largest first on the ring; every other shape keeps the query's order.
+assert.deepStrictEqual(sortForDisplay("donut", DONUT).map((r) => r.value), [60, 30, 10],
+	"a donut is drawn largest slice first");
+assert.deepStrictEqual(sortForDisplay("line", DONUT).map((r) => r.value), [10, 60, 30],
+	"a line keeps the query's order -- sorting it would stop it being a time series");
+assert.deepStrictEqual(sortForDisplay("bar", DONUT).map((r) => r.value), [10, 60, 30],
+	"a bar keeps the order its author chose in Insights");
+assert.deepStrictEqual(DONUT.map((r) => r.value), [10, 60, 30],
+	"sorting copies rather than reordering the card's own data");
+
+// The limit is applied BEFORE the sort, so a "top 10" chart still shows the
+// ten rows Insights picked -- reordered, not replaced.
+const limited = node();
+paintChartSeries(limited, [{ label: "First", value: 1 }, { label: "Second", value: 99 }],
+	cardWith({ status: "available", render_as: "donut", palette: ["#111111"], limit: 1 }));
+assert.ok(limited.innerHTML.includes("First") && !limited.innerHTML.includes("Second"),
+	"a limited donut keeps the rows Insights chose, not the largest ones");
 
 // The labelled fallback: never blank, never broken, always says why.
 const fallback = node();
