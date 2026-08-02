@@ -649,6 +649,42 @@ checks.append(report("workbook:workbook" in _dash,
 checks.append(report("This tab also has " in ported and "kept, not deleted" in ported,
 	"an embedded tab SAYS that charts saved before it are kept, not deleted"))
 
+
+# --- A DASHBOARD, NEVER A WORKBOOK ROUTE ------------------------------------
+#
+# Felix asked to embed a WORKBOOK with no Insights chrome. Insights has no such
+# view: /workbook/:wb renders WorkbookNavbar + WorkbookSidebar and is editing
+# only, /workbook/:wb/chart/:id is the chart EDITOR, and the clean /shared/*
+# routes are is_public-only. Only /dashboards/:name is both clean and
+# permission-correct.
+#
+# These assertions exist because "just point the iframe at the workbook" is a
+# reasonable-sounding change someone could make in one line, and it would embed
+# the editor into an EduTrust evidence dashboard.
+_embed = region(ported, "function embeddedDashboardMarkup(", "function renderRecordsStrip(",
+	"the dashboard embed")
+checks.append(report("/insights/dashboards/" in _embed,
+	"the embed points at the clean read-only dashboard route"))
+# The string LITERAL, not the phrase -- both routes are named in comments
+# explaining why they are refused, and a comment is documentation, not a URL.
+for _forbidden, _why in (
+		("/insights/workbook/", "the workbook route -- navbar, sidebar, editing only"),
+		("/insights/shared/", "the shared route -- is_public, a permission bypass")):
+	_literals = ['"' + _forbidden, "'" + _forbidden]
+	checks.append(report(not any(text in ported for text in _literals),
+		"no URL is ever built for %s (%s)" % (_forbidden, _why)))
+
+# The words, so "workbook" and "dashboard" cannot blur back together.
+checks.append(report("named set of" in ported,
+	"the UI explains that a dashboard is a named set of a workbook's charts"))
+checks.append(report("no sidebar, no query builder, no settings" in ported,
+	"...and states plainly that no editing interface is embedded"))
+# In the MARKUP, not merely carried in state -- the field can be populated and
+# then ignored, which is exactly what a bare id in the caption looks like.
+checks.append(report("state.embeddedDashboardTitle||id" in _embed
+	and "esc(name)" in _embed,
+	"the embed is LABELLED with the dashboard's title, falling back to the id"))
+
 passed = all(checks)
 print()
 print(f"{'PASS' if passed else 'FAIL'}: {sum(checks)}/{len(checks)} checks")

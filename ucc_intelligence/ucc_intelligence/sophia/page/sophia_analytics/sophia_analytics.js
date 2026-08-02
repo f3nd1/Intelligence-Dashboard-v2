@@ -567,18 +567,44 @@ return`<article class="ucc-embedded-chart${editing?" is-editable":""}" data-embe
 // the frame carries the viewer's own session and Insights runs its own
 // permission query. The `/insights/shared/...` route is never used: it is
 // is_public-only and would need a permission bypass to work at all.
+// WHY A DASHBOARD AND NOT A WORKBOOK (settled 2026-08-03).
+//
+// Felix asked to embed a WORKBOOK with no Insights chrome. Insights offers no
+// such view. Its route table, read from frontend/src2/router.ts:
+//
+//   /workbook/:wb                  Workbook.vue -- WorkbookNavbar + WorkbookSidebar,
+//                                  editing only, Cmd+S saves, import handlers
+//   /workbook/:wb/chart/:id        ChartBuilder -- the chart EDITOR
+//   /workbook/:wb/query/:id        the query editor
+//   /dashboards/:name              Dashboard.vue -- grid disabled, no sidebar,
+//                                  no navbar, no editor
+//   /shared/*                      clean, but is_public-only: a permission
+//                                  bypass, forbidden here
+//
+// Only /dashboards/:name is both clean and permission-correct. So a dashboard
+// it is -- which costs nothing, because an Insights dashboard IS a named set
+// of a workbook's charts. The UI says "dashboard" everywhere and explains that
+// relationship, rather than letting the two words blur.
+//
+// What still renders inside the frame: Insights' breadcrumb and a small
+// refresh/menu header. NOT stripped -- hiding it would mean injecting CSS
+// against Insights' internal DOM, which breaks on their next release and is
+// exactly the coupling this migration exists to escape.
 function embeddedDashboardMarkup(state){
 const id=state.embeddedDashboard;
+const name=state.embeddedDashboardTitle||id;
 if(!state.embeddedDashboardReadable){
 return tabChartNotice("This tab is set to show the Insights dashboard "
 +esc(id)+", which your account cannot open. Ask whoever owns it in Insights "
 +"to share it with you.");
 }
 return'<div class="ucc-embed-dashboard">'
-+'<iframe class="ucc-embed-frame" title="Insights dashboard '+esc(id)+'" '
++'<iframe class="ucc-embed-frame" title="Insights dashboard '+esc(name)+'" '
 +'loading="lazy" data-embed-name="'+esc(id)+'" '
 +'data-embed-src="/insights/dashboards/'+encodeURIComponent(id)+'"></iframe>'
-+'<p class="ucc-embed-note"><span data-embed-timing>Loading…</span> · '
++'<p class="ucc-embed-note">Showing the Insights <strong>dashboard</strong> “'
++esc(name)+'” — a named set of charts from its workbook. '
++'<span data-embed-timing>Loading…</span> · '
 +'Drawn by Frappe Insights, with your own permissions. '
 +'<a href="/insights/dashboards/'+encodeURIComponent(id)+'" target="_blank" '
 +'rel="noopener">Open in Insights</a></p>'
@@ -678,6 +704,7 @@ sizes:(response&&response.sizes)||["small","medium","large","full"],
 canEdit:!!(response&&response.can_edit),
 embeddedDashboard:(response&&response.embedded_dashboard)||"",
 embeddedDashboardReadable:!!(response&&response.embedded_dashboard_readable),
+embeddedDashboardTitle:(response&&response.embedded_dashboard_title)||"",
 loading:false,error:null};
 renderTabCharts(dashboard,config,tab);
 renderTabActions(dashboard,tab);
@@ -2249,16 +2276,14 @@ function openDashboardPicker(dashboard,config,tab){
 openModal("Embed an Insights dashboard",
 '<div class="ucc-chart-picker">'
 +'<div data-picker-step1>'
-+'<p class="ucc-chart-picker-note">Dashboards live in workbooks in Frappe '
-+'Insights. Choose the workbook first.</p>'
++'<p class="ucc-chart-picker-note">A <strong>dashboard</strong> is a named set of a workbook&rsquo;s charts, built in Frappe Insights. Dashboards live inside workbooks, so choose the workbook first.</p>'
 +'<div class="ucc-chart-picker-results" data-workbook-list>'+tabChartNotice("Loading…")+"</div></div>"
 +'<div data-picker-step2 hidden>'
 +'<button type="button" class="ucc-chart-picker-back" data-picker-back>&#8592; Choose a different workbook</button>'
 +'<h4 class="ucc-chart-picker-where" data-picker-where></h4>'
 +'<input type="search" class="ucc-chart-picker-search" data-chart-picker-search '
 +'placeholder="Search dashboards…" autocomplete="off" aria-label="Search Insights dashboards">'
-+'<p class="ucc-chart-picker-note">This tab will show the whole dashboard, '
-+'drawn by Insights with its own layout and colours.</p>'
++'<p class="ucc-chart-picker-note">This tab will show the whole dashboard, drawn by Insights with its own layout and colours. None of Insights&rsquo; editing interface is embedded &mdash; no sidebar, no query builder, no settings.</p>'
 +'<div class="ucc-chart-picker-results" data-chart-picker-results>'+tabChartNotice("Loading…")+"</div>"
 +"</div></div>");
 const modal=ensureModal();

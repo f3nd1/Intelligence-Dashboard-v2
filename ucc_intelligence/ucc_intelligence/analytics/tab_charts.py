@@ -536,6 +536,10 @@ def get_tab(criterion, tab):
 		# fetches the dashboard's contents and never sees its data.
 		"embedded_dashboard": config["embedded_dashboard"],
 		"embedded_dashboard_readable": _dashboard_readable(config["embedded_dashboard"]),
+		# The TITLE, because the id is a hash. Same rule as the cards and the
+		# picker: an id is never a useful label to a human. Empty when this
+		# user cannot read it, and the page says that instead.
+		"embedded_dashboard_title": _dashboard_title(config["embedded_dashboard"]),
 		# The page renders the same tab for everyone and shows the edit
 		# controls only when this is true. It is a UI signal, not the gate --
 		# every write endpoint checks again.
