@@ -327,10 +327,28 @@ ADR_016 = ROOT / "docs" / "architecture" / "decisions" / "ADR-016-refuse-rather-
 report(ADR_016.exists(), "ADR-016 records why Sophia refuses rather than infers")
 PROBE = ROOT / "docs" / "migration" / "scripts" / "probe_insights_chart_config.py"
 report(PROBE.exists(), "a probe exists for the builder controls whose config keys are unknown")
+# NOT READ -- but no longer UNKNOWN.
+#
+# This used to search the raw source, which made it impossible to write the
+# confirmed key names down anywhere in the module. That was the wrong shape for
+# the property: the risk is READING a key inferred from a label, not naming one
+# in a docstring beside the source it came from. So the search is on code with
+# comments and docstrings removed -- a real `config.get("y_min")` still trips
+# it, because code string literals are deliberately kept.
+presentation_code = strip_comments_and_strings(presentation_source, True)
 for guessed in ("rotate_values", "show_data_labels", "split_series", "y_min", "y_max",
-		"show_scrollbar", "normalize", "overlap"):
-	report(guessed not in presentation_source,
-		"no config key was inferred from a UI label (%s)" % guessed)
+		"show_scrollbar", "normalize", "overlap", "label_rotation", "split_by",
+		"max_split_values"):
+	report(guessed not in presentation_code,
+		"no config key for an unbuilt control is READ (%s)" % guessed)
+# ...and the names ARE written down, with where they came from, so the next
+# round does not re-run a probe whose answer is already settled.
+report("chart.types.ts" in presentation_source
+	and "x_axis.label_rotation" in presentation_source
+	and "y_axis.min" in presentation_source,
+	"the confirmed key paths are recorded in the docstring, with their source")
+report("split_by" in presentation_source and "withhold" in presentation_source.lower(),
+	"...and split_by is recorded as a WITHHOLD question, not a cosmetic one")
 
 # The 2026-08-03 probe confirmed 16 real keys. Reading one whose MEANING is
 # still unconfirmed would be the same mistake with a real name attached, so the

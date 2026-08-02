@@ -156,6 +156,51 @@ report("NO CHART CHOSEN" not in output,
 report("UCC_PROBE_CHART" not in probe,
 	"and the probe never wrote the name into its own globals to make that work")
 
+
+# --- THE DECLARED PATHS -------------------------------------------------
+#
+# The 2026-08-03 run found nothing for seven of the nine, and the reason was
+# not that Insights stores them elsewhere. It was that the probed chart was a
+# DONUT, and all nine are axis-chart keys. The expected paths below are copied
+# from Insights' chart.types.ts, so the probe now checks a path instead of
+# hoping a name matches -- and `x_axis.label_rotation` is the proof it needed
+# to: "rotation".startswith("rotate") is False, so the name matcher would have
+# reported Rotate Values ABSENT on a chart that had it.
+CONTROLS = dict((control, expected) for control, expected, _hint in probe["CONTROLS"])
+report(CONTROLS["Rotate Values"] == "x_axis.label_rotation",
+	"Rotate Values is checked at x_axis.label_rotation, per chart.types.ts")
+report(CONTROLS["Y-Min"] == "y_axis.min" and CONTROLS["Y-Max"] == "y_axis.max",
+	"...Y-Min/Y-Max at y_axis.min / y_axis.max, NOT y_min / y_max")
+report(CONTROLS["Split Series"] == "split_by", "...Split Series at split_by")
+report(not matches("x_axis.label_rotation", probe["CONTROL_WORDS"]["Rotate Values"]),
+	"the NAME matcher misses label_rotation -- which is why the path is checked")
+
+donut = {"chart_type": "Donut", "label_column": {"column_name": "t", "data_type": "String"},
+	"x_axis": {"dimension": {"label": "status"}}, "label_position": "left"}
+bar = {"chart_type": "Bar", "x_axis": {"dimension": {"column_name": "s"}, "label_rotation": 45},
+	"y_axis": {"series": [{"show_data_labels": True}], "min": 10, "max": 250,
+		"normalize": True, "show_axis_label": True, "show_scrollbar": True,
+		"show_data_labels": True},
+	"split_by": {"dimension": {"column_name": "programme"}}}
+donut_paths = dict(walk(donut))
+bar_paths = dict(walk(bar))
+report(not any(path in donut_paths for path in CONTROLS.values()),
+	"a Donut carries NONE of the nine -- the correct answer, not a failed search")
+missing_on_bar = [c for c, path in CONTROLS.items() if path not in bar_paths]
+report(missing_on_bar == ["Overlap"],
+	"a Bar carries all of them (only Overlap left unset here): missing=%s" % missing_on_bar)
+
+probe["frappe"].get_list = lambda doctype, **kwargs: [
+	{"name": "d1", "title": "Donut", "chart_type": "Donut", "modified": "2026-08-03",
+		"config": __import__("json").dumps(donut)}]
+donut_output = capture("d1")
+report("ALL NINE ARE AXIS-CHART KEYS" in donut_output,
+	"...and the probe SAYS so on a Donut, instead of reporting nine mysteries")
+report("CANDIDATE    label_column.data_type" in donut_output,
+	"the data_type false match still shows -- as a candidate beside an ABSENT path")
+report("       PRESENT " not in donut_output and donut_output.count("       ABSENT ") == 9,
+	"...and all nine are reported ABSENT at their declared path, none PRESENT")
+
 # The probe must not write. Asserted by source, because a probe that edits the
 # thing it is measuring is the worst possible tool.
 source = PROBE.read_text()

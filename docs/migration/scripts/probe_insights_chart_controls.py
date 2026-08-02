@@ -65,20 +65,38 @@ KNOWN_KEYS = (
 	"target_column", "show_inline_labels",
 )
 
-# The nine controls with no confirmed key name, and what a real value for each
-# would LOOK like. The shape is the useful half: a control that stores a number
-# cannot be a key holding True, however well the names match.
+# The nine controls, their EXPECTED path, and what the value should look like.
+#
+# The expected paths are not guesses any more. They are copied from Insights'
+# own TypeScript declarations, `frontend/src2/types/chart.types.ts`, where
+# AxisChartConfig / YAxis / YAxisBar / XAxis declare every one of them. That is
+# a source, not a plausible-sounding name, which is what ADR-016 asks for.
+#
+# EVERY ONE OF THE NINE IS AN AXIS-CHART KEY -- Bar, Line or Row. DonutChartConfig
+# declares only label_column, value_column, legend_position, max_slices and
+# show_inline_labels. So a Donut carrying none of them is the correct and
+# expected result, not a failure to find them.
+#
+# Note `y_axis.min` and `y_axis.max`, NOT `y_min`/`y_max`. And note
+# `x_axis.label_rotation`, which the name matcher below would NOT have caught:
+# "rotation".startswith("rotate") is False. The expected path is checked
+# directly for exactly that reason.
 CONTROLS = (
-	("Rotate Values", "a number of degrees (45, 90) or a string like '45'"),
-	("Overlap", "a boolean, or a number if it is an overlap percentage"),
-	("Normalize", "a boolean"),
-	("Show Data Labels", "a boolean"),
-	("Show Axis Label (the toggle, not the label text)", "a boolean"),
-	("Show Scrollbar", "a boolean"),
-	("Y-Min", "a number"),
-	("Y-Max", "a number"),
-	("Split Series", "a boolean, or a column name"),
+	("Rotate Values", "x_axis.label_rotation", "a number of degrees"),
+	("Overlap", "y_axis.overlap", "a boolean -- Bar only (YAxisBar)"),
+	("Normalize", "y_axis.normalize", "a boolean -- Bar only (YAxisBar)"),
+	("Show Data Labels", "y_axis.show_data_labels",
+		"a boolean; also per-series at y_axis.series[n].show_data_labels"),
+	("Show Axis Label (the toggle, not the label text)", "y_axis.show_axis_label",
+		"a boolean; the TEXT is y_axis.axis_label"),
+	("Show Scrollbar", "y_axis.show_scrollbar", "a boolean"),
+	("Y-Min", "y_axis.min", "a number"),
+	("Y-Max", "y_axis.max", "a number"),
+	("Split Series", "split_by", "an object: {dimension, max_split_values}"),
 )
+
+# Chart types that can carry the nine at all, per AXIS_CHARTS in chart.types.ts.
+AXIS_CHARTS = ("bar", "line", "row")
 
 # Used only to SHORTLIST candidates for a human to judge. Never to conclude.
 #
@@ -258,24 +276,40 @@ def ucc_probe(chart_id=""):
 		print("   %-6s %-34s %s" % (mark, path, describe(value)))
 
 	head(3, "THE NINE CONTROLS -- WHAT WAS FOUND FOR EACH")
-	print("   A CANDIDATE is a name that looks related. It is NOT a confirmation.")
-	print("   Read its value against the 'expects' line: a control that stores a")
-	print("   number cannot be a key holding True, however well the names match.\n")
+	is_axis_chart = (found.get("chart_type") or "").lower() in AXIS_CHARTS
+	if not is_axis_chart:
+		print("   THIS IS A %s CHART, AND ALL NINE ARE AXIS-CHART KEYS."
+			% (found.get("chart_type") or "?").upper())
+		print("   Per Insights' own chart.types.ts, only Bar, Line and Row declare")
+		print("   x_axis/y_axis at all. Finding none of them here is the CORRECT")
+		print("   answer for this chart type, not a failed search. To confirm the")
+		print("   nine, run this against a Bar chart.\n")
+	print("   PRESENT/ABSENT is checked at the path Insights' own type")
+	print("   declarations give. A CANDIDATE is only a name that looks related,")
+	print("   and is never a confirmation on its own.\n")
+	by_path = dict(walk(config))
 	unresolved = []
-	for control, expects in CONTROLS:
+	for control, expected, expects in CONTROLS:
 		alternatives = CONTROL_WORDS[control]
 		hits = [(path, value) for path, value in leaves
-			if matches(path, alternatives)]
+			if matches(path, alternatives) and path != expected]
 		print("   %s" % control)
-		print("       expects: %s" % expects)
-		if hits:
-			for path, value in hits[:6]:
-				print("       CANDIDATE  %-30s %s" % (path, describe(value)))
+		print("       declared at: %s   (%s)" % (expected, expects))
+		if expected in by_path:
+			print("       PRESENT      %-30s %s" % (expected, describe(by_path[expected])))
 		else:
-			print("       NO KEY IN THIS CONFIG HAS A NAME RESEMBLING THIS CONTROL.")
-			print("       Either it is stored under an unrelated name -- check")
-			print("       section 4 -- or it is not stored in config at all.")
+			print("       ABSENT       nothing at %s" % expected)
 			unresolved.append(control)
+		# Per-series duplicates of the same option, which the flat path misses.
+		for path, value in leaves:
+			if path.endswith("." + expected.split(".")[-1]) and path != expected:
+				print("       also at      %-30s %s" % (path, describe(value)))
+		# Candidates only matter when the declared path is EMPTY. Printing them
+		# next to a confirmed value is noise that invites a second guess at a
+		# question already answered.
+		if expected not in by_path:
+			for path, value in hits[:4]:
+				print("       CANDIDATE    %-30s %s" % (path, describe(value)))
 		print()
 
 	head(4, "CORROBORATION -- what is different about THIS chart")
@@ -315,23 +349,27 @@ def ucc_probe(chart_id=""):
 		print("   No path differs in value from the other charts either.")
 
 	head(5, "WHAT THIS PROBE COULD NOT ANSWER")
-	if unresolved:
-		print("   These controls have NO key in this chart's config whose name")
-		print("   resembles them. Stated plainly rather than matched to the")
-		print("   nearest plausible key:\n")
+	if unresolved and not is_axis_chart:
+		print("   Nothing, for this chart. All nine are axis-chart keys and this")
+		print("   is a %s, so their absence is the expected answer rather than"
+			% (found.get("chart_type") or "?"))
+		print("   an unanswered question. Run against a Bar chart to confirm them.\n")
 		for control in unresolved:
 			print("   - %s" % control)
-		print("\n   For each, one of three things is true, and section 4 usually")
-		print("   distinguishes them:")
-		print("     a) it is stored under an unrelated name -- look for it in the")
-		print("        'unique to this chart' or 'differs in value' lists above;")
-		print("     b) it is not stored in `config` at all but on the Chart record")
-		print("        itself, or in the workbook -- a different probe;")
+	elif unresolved:
+		print("   These are ABSENT at the path Insights' own type declarations")
+		print("   give for them, on a chart type that can carry them:\n")
+		for control in unresolved:
+			print("   - %s" % control)
+		print("\n   For each, one of three things is true:")
+		print("     a) the control was left at its default -- Insights omits an")
+		print("        unset optional key rather than writing a default value;")
+		print("     b) the installed version differs from the declarations these")
+		print("        paths came from -- check chart.types.ts on this bench;")
 		print("     c) the control was not actually saved. Re-check in Insights.")
 	else:
-		print("   Every one of the nine has at least a candidate. None of them is")
-		print("   confirmed by that alone -- check each value against its")
-		print("   'expects' line and against section 4 before anything is wired.")
+		print("   Every one of the nine is PRESENT at its declared path. Each is")
+		print("   confirmed by name AND source AND a real value -- enough to wire.")
 
 	head(6, "WHAT TO SEND BACK")
 	print("   All of it, sections 1 to 5. Section 1's raw JSON is the part that")
