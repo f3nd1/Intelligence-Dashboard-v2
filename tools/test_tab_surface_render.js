@@ -338,6 +338,24 @@ paintChartSeries(unknown, SERIES, cardWith({ status: "available", render_as: "tr
 assert.ok(unknown.innerHTML.includes("data-chart-segment"),
 	"an unrecognised renderer degrades to bars rather than throwing");
 
+// --- #4: a drawable chart opens as the DIAGRAM, not the table --------------
+const drawable = node();
+const drawableCard = cardWith({ status: "available", render_as: "bar", palette: ["#2563EB"] });
+paintChartSeries(drawable, SERIES, drawableCard);
+assert.strictEqual(exported.viewAfterPaint(), "diagram",
+	"a chart that CAN be drawn opens as the diagram");
+const undrawable = node();
+paintChartSeries(undrawable, SERIES, cardWith({ status: "table_only",
+	reason: "No Insights chart has been built for this query.", palette: ["#2563EB"] }));
+assert.strictEqual(exported.viewAfterPaint(), "table",
+	"...and the table stays the automatic state only when nothing can be drawn");
+
+// --- #4: the rename control, editors only ----------------------------------
+const editable = embeddedChartMarkup({ chart: "q-1", title: "Chart 1", span: 6 }, true);
+const readOnly = embeddedChartMarkup({ chart: "q-1", title: "Chart 1", span: 6 }, false);
+assert.ok(editable.includes("data-retitle-chart"), "an editor can rename a card");
+assert.ok(!readOnly.includes("data-retitle-chart"), "a viewer cannot");
+
 // --- the picker lists both kinds, marked -----------------------------------
 assert.ok(SRC.includes("Table only"),
 	"the picker marks chart-less queries rather than hiding them");

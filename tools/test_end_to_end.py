@@ -341,9 +341,12 @@ for unconfirmed in ("order_by", "value_column", "label_position", "date_column",
 		"number_columns", "number_column_options", "show_inline_labels"):
 	report('config.get("%s")' % unconfirmed not in presentation_code,
 		"a confirmed key with an unconfirmed meaning stays unread (%s)" % unconfirmed)
-report('config.get("xAxis")' not in presentation_code
-	and 'config.get("yAxis")' not in presentation_code,
-	"the camelCase axis pair is never read -- it is the builder's empty scaffolding")
+# The camelCase pair is now a validated FALLBACK, not a blanket refusal -- see
+# the module docstring, which corrects the earlier overstatement. What must
+# still hold is that it is only consulted when snake_case gave nothing.
+report('if not label_column:' in presentation_code
+	and 'config.get("xAxis")' in presentation_code,
+	"the camelCase pair is a fallback, reached only when snake_case is empty")
 report('config.get("limit")' in presentation_code and 'config.get("filters")' in presentation_code,
 	"limit and filters ARE read -- a number cannot be misread, and a chart filter changes the figures")
 

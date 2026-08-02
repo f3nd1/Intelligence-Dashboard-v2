@@ -80,6 +80,7 @@ LEGACY_DEFAULTS_PREFIX = "ucc_sophia_tab_charts"
 # stored value stays small and a tab stays loadable.
 MAX_PER_TAB = 12
 MAX_INTRO_LENGTH = 4000
+MAX_TITLE_LENGTH = 140
 MAX_QUESTION_IDS = 60
 
 # Card width, in columns of the tab's 12-column grid. Stored as the SPAN, not
@@ -202,6 +203,12 @@ def _stored(criterion, tab):
 			palette = chart_presentation.normalise_palette(item.get("palette"))
 			if palette:
 				entry["palette"] = palette
+			# #4: the card's OWN title, set by whoever put it on the tab.
+			# Insights record names are written for whoever built the query;
+			# a criterion tab is read by an auditor.
+			display = clean_text(item.get("display_title"))[:MAX_TITLE_LENGTH]
+			if display:
+				entry["display_title"] = display
 			config["charts"].append(entry)
 
 	intro = stored.get("intro")
@@ -545,13 +552,29 @@ def chart_data(chart, criterion=None, tab=None):
 		# Chart title, then query title, then a labelled id -- never a bare
 		# hash. Insights creates an untitled backing query when a chart is
 		# built, and those were reaching the tabs as `o80pe2gco2`.
-		"title": chart_presentation.label_for(
+		# The card's own title wins over everything: it was set by the person
+		# who put the card on the tab, for the person reading the tab.
+		"title": _display_title(criterion, tab, chart) or chart_presentation.label_for(
 			chart, doc.get("title"), record=presentation),
 		"series": rows_to_chart_series(rows),
 		"columns": columns,
 		"rows": rows,
 		"presentation": presentation,
 	}
+
+
+def _display_title(criterion, tab, chart):
+	"""This card's own title on this tab, if it has one."""
+	if not (criterion and tab):
+		return ""
+	try:
+		criterion, tab = _validated(criterion, tab)
+	except Exception:
+		return ""
+	for item in _stored(criterion, tab)["charts"]:
+		if item.get("chart") == chart:
+			return clean_text(item.get("display_title"))
+	return ""
 
 
 def _palette_for(criterion, tab, chart):
@@ -573,6 +596,36 @@ def _palette_for(criterion, tab, chart):
 		if item.get("chart") == chart:
 			return item.get("palette")
 	return None
+
+
+def set_display_title(criterion, tab, chart, title):
+	"""Give one card on one tab its own title.
+
+	Separate from the Insights record's title, because the two are read by
+	different people: an Insights title names a query for whoever built it,
+	while a criterion tab is shown to an auditor. Blank clears the override and
+	the Chart's (then the Query's) own title returns.
+	"""
+	criterion, tab = _validated(criterion, tab)
+	_require_edit()
+	chart = clean_text(chart)
+	title = clean_text(title)[:MAX_TITLE_LENGTH]
+	config = _stored(criterion, tab)
+	before = None
+	for item in config["charts"]:
+		if item.get("chart") != chart:
+			continue
+		before = item.get("display_title")
+		if title:
+			item["display_title"] = title
+		else:
+			item.pop("display_title", None)
+	if before == (title or None):
+		return get_tab(criterion, tab)
+	_store(criterion, tab, config)
+	tab_audit.record(criterion, tab, "chart_retitled",
+		"Retitled a card to %r" % (title or "(its own title)"), before=before, after=title)
+	return get_tab(criterion, tab)
 
 
 def set_palette(criterion, tab, chart, palette):

@@ -906,7 +906,22 @@ State.insights_charts = [{"name": "chart-c", "title": "Only camelCase",
 	"config": json.dumps({"xAxis": PLACEHOLDER, "yAxis": [PLACEHOLDER]})}]
 only_camel = chart_presentation.presentation_for("q-open", columns=["status", "count"])
 report(only_camel["status"] == "table_only",
-	"a chart with ONLY the placeholder pair is unconfigured, and says so")
+	"a chart with ONLY the EMPTY placeholder pair is unconfigured, and says so")
+
+# ...but a camelCase pair holding REAL column names is used, because Felix set
+# axes on a chart and Sophia reported none. Safe because condition 3 -- the
+# name must match a column the query returned -- still applies.
+State.insights_charts = [{"name": "chart-c", "title": "camelCase with real values",
+	"chart_type": "Bar", "query": "q-open", "data_query": None,
+	"config": json.dumps({"xAxis": {"column_name": "status"},
+		"yAxis": [{"measure_name": "count"}]})}]
+real_camel = chart_presentation.presentation_for("q-open", columns=["status", "count"])
+report(real_camel["status"] == "available" and real_camel["x_column"] == "status",
+	"a camelCase pair holding REAL column names is used as a fallback")
+State.insights_charts[0]["config"] = json.dumps({"xAxis": {"column_name": "not_a_column"}})
+bogus = chart_presentation.presentation_for("q-open", columns=["status", "count"])
+report(bogus["status"] == "table_only",
+	"...but only when the name is a column the query really returns")
 
 # --- LABELS: never a bare id ------------------------------------------------
 # Insights creates an untitled backing query when a chart is built. Four of
@@ -953,6 +968,36 @@ report(picked["q-untitled"] == "Innovation type mix",
 	"the picker lists by title too, never by id (%r)" % picked["q-untitled"])
 report(not any(title == chart for chart, title in picked.items()),
 	"no row in the picker is labelled with its own id")
+
+# --- #4: a card's OWN title -------------------------------------------------
+# Insights names a query for whoever built it. A criterion tab is read by an
+# auditor, and "Chart 1" tells them nothing.
+reset()
+State.doctypes.add("Insights Chart v3")
+State.insights_charts = [{"name": "chart-t", "title": "Chart 1", "chart_type": "Bar",
+	"query": "q-open", "data_query": None, "config": "{}"}]
+tab_charts.add("criterion_3", "overview", "q-open")
+report(tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["title"]
+	== "Chart 1", "with no override, the Insights title is used as before")
+tab_charts.set_display_title("criterion_3", "overview", "q-open", "Open actions by status")
+report(tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["title"]
+	== "Open actions by status", "a card's own title beats the Insights record's")
+report(any(entry["action"] == "chart_retitled" for entry in State.audit),
+	"...and renaming is audited like every other tab change")
+report(tab_charts.chart_data("q-open")["title"] == "Chart 1",
+	"the override is scoped to its tab, like the palette")
+tab_charts.set_display_title("criterion_3", "overview", "q-open", "")
+report(tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["title"]
+	== "Chart 1", "clearing it returns the record's own title")
+tab_charts.set_display_title("criterion_3", "overview", "q-open", "x" * 500)
+stored_title = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["title"]
+report(len(stored_title) == tab_charts.MAX_TITLE_LENGTH,
+	"an absurd title is truncated, not stored whole (%d)" % len(stored_title))
+State.may_write = False
+report(raises(PermissionError_, tab_charts.set_display_title,
+	"criterion_3", "overview", "q-open", "Nope"),
+	"a reader cannot rename a card")
+State.may_write = True
 
 # --- THE PICKER: both kinds, marked -----------------------------------------
 reset()

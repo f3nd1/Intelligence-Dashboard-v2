@@ -71,7 +71,8 @@ class FakeDoc:
 	def __init__(self, data):
 		self.data = dict(data)
 		self.name = data.get("name")
-		self.meta = types.SimpleNamespace(has_field=lambda field: field in ("resolution_note",))
+		self.meta = types.SimpleNamespace(
+			has_field=lambda field: field in ("suppression_reason", "resolved_at"))
 
 	def get(self, key):
 		return self.data.get(key)
@@ -121,8 +122,17 @@ def install():
 	# get_all EXISTS but must never be used for findings -- it applies no
 	# permissions. It serves the rule CONFIGURATION table only, which holds no
 	# institutional data.
-	frappe.get_all = lambda doctype, **kwargs: (
-		list(State.rule_records) if doctype == "UCC Monitoring Rule" else [])
+	def fake_get_all(doctype, filters=None, **kwargs):
+		if doctype == "UCC Monitoring Rule":
+			return list(State.rule_records)
+		if doctype == "UCC Monitoring Run":
+			rows = list(State.runs)
+			for key, value in (filters or {}).items():
+				rows = [row for row in rows if row.get(key) == value]
+			return rows
+		return []
+
+	frappe.get_all = fake_get_all
 	frappe.get_doc = lambda doctype, name: FakeDoc(
 		next(row for row in State.findings if row["name"] == name))
 	frappe.get_single = lambda doctype: types.SimpleNamespace(
@@ -130,7 +140,10 @@ def install():
 	frappe.has_permission = lambda doctype, ptype=None: (
 		State.may_write_findings if doctype == "UCC Monitoring Finding"
 		else State.may_write_sources)
-	frappe.utils = types.SimpleNamespace(cstr=lambda v: "" if v is None else str(v))
+	frappe.utils = types.SimpleNamespace(
+		cstr=lambda v: "" if v is None else str(v),
+		now=lambda: "2026-08-03 04:00:00")
+	frappe.get_traceback = lambda: ""
 	frappe.session = types.SimpleNamespace(user="tester@ucc")
 	frappe.logger = lambda *a, **k: types.SimpleNamespace(
 		info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
@@ -159,21 +172,32 @@ def install():
 	ingestion = types.ModuleType("ucc_intelligence.knowledge.ingestion")
 
 	def register_source(title, source_type, text=None, attached_file=None, **fields):
+		"""Mirrors the real one: it registers AND indexes, and returns a dict.
+
+		Modelling it as returning a name was what hid the double-index bug."""
 		name = "SRC-%02d" % (len(State.registered) + 1)
 		State.registered.append({"name": name, "title": title, "source_type": source_type})
 		State.sources.append({"name": name, "title": title, "source_type": source_type,
-			"sync_status": "Not indexed", "last_indexed": None, "is_active": 1,
-			"version": "1", "classification": "Internal", "superseded_by": None,
+			"sync_status": "Not Indexed", "last_indexed_at": None, "is_active": 1,
+			"document_version": "1", "classification": "Internal", "superseded_by": None,
+			"chunk_count": 0, "permission_role": None, "attached_file": None,
+			"content_checksum": "",
 			"owner_department": "", "effective_date": None, "review_date": None})
-		return name
+		result = index_source(name, text=text)
+		return dict(result, source=name)
 
 	def index_source(source_name, text=None):
+		if not (text or "").strip():
+			return {"ok": False, "indexed": False,
+				"message": "The document is empty; nothing to index."}
 		State.indexed.append(source_name)
 		for row in State.sources:
 			if row["name"] == source_name:
-				row["last_indexed"] = "2026-08-03 02:00:00"
+				row["last_indexed_at"] = "2026-08-03 02:00:00"
 				row["sync_status"] = "Indexed"
+				row["chunk_count"] = 2
 		State.chunks[source_name] = ["c1", "c2"]
+		return {"ok": True, "indexed": True, "sections": 2}
 
 	ingestion.register_source = register_source
 	ingestion.index_source = index_source
@@ -188,18 +212,21 @@ from ucc_intelligence.operations import service  # noqa: E402
 
 def reset():
 	State.findings = [
-		{"name": "F-1", "rule_id": "student_log_background_required",
-			"rule_title": "Student Log closed without student background", "status": "Open",
+		{"name": "F-1", "rule": "student_log_background_required", "status": "Open",
 			"severity": "High", "target_doctype": "Student Log", "target_record": "LOG-001",
-			"detail": "Background is empty.", "first_seen": "2026-08-01", "last_seen": "2026-08-02"},
-		{"name": "F-2", "rule_id": "quality_action_closure_evidence",
-			"rule_title": "Quality Action closed without evidence", "status": "Open",
+			"detail": "Background is empty.", "occurrence_count": 3,
+			"responsible_role": "Student Services", "first_seen_run": "RUN-1",
+			"last_seen_run": "RUN-2", "modified": "2026-08-02 03:00:00"},
+		{"name": "F-2", "rule": "quality_action_closure_evidence", "status": "Open",
 			"severity": "Medium", "target_doctype": "Quality Action", "target_record": "QA-9",
-			"detail": "No evidence attached.", "first_seen": "2026-08-01", "last_seen": "2026-08-02"},
-		{"name": "F-3", "rule_id": "student_log_background_required",
-			"rule_title": "Student Log closed without student background", "status": "Resolved",
+			"detail": "No evidence attached.", "occurrence_count": 1,
+			"responsible_role": "Quality", "first_seen_run": "RUN-1",
+			"last_seen_run": "RUN-2", "modified": "2026-08-02 03:00:00"},
+		{"name": "F-3", "rule": "student_log_background_required", "status": "Resolved",
 			"severity": "High", "target_doctype": "Student Log", "target_record": "LOG-007",
-			"detail": "Was empty.", "first_seen": "2026-07-01", "last_seen": "2026-07-20"},
+			"detail": "Was empty.", "occurrence_count": 2,
+			"responsible_role": "Student Services", "first_seen_run": "RUN-0",
+			"last_seen_run": "RUN-1", "modified": "2026-07-20 03:00:00"},
 	]
 	State.readable_findings = {"F-1", "F-2", "F-3"}
 	State.may_write_findings = True
@@ -209,10 +236,12 @@ def reset():
 	State.sources = []
 	State.chunks = {}
 	State.rule_records = [{"name": "R-1", "rule_id": "student_log_background_required",
-		"enabled": 1, "last_run": "2026-08-02 03:00:00", "severity": "High"}]
-	State.runs = [{"name": "RUN-1", "status": "Completed", "started_at": "2026-08-02 03:00:00",
-		"finished_at": "2026-08-02 03:01:00", "rules_run": 2, "findings_open": 2,
-		"findings_resolved": 1}]
+		"enabled": 1, "severity": "High", "rule_version": "1.0"}]
+	State.runs = [{"name": "RUN-2", "rule": "student_log_background_required",
+		"status": "Completed", "started_at": "2026-08-02 03:00:00",
+		"finished_at": "2026-08-02 03:01:00", "records_evaluated": 41,
+		"findings_opened": 2, "findings_reopened": 0, "findings_resolved": 1,
+		"error_message": ""}]
 	State.saved = []
 	State.indexed = []
 	State.registered = []
@@ -270,7 +299,7 @@ report(raises(ValidationError_, service.set_finding_status, "F-1", "Suppressed")
 report(not State.saved, "...and nothing was written")
 report(service.set_finding_status("F-1", "Suppressed", "Known exception, signed off by QA")["ok"],
 	"suppressing WITH a reason works")
-report(any(row.get("resolution_note") for row in State.saved),
+report(any(row.get("suppression_reason") for row in State.saved),
 	"...and the reason is stored on the record, not just in a log")
 
 reset()
@@ -300,7 +329,11 @@ reset()
 added = service.add_source("Student Support Services Procedure", "Procedure",
 	text="Section 1. Counselling is offered before enrolment.")
 report(added["ok"] and added["indexed"], "a document can be registered AND indexed in one step")
-report(State.registered and State.indexed, "...and both engine calls really ran")
+report(State.registered and State.indexed, "...and the engine really ran")
+report(len(State.indexed) == 1,
+	"indexed EXACTLY ONCE -- register_source() already indexes, and calling it "
+	"again is what made Felix's registration look like it did nothing")
+report(added["sections"] == 2, "the section count comes back for the confirmation message")
 after = service.knowledge_overview()
 report(after["total"] == 1 and after["indexed"] == 1 and after["chunks"] == 2,
 	"the panel then reports it as indexed, with its section count")
@@ -322,14 +355,73 @@ reset()
 import ucc_intelligence.knowledge.ingestion as fake_ingestion  # noqa: E402
 
 
-def failing_index(source_name, text=None):
+def failing_index(*args, **kwargs):
 	raise RuntimeError("extractor unavailable")
 
 
-fake_ingestion.index_source = failing_index
-partial = service.add_source("Half a document", "Policy", text="x")
-report(partial["ok"] and partial["indexed"] is False and partial.get("message"),
-	"a source that registers but fails to index says so instead of rolling back")
+fake_ingestion.register_source = failing_index
+broken = service.add_source("Half a document", "Policy", text="x")
+report(broken["ok"] is False and broken.get("message"),
+	"a registration that RAISES reports the reason -- never a silent no-op")
+report("extractor unavailable" in broken["message"], "...and it is the real reason: %r" % broken["message"])
+
+reset()
+report(raises(ValidationError_, service.add_source, "A title but no text", "Policy"),
+	"a document with neither text nor an attachment is refused up front")
+
+# --- EVERY FIELD THIS MODULE ASKS FOR MUST REALLY EXIST ---------------------
+# The bug this exists for: Sophia asked for `rule_title`, `first_seen`,
+# `last_seen`, `rules_run`, `findings_open`, `last_run`, `version` and
+# `resolution_note`. None of them exist, and Felix got
+#     (1054, "Unknown column 'rule_title' in 'SELECT'")
+# the moment he opened the panel.
+#
+# The previous report listed those names as "unverified, needs your bench".
+# They were not unverifiable at all -- every one is in a JSON file in this
+# repository. Caution that does not actually check is just a slower guess. So
+# this reads the DocType definitions and compares.
+import json as _json  # noqa: E402
+import re as _re  # noqa: E402
+
+DOCTYPE_DIR = ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "doctype"
+# Fields Frappe gives every DocType, which never appear in its own JSON.
+STANDARD = {"name", "owner", "creation", "modified", "modified_by", "docstatus", "idx"}
+
+
+def fields_of(doctype):
+	folder = doctype.lower().replace(" ", "_")
+	path = DOCTYPE_DIR / folder / (folder + ".json")
+	if not path.exists():
+		return None
+	return {f["fieldname"] for f in _json.loads(path.read_text())["fields"]} | STANDARD
+
+
+service_source = (ROOT / "ucc_intelligence" / "ucc_intelligence" / "operations"
+	/ "service.py").read_text(encoding="utf-8")
+
+# Every `fields=[...]` list in the module, paired with the DocType constant on
+# the same call. Parsed from source so a new query cannot skip this check.
+for constant, doctype in (("FINDING_DOCTYPE", "UCC Monitoring Finding"),
+		("RUN_DOCTYPE", "UCC Monitoring Run"),
+		("RULE_DOCTYPE", "UCC Monitoring Rule"),
+		("SOURCE_DOCTYPE", "UCC Knowledge Source"),
+		("CHUNK_DOCTYPE", "UCC Knowledge Chunk")):
+	real = fields_of(doctype)
+	report(real is not None, "%s's DocType JSON is readable" % doctype)
+	if not real:
+		continue
+	asked = set()
+	for call in _re.finditer(
+			r"\(\s*%s\s*,(.{0,700}?)\)" % constant, service_source, _re.S):
+		block = call.group(1)
+		for group in _re.findall(r"fields=\[(.*?)\]", block, _re.S):
+			asked |= set(_re.findall(r'"([a-z_]+)"', group))
+		for group in _re.findall(r"filters=\{(.*?)\}", block, _re.S):
+			asked |= set(_re.findall(r'"([a-z_]+)"\s*:', group))
+	unknown = sorted(asked - real)
+	report(not unknown, "%s: every field asked for exists (%s)"
+		% (doctype, ", ".join(unknown) if unknown else "ok"))
+
 
 # --- the gate must be EXPLICIT, not inherited from the DocType -------------
 # Removing the permission check from set_finding_status() passed every
