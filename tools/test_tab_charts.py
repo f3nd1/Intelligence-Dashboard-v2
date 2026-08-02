@@ -738,7 +738,7 @@ presentation = data["presentation"]
 report(presentation["status"] == "available", "a chart-backed query renders as a chart")
 report(presentation["render_as"] == "bar" and presentation["chart_type"] == "Bar",
 	"the free-text chart_type maps to a supported renderer")
-report(presentation["label_column"] == "status" and presentation["value_columns"] == ["count"],
+report(presentation["x_column"] == "status" and presentation["y_columns"] == ["count"],
 	"the axes come off the Chart record, not from guessing the query's columns")
 report(presentation["legend_position"] == "bottom" and presentation["axis_label"] == "Actions",
 	"legend position and axis label carry through")
@@ -781,7 +781,7 @@ report(stale["status"] == "table_only" and "department" in stale["reason"],
 State.insights_charts[0]["config"] = json.dumps({
 	"x_axis": {"column_name": "status"}, "y_axis": [{"measure_name": "count"}]})
 nested = tab_charts.chart_data("q-open", criterion="criterion_3", tab="overview")["presentation"]
-report(nested["label_column"] == "status" and nested["value_columns"] == ["count"],
+report(nested["x_column"] == "status" and nested["y_columns"] == ["count"],
 	"config written as nested dicts reads the same as plain strings")
 
 # A chart the user cannot read must not resolve for them.
@@ -836,6 +836,77 @@ report(raises(PermissionError_, tab_charts.set_palette,
 	"criterion_3", "overview", "q-open", "#123456"),
 	"a reader cannot recolour a chart")
 State.may_write = True
+
+# --- THE 2026-08-03 CONFIG PROBE: what is honoured, and what is not ---------
+reset()
+State.doctypes.add("Insights Chart v3")
+State.readable.add("q-open")
+BASE = {"x_axis": "status", "y_axis": ["count"]}
+
+
+def with_config(**extra):
+	config = dict(BASE)
+	config.update(extra)
+	State.insights_charts = [{"name": "chart-c", "title": "Open by status",
+		"chart_type": "Bar", "query": "q-open", "data_query": None,
+		"config": json.dumps(config)}]
+	return chart_presentation.presentation_for("q-open", columns=["status", "count"])
+
+
+# limit: honoured, because a number cannot be misread.
+report(with_config(limit=10)["limit"] == 10, "the chart's limit is read")
+report(with_config()["limit"] == 0, "no limit means no limit, not a default one")
+for junk in ("", None, "ten", -3, 0):
+	report(with_config(limit=junk)["limit"] == 0,
+		"a junk limit (%r) is ignored rather than guessed at" % junk)
+
+# filters: the chart is WITHHELD, because Sophia executes the query and
+# Insights applies the chart's filters on top -- the figures would differ.
+filtered = with_config(filters=[{"column": "status", "operator": "=", "value": "Open"}])
+report(filtered["status"] == "table_only" and "would not match" in filtered["reason"],
+	"a chart with its own filters is withheld, not drawn from unfiltered rows")
+report(with_config(filters=[])["status"] == "available",
+	"an EMPTY filter list is not a filter -- that chart still draws")
+report(with_config(filters={})["status"] == "available", "...nor is an empty object")
+
+# The keys whose MEANING is unconfirmed are not read at all. Asserted as an
+# absence so nobody quietly wires one later on the strength of its name.
+unconfirmed = with_config(order_by="count desc", value_column="count",
+	label_column="status", label_position="left", date_column="creation",
+	location_column="country", size_column="count", source_column="a",
+	target_column="b", number_columns=["count"], number_column_options={},
+	show_inline_labels=True)
+for key in ("order_by", "value_column", "label_column", "label_position",
+		"date_column", "location_column", "size_column", "source_column",
+		"target_column", "number_columns", "number_column_options",
+		"show_inline_labels"):
+	report(key not in unconfirmed,
+		"%s is NOT read -- its key is confirmed, its meaning is not" % key)
+report(unconfirmed["status"] == "available",
+	"...and their presence does not stop the chart drawing")
+
+# xAxis/yAxis are the builder's unfilled scaffolding, never a fallback.
+PLACEHOLDER = {"aggregation": "", "column_name": "", "data_type": "", "dimension_name": ""}
+report(chart_presentation._column_of(PLACEHOLDER) == "",
+	"the camelCase placeholder shape yields NO column, so it can never resolve a chart")
+# Whitespace is not a column name either. The column-validation gate downstream
+# would reject "   " anyway, so this is belt-and-braces -- but a mutation that
+# removed the strip() survived every behavioural test precisely BECAUSE the
+# later gate hid it, and an intent that is only enforced by accident is not
+# enforced.
+report(chart_presentation._column_of({"column_name": "   "}) == "",
+	"a whitespace-only column name is no column")
+report(chart_presentation._column_of("  status  ") == "status",
+	"...and a real one is trimmed rather than rejected")
+camel = with_config(xAxis=PLACEHOLDER, yAxis=[PLACEHOLDER])
+report(camel["x_column"] == "status" and camel["y_columns"] == ["count"],
+	"a chart carrying BOTH spellings uses the snake_case one, which holds the real names")
+State.insights_charts = [{"name": "chart-c", "title": "Only camelCase",
+	"chart_type": "Bar", "query": "q-open", "data_query": None,
+	"config": json.dumps({"xAxis": PLACEHOLDER, "yAxis": [PLACEHOLDER]})}]
+only_camel = chart_presentation.presentation_for("q-open", columns=["status", "count"])
+report(only_camel["status"] == "table_only",
+	"a chart with ONLY the placeholder pair is unconfigured, and says so")
 
 # --- LABELS: never a bare id ------------------------------------------------
 # Insights creates an untitled backing query when a chart is built. Four of

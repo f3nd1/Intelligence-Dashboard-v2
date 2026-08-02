@@ -27,17 +27,76 @@ and a Chart is created there and then pointed at a Query with a dropdown. That
 is why `query` and `data_query` are Link fields on the Chart rather than the
 Query holding a chart: the Chart points at the Query, never the reverse.
 
+WHAT THE 2026-08-03 CONFIG PROBE SETTLED (probe_insights_chart_config.py)
+16 real keys across 9 live charts. What each one does about it, and why:
+
+  READ AND HONOURED
+    chart_type, x_axis, y_axis, legend_position, axis_label  (as before)
+    limit    -> the series is truncated to it and the card says so. A number
+                is a number; there is nothing to misread.
+    filters  -> if the chart carries ANY, the chart is WITHHELD and the table
+                is shown instead. Sophia executes the QUERY, not the chart, so
+                a chart filter is not applied to these rows -- drawing anyway
+                would put more data on the card than Insights shows for the
+                same chart. On a dashboard used as EduTrust evidence that is
+                not a cosmetic difference. See "filters" below.
+
+  A NOTE ON NAMES
+    The contract calls the resolved axes `x_column` and `y_columns`, NOT
+    `label_column`/`value_columns`. Insights has its own `label_column` and
+    `value_column` keys which are deliberately unread, and two different things
+    under one name is how a "not read" rule quietly stops being true.
+
+  DELIBERATELY NOT READ -- the key name is confirmed, the MEANING is not
+    order_by            re-sorting on a misread shape silently reorders an
+                        evidence chart, and a wrong order looks like a finding
+    value_column        \
+    label_column         | plausibly the Number chart's figure and caption.
+    label_position       | "Plausibly" is the problem: nothing corroborates it
+    number_columns       | beyond the names, and CLAUDE.md's standing rule is
+    number_column_options/ that a name is not evidence.
+    date_column         no confirmation it is an x-axis rather than, say, a
+                        filter field or a granularity control
+    location_column     configures Map
+    size_column         configures Bubble
+    source_column       \ configure Sankey
+    target_column       /
+    show_inline_labels  seen on one chart as a bool. It MIGHT be "Show Data
+                        Labels". Wiring it on the strength of its name is the
+                        exact move ADR-016 forbids.
+
+  The four Map/Bubble/Sankey keys will stay unread even once confirmed: those
+  chart types are refusals, not gaps (see SUPPORTED_TYPES), so reading their
+  configuration would be half-state for a diagram that is never drawn.
+
+  Unblocking any of the rest is one isolated experiment each: change that one
+  control in Insights, save, re-run the probe on that chart, and see which key
+  moved. Nothing here is blocked on anything larger.
+
+xAxis / yAxis ARE IGNORED -- DO NOT WIRE THEM
+Three charts (o2kvutcfld, tt51l7mma3, ni4pnlah9o) carry BOTH `x_axis` and
+`xAxis`. The snake_case pair holds the real column names; the camelCase pair
+holds the empty placeholder shape the builder initialises:
+
+    {"aggregation": "", "column_name": "", ...}
+
+So they are not an alternative spelling to fall back to -- they are unfilled
+scaffolding, and treating them as a fallback would resolve a chart to a column
+named "". `_column_of()` returns "" for that shape anyway, and a test asserts
+it, so even a future mistake here cannot produce a column. Reading them is
+still pointless: ignored, on purpose, permanently.
+
 WHAT THE BUILDER EXPOSES, AND WHAT IS READ HERE
 Read off the v3 builder UI. The left column is what a person sees; the right
 is whether this module acts on it.
 
     Title                -> READ, from the record's own `title` field
-    X Axis Column        -> READ, as config.x_axis
-    Y Axis Series        -> READ, as config.y_axis (all series)
-    Stack                -> READ into `stacked`, NOT YET DRAWN
+    X Axis Column        -> READ, as config.x_axis -> `x_column`
+    Y Axis Series        -> READ, as config.y_axis (all series) -> `y_columns`
+    Stack                -> NO LONGER READ (see below)
     Show Axis Label      -> the LABEL is read (config.axis_label); the
                             show/hide toggle itself is not
-    (legend position)    -> READ into `legend_position`, NOT YET DRAWN
+    (legend position)    -> READ AND DRAWN (the donut's legend)
     Rotate Values        -> ignored
     Overlap              -> ignored
     Normalize            -> ignored
@@ -46,14 +105,13 @@ is whether this module acts on it.
     Y-Min / Y-Max        -> ignored
     Split Series         -> ignored
 
-Two of those are worth stating plainly rather than leaving implied: `stacked`
-and `legend_position` are parsed into the presentation contract and no painter
-uses them yet. They are read, not honoured.
-
-The config KEY NAMES for the ignored controls are unknown -- the probe only
-reported the six keys listed above, and the builder shows UI labels, not
-fields. Adding any of them means probing a chart that actually uses it first,
-not guessing the key from the label.
+Of the nine builder controls whose keys were unknown on 2026-08-02, the
+2026-08-03 probe found EIGHT of them nowhere in `config` on any of nine live
+charts: Rotate Values, Overlap, Normalize, the Show Axis Label toggle, Show
+Scrollbar, Y-Min, Y-Max and Split Series. They are either stored somewhere
+other than the Chart's config, or they are client-side display state Insights
+never persists. Nothing is implemented for them, and nothing should be until
+one of them is isolated and re-probed.
 
     52 queries exist. 7 have a chart. 45 do not.
     NO COLOUR FIELD ANYWHERE -- see "colour" below.
@@ -365,6 +423,35 @@ def presentation_for(query, columns=None, palette=None):
 				"returns. Set Y Axis Series in Insights and it will draw here.")
 			return blank
 
+	# A CHART FILTER MEANS THE NUMBERS WOULD NOT MATCH INSIGHTS.
+	#
+	# Sophia executes the QUERY. Insights renders the CHART, which applies its
+	# own filters on top of the query's. So a chart with filters shows fewer
+	# rows in Insights than these rows contain -- and drawing them anyway would
+	# put a larger figure on a card that carries the chart's name.
+	#
+	# Withheld rather than approximated. Applying the filters here would mean
+	# reproducing a filter shape that has not been proven on this bench, which
+	# is the mistake ADR-016 exists to prevent.
+	chart_filters = config.get("filters")
+	if chart_filters not in (None, "", [], {}):
+		blank["chart_type"] = raw_type
+		blank["reason"] = ("This chart applies its own filters in Insights, which are "
+			"not applied to these rows -- so the figures would not match. The rows "
+			"below are the query's own, unfiltered.")
+		return blank
+
+	# LIMIT is honoured. It is a plain number, so there is nothing to misread,
+	# and a chart configured as "top 10" that silently drew 40 bars would be
+	# showing something its author did not ask for.
+	limit = config.get("limit")
+	try:
+		limit = int(limit) if limit not in (None, "") else 0
+	except (TypeError, ValueError):
+		limit = 0
+	if limit < 1:
+		limit = 0
+
 	legend = _text(config.get("legend_position")).lower()
 	return {
 		"status": "available",
@@ -373,10 +460,11 @@ def presentation_for(query, columns=None, palette=None):
 		"chart_type": raw_type,
 		"render_as": supported,
 		"supported": True,
-		"label_column": label_column,
-		"value_columns": value_columns,
+		"x_column": label_column,
+		"y_columns": value_columns,
 		"axis_label": _text(config.get("axis_label")),
 		"legend_position": legend if legend in LEGEND_POSITIONS else "",
+		"limit": limit,
 		# `stack` IS NO LONGER READ (decided 2026-08-03).
 		#
 		# It was parsed into this contract and honoured by nothing, which is the

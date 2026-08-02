@@ -332,6 +332,21 @@ for guessed in ("rotate_values", "show_data_labels", "split_series", "y_min", "y
 	report(guessed not in presentation_source,
 		"no config key was inferred from a UI label (%s)" % guessed)
 
+# The 2026-08-03 probe confirmed 16 real keys. Reading one whose MEANING is
+# still unconfirmed would be the same mistake with a real name attached, so the
+# absence is asserted per key, on the executable source only.
+presentation_code = strip_comments_and_strings(presentation_source, True)
+for unconfirmed in ("order_by", "value_column", "label_position", "date_column",
+		"location_column", "size_column", "source_column", "target_column",
+		"number_columns", "number_column_options", "show_inline_labels"):
+	report('config.get("%s")' % unconfirmed not in presentation_code,
+		"a confirmed key with an unconfirmed meaning stays unread (%s)" % unconfirmed)
+report('config.get("xAxis")' not in presentation_code
+	and 'config.get("yAxis")' not in presentation_code,
+	"the camelCase axis pair is never read -- it is the builder's empty scaffolding")
+report('config.get("limit")' in presentation_code and 'config.get("filters")' in presentation_code,
+	"limit and filters ARE read -- a number cannot be misread, and a chart filter changes the figures")
+
 # --- OPERATIONS: two finished engines, finally visible ----------------------
 OPERATIONS = APP / "operations" / "service.py"
 report(OPERATIONS.exists(), "operations/service.py surfaces monitoring and knowledge")
