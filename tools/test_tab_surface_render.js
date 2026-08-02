@@ -27,7 +27,16 @@ const win = {
 };
 const frappe = { pages: { "sophia-analytics": {} }, model: {}, boot: {} };
 win.frappe = frappe;
-const doc = { getElementById: () => null, createElement: () => ({}), head: { appendChild() {} }, addEventListener() {} };
+// The embed sizes itself against the window and checks the chrome on a timer,
+// so both are captured rather than stubbed away -- a deferred check nobody can
+// run is a check that was never written.
+win.innerHeight = 900;
+win.listeners = {};
+win.addEventListener = (name, fn) => { (win.listeners[name] = win.listeners[name] || []).push(fn); };
+win.deferred = [];
+win.setTimeout = (fn, ms) => { win.deferred.push({ fn, ms }); return win.deferred.length; };
+const doc = { getElementById: () => null, createElement: () => ({}), head: { appendChild() {} },
+	addEventListener() {}, querySelectorAll: () => [] };
 
 // These live INSIDE initAnalyticsEngine(), which cannot be run headlessly (it
 // boots the whole dashboard). So the functions under test are lifted out of
@@ -54,24 +63,27 @@ const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown"
 	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
 	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
 	"paintTableOnly", "sortForDisplay", "embeddedDashboardMarkup", "loadVisibleEmbeds",
-	"hideInsightsChrome"];
+	"hideInsightsChrome", "insightsDocument", "insightsChromeReport", "sizeEmbedFrame",
+	"bindEmbedResize"];
 // Module-level consts, which lift() cannot reach because it looks for
 // `function <name>(`. Taken from the real source VERBATIM rather than retyped,
 // so a painter or a threshold changed on the page cannot silently disagree
 // with what this harness tests.
 const CONSTS = ["CHART_PAINTERS", "DONUT_LABEL_MIN_SHARE", "SORTED_BY_VALUE",
-	"INSIGHTS_CHROME_CSS"]
+	"INSIGHTS_CHROME_CSS", "EMBED_MIN_HEIGHT", "embedResizeBound"]
 	.map(function (name) {
-		const found = (SRC.match(new RegExp("const " + name + "=[\\s\\S]*?;\\n")) || [])[0];
+		const found = (SRC.match(new RegExp("(?:const|let) " + name + "=[\\s\\S]*?;\\n")) || [])[0];
 		assert.ok(found, "the page declares " + name);
 		return found;
 	}).join("\n");
 
 const exported = new Function("window", "document", "frappe", "CSS",
 	"const tabChartState={};let lastView=null;function setChartView(c,v){lastView=v;}\n"
+	+ "const uccLog=[];function logEvent(card,level,event,detail){uccLog.push({level,event,detail});}\n"
 	+ CONSTS + "\n" + NEEDED.map(lift).join("\n")
 	+ "\n;return { " + NEEDED.join(", ")
-	+ ", INSIGHTS_CHROME_CSS, tabChartState, viewAfterPaint: () => lastView };"
+	+ ", INSIGHTS_CHROME_CSS, EMBED_MIN_HEIGHT, tabChartState, uccLog,"
+	+ " viewAfterPaint: () => lastView };"
 )(win, doc, frappe, { escape: (s) => s });
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
 	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
@@ -405,12 +417,15 @@ assert.ok(embedDenied.includes("cannot open"),
 // A DOM small enough to hand-build and real enough to prove the promotion.
 function el(tag, attrs) {
 	const node = { tag, dataset: {}, hidden: false, children: [], listeners: {},
-		parentNode: null, src: "",
+		parentNode: null, src: "", style: {},
+		getBoundingClientRect() { return { top: 240 }; },
 		addEventListener(name, fn) { (this.listeners[name] = this.listeners[name] || []).push(fn); },
 		closest(sel) {
 			let at = this;
 			while (at) {
 				if (sel === "[data-tab-charts]" && at.dataset.tabCharts !== undefined) return at;
+				if (sel.startsWith("[data-dashboard-panel]")
+					&& at.dataset.dashboardPanel !== undefined) return at;
 				at = at.parentNode;
 			}
 			return null;
@@ -419,8 +434,7 @@ function el(tag, attrs) {
 		querySelectorAll(sel) {
 			const out = [];
 			(function walk(n) {
-				if (sel === "iframe[data-embed-src]"
-					&& n.tag === "iframe" && n.dataset.embedSrc !== undefined) out.push(n);
+				if (sel === "iframe.ucc-embed-frame" && n.tag === "iframe") out.push(n);
 				n.children.forEach(walk);
 			})(this);
 			return out;
@@ -474,18 +488,49 @@ function fakeFrame(contentDocument) {
 	Object.defineProperty(frame, "contentDocument", { get: contentDocument });
 	return frame;
 }
-const appended = [];
-const sameOrigin = fakeFrame(() => ({
-	head: { appendChild: (n) => appended.push(n) },
-	createElement: () => ({ setAttribute() {}, textContent: "" }),
-}));
+// A frame document real enough to answer both questions the live bench asked:
+// did the stylesheet go in, and did it MATCH anything. `shown` decides whether
+// the sidebar/header report as visible.
+function fakeInsights(opts) {
+	const o = opts || {};
+	const styles = [];
+	const node = (tag, className) => ({ tagName: tag, className,
+		style: { display: o.shown === false ? "none" : "" } });
+	const sidebar = o.sidebar === false ? null : node("DIV", "h-full border-r bg-gray-50");
+	const header = o.header === false ? null : node("HEADER", "flex h-12 items-center border-b");
+	const appRoot = { children: o.appChildren
+		|| [node("DIV", "flex h-screen w-screen overflow-hidden bg-white")] };
+	return { styles, head: { appendChild: (n) => styles.push(n) },
+		createElement: () => ({ setAttribute() {}, textContent: "" }),
+		defaultView: { getComputedStyle: (n) => n.style },
+		querySelector(sel) {
+			if (sel === "style[data-ucc-embed-chrome]") return styles[0] || null;
+			if (sel === "div.border-r.bg-gray-50") return sidebar;
+			if (sel === "#app header") return header;
+			if (sel === "#app") return o.appRoot === false ? null : appRoot;
+			return null;
+		} };
+}
+const insightsDoc = fakeInsights({});
+const sameOrigin = fakeFrame(() => insightsDoc);
 assert.strictEqual(exported.hideInsightsChrome(sameOrigin), true,
 	"a same-origin frame accepts the stylesheet");
-assert.strictEqual(appended.length, 1, "...exactly one, appended to its head");
-assert.ok(/#app > div > div\.border-r:first-child\{display:none!important\}/
-	.test(appended[0].textContent), "the AppSidebar wrapper is what gets hidden");
-assert.ok(/#app > div > div > header\{display:none!important\}/
-	.test(appended[0].textContent), "...and Dashboard.vue's breadcrumb header too");
+assert.strictEqual(insightsDoc.styles.length, 1, "...exactly one, appended to its head");
+assert.strictEqual(exported.hideInsightsChrome(sameOrigin), true,
+	"a second call is a no-op, not a second stylesheet");
+assert.strictEqual(insightsDoc.styles.length, 1, "...still one");
+// #1 from the live bench: the FIRST selectors asked for a whole tree shape
+// (#app > div > div.border-r:first-child) and matched nothing on the real
+// build. These name the elements and nothing else.
+assert.ok(!/>/.test(exported.INSIGHTS_CHROME_CSS),
+	"no child-combinator chains -- a selector that asserts the tree shape is a "
+	+ "selector that fails silently when the tree moves");
+assert.ok(!/:first-child|:nth-child/.test(exported.INSIGHTS_CHROME_CSS),
+	"...and no positional guesses either");
+assert.ok(/div\.border-r\.bg-gray-50\{display:none!important\}/
+	.test(exported.INSIGHTS_CHROME_CSS), "the AppSidebar wrapper is hidden by its own classes");
+assert.ok(/#app header\{display:none!important\}/.test(exported.INSIGHTS_CHROME_CSS),
+	"...and Dashboard.vue's breadcrumb header too");
 assert.ok(!/insights\/shared|is_public/.test(exported.INSIGHTS_CHROME_CSS),
 	"hiding chrome is a stylesheet, never a switch to the public/shared route");
 
@@ -498,21 +543,78 @@ assert.strictEqual(exported.hideInsightsChrome(crossOrigin), false,
 assert.strictEqual(exported.hideInsightsChrome(fakeFrame(() => ({ head: null }))), false,
 	"...and so does one with no head yet");
 
+// The report is the part that would have caught this round's bug. Injecting is
+// not hiding: the check looks at what the rules actually did.
+assert.strictEqual(exported.insightsChromeReport(fakeFrame(() => fakeInsights({ shown: false }))),
+	"hidden", "chrome that is really gone reports hidden");
+const stillThere = exported.insightsChromeReport(fakeFrame(() => fakeInsights({ shown: true })));
+assert.ok(stillThere.startsWith("still visible"),
+	"chrome the rules missed reports as still visible, not as success");
+assert.ok(stillThere.includes("border-r") && stillThere.includes("header"),
+	"...naming the real class names, so the next attempt has the DOM not a guess");
+const nothingMatched = exported.insightsChromeReport(fakeFrame(() => fakeInsights(
+	{ sidebar: false, header: false })));
+assert.ok(nothingMatched.includes("#app children:") && nothingMatched.includes("h-screen"),
+	"and when NOTHING matches, the report carries the app root's real children");
+assert.strictEqual(exported.insightsChromeReport(crossOrigin),
+	"the frame's document could not be reached from Sophia",
+	"an unreachable document says so plainly rather than reporting success");
+
 // And the loader is what calls it: promoting src without stripping the chrome
 // would pass every assertion above and still ship the sidebar.
 const chromeArea = area("4.2.2", false, "/insights/dashboards/dash-4");
-const chromeRoot = el("div", {});
+const chromeRoot = el("div", { dashboardPanel: "criterion_4" });
 chromeRoot.children.push(chromeArea.area);
 chromeArea.area.parentNode = chromeRoot;
-const injected = [];
-Object.defineProperty(chromeArea.frame, "contentDocument", { get: () => ({
-	head: { appendChild: (n) => injected.push(n) },
-	createElement: () => ({ setAttribute() {}, textContent: "" }),
-}) });
+const loaderDoc = fakeInsights({ shown: true });
+Object.defineProperty(chromeArea.frame, "contentDocument", { get: () => loaderDoc });
+win.deferred.length = 0;
+exported.uccLog.length = 0;
 exported.loadVisibleEmbeds(chromeRoot);
 (chromeArea.frame.listeners.load || []).forEach((fn) => fn.call(chromeArea.frame));
-assert.strictEqual(injected.length, 1,
+assert.strictEqual(loaderDoc.styles.length, 1,
 	"the frame's load handler is what hides the chrome, on the real path");
+assert.strictEqual(win.deferred.length, 1,
+	"...and schedules the check for after Vue has mounted, not at load");
+assert.ok(win.deferred[0].ms >= 1000,
+	"the check waits long enough for the shell to render");
+win.deferred[0].fn();
+const chromeLog = exported.uccLog.filter((row) => row.event === "embed_chrome");
+assert.strictEqual(chromeLog.length, 1, "the check logs its result once");
+assert.strictEqual(chromeLog[0].level, "WARNING",
+	"chrome still showing is a WARNING in the diagnostics log, not a silent pass");
+assert.ok(chromeLog[0].detail.includes("border-r"),
+	"...carrying what it actually found");
+
+// --- the frame fills the window instead of a fixed 620px -------------------
+// #2 from the live bench: charts cut off at the bottom. Height comes from the
+// PARENT page's geometry, so it does not depend on same-origin scripting.
+const sized = area("4.3.1", false, "/insights/dashboards/dash-5").frame;
+exported.sizeEmbedFrame(sized);           // top 240, window 900
+assert.strictEqual(sized.style.height, "572px",
+	"the frame fills the space from its top edge to the bottom of the window");
+win.innerHeight = 500;                    // a short laptop window
+exported.sizeEmbedFrame(sized);
+assert.strictEqual(sized.style.height, exported.EMBED_MIN_HEIGHT + "px",
+	"...never collapsing below the floor, however short the window");
+win.innerHeight = 900;
+assert.ok(!/height:\s*620px/.test(SRC), "and the fixed 620px height is gone from the page CSS");
+
+// A frame someone loaded in a narrow window is re-sized when its tab is shown
+// again -- the sizing pass must not be gated on the src promotion.
+sized.style.height = "";
+const sizedArea = el("section", { tabCharts: "4.3.1" });
+sized.parentNode = sizedArea;
+sizedArea.children.push(sized);
+delete sized.dataset.embedSrc;
+const sizedRoot = el("div", {});
+sizedRoot.children.push(sizedArea);
+sizedArea.parentNode = sizedRoot;
+exported.loadVisibleEmbeds(sizedRoot);
+assert.strictEqual(sized.style.height, "572px",
+	"an ALREADY-loaded frame is re-sized when its tab is shown again");
+assert.ok((win.listeners.resize || []).length >= 1,
+	"and the window resize is bound, so the frame follows the window");
 
 // The labelled fallback: never blank, never broken, always says why.
 const fallback = node();

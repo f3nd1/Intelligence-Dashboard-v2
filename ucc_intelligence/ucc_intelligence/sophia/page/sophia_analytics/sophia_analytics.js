@@ -423,43 +423,113 @@ loadVisibleEmbeds(dashboard);
 // The coupling is real but bounded: if Insights restructures its shell the
 // selectors stop matching and the chrome comes back. Nothing breaks, and the
 // caption never promises the chrome is gone.
+//
+// SELECTORS, SECOND ATTEMPT. The first version asked for
+// `#app > div > div.border-r:first-child` -- four claims about the tree, and
+// any one of them being wrong means no rule matches and the sidebar stays,
+// silently. These ask only for the two elements themselves. Insights' class
+// names survive its build (Tailwind classes are literal in the template; only
+// <style scoped> blocks get hashed), so a name is the sturdier half of what
+// that selector was claiming.
+//   div.border-r.bg-gray-50   App.vue's wrapper around <AppSidebar/>
+//   #app header               Dashboard.vue's breadcrumb + refresh bar
 const INSIGHTS_CHROME_CSS=
-"#app > div > div.border-r:first-child{display:none!important}"
-+"#app > div > div > header{display:none!important}";
+"div.border-r.bg-gray-50{display:none!important}"
++"#app header{display:none!important}";
+function insightsDocument(frame){
+try{const doc=frame.contentDocument;return(doc&&doc.head)?doc:null;}
+catch(error){return null;}
+}
 function hideInsightsChrome(frame){
-try{
-const doc=frame.contentDocument;
-if(!doc||!doc.head)return false;
+const doc=insightsDocument(frame);
+if(!doc)return false;
+if(doc.querySelector("style[data-ucc-embed-chrome]"))return true;
 const style=doc.createElement("style");
 style.setAttribute("data-ucc-embed-chrome","");
 style.textContent=INSIGHTS_CHROME_CSS;
 doc.head.appendChild(style);
 return true;
-}catch(error){return false;}
+}
+
+// Injecting the stylesheet is not the same as the chrome being gone: the rule
+// can land in the right document and match nothing. So the result is CHECKED
+// once Vue has had time to mount, and what it finds goes into the diagnostics
+// log -- INCLUDING the class names of whatever is still showing, so a second
+// failure arrives with the real DOM attached instead of another guess.
+function insightsChromeReport(frame){
+const doc=insightsDocument(frame);
+if(!doc)return"the frame's document could not be reached from Sophia";
+const view=doc.defaultView;
+const named=function(node){
+return node.tagName.toLowerCase()+"."+String(node.className||"").trim();};
+const targets=[doc.querySelector("div.border-r.bg-gray-50"),doc.querySelector("#app header")]
+.filter(Boolean);
+const showing=targets.filter(function(node){
+return!view||view.getComputedStyle(node).display!=="none";});
+if(showing.length)return"still visible — "+showing.map(named).join(" | ");
+if(targets.length)return"hidden";
+// Nothing matched at all: the shell moved, or this build differs from the
+// source. The app root's own children are what a next attempt needs.
+const root=doc.querySelector("#app");
+if(!root)return"no #app element in the frame";
+return"no sidebar or header matched. #app children: "
++(Array.prototype.map.call(root.children,named).join(" | ")||"(none)");
+}
+
+// The frame fills the space between its own top edge and the bottom of the
+// window, rather than a fixed 620px that cut this dashboard's charts in half.
+// Nothing is measured INSIDE the frame -- this is the parent page's geometry
+// only, so it works whether or not same-origin scripting into the frame does.
+// A dashboard taller than the space scrolls inside its own frame.
+const EMBED_MIN_HEIGHT=520,EMBED_BOTTOM_GAP=88,CHROME_CHECK_DELAY=2500;
+function sizeEmbedFrame(frame){
+const top=frame.getBoundingClientRect().top;
+const room=(window.innerHeight||0)-top-EMBED_BOTTOM_GAP;
+frame.style.height=Math.max(EMBED_MIN_HEIGHT,Math.round(room))+"px";
+}
+let embedResizeBound=false;
+function bindEmbedResize(){
+if(embedResizeBound)return;
+embedResizeBound=true;
+window.addEventListener("resize",function(){
+document.querySelectorAll("iframe.ucc-embed-frame").forEach(function(frame){
+const area=frame.closest("[data-tab-charts]");
+if(!area||!area.hidden)sizeEmbedFrame(frame);});
+});
 }
 
 function loadVisibleEmbeds(root){
-(root||document).querySelectorAll("iframe[data-embed-src]").forEach(function(frame){
+bindEmbedResize();
+(root||document).querySelectorAll("iframe.ucc-embed-frame").forEach(function(frame){
 const area=frame.closest("[data-tab-charts]");
 if(area&&area.hidden)return;
+// Re-sized on every pass, not only the first: a frame someone loaded in a
+// narrow window is shown again in a wide one.
+sizeEmbedFrame(frame);
+if(frame.dataset.embedSrc===undefined)return;
 const url=frame.dataset.embedSrc;
 delete frame.dataset.embedSrc;
 const started=(window.performance&&performance.now)?performance.now():0;
 frame.addEventListener("load",function(){
 const ms=started?Math.round(performance.now()-started):0;
-const stripped=hideInsightsChrome(frame);
+hideInsightsChrome(frame);
+sizeEmbedFrame(frame);
 const note=frame.parentNode&&frame.parentNode.querySelector("[data-embed-timing]");
 if(note)note.textContent="Loaded in "+ms+" ms";
 // Into the diagnostics log too, so the number survives the page being
 // used rather than living only in a caption nobody screenshots.
 const card=frame.closest("[data-dashboard-panel],.ucc-criterion-dashboard");
-if(card){logEvent(card,"INFO","embed_loaded",
-frame.dataset.embedName+" · "+ms+" ms");
-// Silent when it works. A failure is worth a line, because the symptom --
-// Insights' menu inside a Sophia panel -- otherwise reads as a bug with no
-// trail back to a version change in Insights.
-if(!stripped)logEvent(card,"WARNING","embed_chrome",
-frame.dataset.embedName+" · Insights' own menu could not be hidden");}
+if(!card)return;
+logEvent(card,"INFO","embed_loaded",frame.dataset.embedName+" · "+ms+" ms");
+// `load` fires when the document and its assets are done, which is BEFORE
+// Vue has finished mounting the shell -- so the check waits. The stylesheet
+// itself does not: a rule appended early applies to elements that appear
+// later, which is the whole reason this is CSS and not a DOM edit.
+window.setTimeout(function(){
+const report=insightsChromeReport(frame);
+logEvent(card,report==="hidden"?"INFO":"WARNING","embed_chrome",
+frame.dataset.embedName+" · Insights' own menu: "+report);
+},CHROME_CHECK_DELAY);
 },{once:true});
 frame.src=url;
 });
@@ -2736,7 +2806,9 @@ style.textContent=`
    iframe does not size to its content and there is no same-origin-safe way to
    ask it how tall it is without coupling to Insights' internals. */
 .ucc-embed-dashboard{grid-column:1/-1}
-.ucc-embed-frame{display:block;width:100%;height:620px;border:1px solid #E6EBF3;
+/* The height is set in JS from the window, not here -- this is only the floor
+   for the moment before that runs, and for a very short window. */
+.ucc-embed-frame{display:block;width:100%;height:520px;border:1px solid #E6EBF3;
  border-radius:12px;background:#fff}
 .ucc-embed-note{margin:6px 0 0;font-size:11px;color:#64748B}
 /* The Records strip: facts, under the dashboard Insights drew. */
