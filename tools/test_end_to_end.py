@@ -336,17 +336,25 @@ for guessed in ("rotate_values", "show_data_labels", "split_series", "y_min", "y
 # still unconfirmed would be the same mistake with a real name attached, so the
 # absence is asserted per key, on the executable source only.
 presentation_code = strip_comments_and_strings(presentation_source, True)
-for unconfirmed in ("order_by", "value_column", "label_position", "date_column",
+# label_column, value_column and number_columns moved OUT of this list on
+# 2026-08-03: Felix's Donut corroborated what they mean (its only populated
+# axis key was label_column, holding a real column). Evidence, not a name.
+for unconfirmed in ("order_by", "label_position", "date_column",
 		"location_column", "size_column", "source_column", "target_column",
-		"number_columns", "number_column_options", "show_inline_labels"):
+		"number_column_options", "show_inline_labels"):
 	report('config.get("%s")' % unconfirmed not in presentation_code,
 		"a confirmed key with an unconfirmed meaning stays unread (%s)" % unconfirmed)
 # The camelCase pair is now a validated FALLBACK, not a blanket refusal -- see
 # the module docstring, which corrects the earlier overstatement. What must
 # still hold is that it is only consulted when snake_case gave nothing.
-report('if not label_column:' in presentation_code
-	and 'config.get("xAxis")' in presentation_code,
-	"the camelCase pair is a fallback, reached only when snake_case is empty")
+report("LABELLED_RENDERERS" in presentation_code
+	and "def axis_keys_for(" in presentation_code,
+	"which config keys hold the axes depends on the chart TYPE, not one guess for all")
+report("def resolve_axes(" in presentation_code,
+	"...and resolution is public, so the bench probe reports what the app really does")
+PROBE_RES = ROOT / "docs" / "migration" / "scripts" / "probe_tab_chart_resolution.py"
+report(PROBE_RES.exists() and "chart_presentation.resolve_axes(" in PROBE_RES.read_text(encoding="utf-8"),
+	"the probe CALLS the app's resolution instead of re-implementing a truthiness check")
 report('config.get("limit")' in presentation_code and 'config.get("filters")' in presentation_code,
 	"limit and filters ARE read -- a number cannot be misread, and a chart filter changes the figures")
 

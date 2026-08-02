@@ -20,6 +20,18 @@ instead. So the chart IS being found, and its `config` genuinely has no
 
   C. The axes are stored somewhere other than `config` entirely.
 
+WHAT THE 2026-08-03 RUN ACTUALLY FOUND, and what it got wrong
+Two of three cards resolved and drew. The third -- a Donut -- did not, and this
+script reported "axes are present under x_axis; Sophia should draw this" about
+it. That was a FALSE POSITIVE: its x_axis is {"dimension": {}}, an empty
+wrapper, and `bool({"dimension": {}})` is True. The real value was in
+`label_column`.
+
+So this script no longer judges by truthiness. It imports
+`analytics.chart_presentation` and prints what the APP resolves, including the
+key order it tried and the final verdict. A probe that can disagree with the
+code is worse than no probe.
+
 This prints enough to tell them apart. It does NOT change anything, and the
 fix is chosen from the output rather than from a hypothesis.
 
@@ -35,6 +47,8 @@ learn its column names.
 import json
 
 import frappe
+
+from ucc_intelligence.analytics import chart_presentation
 
 TAB_DOCTYPE = "UCC Analytics Tab"
 QUERY_DOCTYPE = "Insights Query v3"
@@ -117,17 +131,35 @@ def run():
 		for key in AXIS_KEYS:
 			if key in config:
 				print("        %-8s %s" % (key, json.dumps(config[key], default=str)[:120]))
-		snake = bool(config.get("x_axis"))
-		camel = bool(config.get("xAxis"))
-		print("      x_axis populated: %s    xAxis populated: %s" % (snake, camel))
-		if not snake and camel:
-			print("      -> EXPLANATION B: the axes are under the camelCase keys.")
-		elif not snake and not camel:
-			print("      -> EXPLANATION C: no axis key holds anything. Either the")
-			print("         chart Felix edited is a DIFFERENT record from this one,")
-			print("         or the builder stores axes outside `config`.")
+
+		# THE RESOLVED COLUMN, from the app's OWN code -- not a truthiness
+		# check on x_axis.
+		#
+		# The 2026-08-03 run said "axes are present under x_axis; Sophia should
+		# draw this" for a Donut whose x_axis was {"dimension": {}} -- an empty
+		# wrapper. bool({"dimension": {}}) is True, so the probe declared a
+		# chart healthy that could not draw. A probe that disagrees with the
+		# code is worse than no probe, so this now CALLS the code.
+		render_as = chart_presentation.SUPPORTED_TYPES.get(
+			(found.get("chart_type") or "").lower())
+		if not render_as:
+			print("      -> chart type %r is not one Sophia draws; the card shows"
+				% (found.get("chart_type") or ""))
+			print("         its rows as a table, which is a real view, not a failure.")
 		else:
-			print("      -> axes are present under x_axis; Sophia should draw this.")
+			label, values = chart_presentation.resolve_axes(config, render_as)
+			print("      keys tried, in order: %s"
+				% (chart_presentation.axis_keys_for(render_as),))
+			print("      RESOLVED label column: %r" % label)
+			print("      RESOLVED value columns: %r" % values)
+			if label and values:
+				print("      -> Sophia resolves both. If the card still does not draw,")
+				print("         the columns do not match what the query returns -- see below.")
+			elif label:
+				print("      -> no VALUE column resolves. The card will show its rows.")
+			else:
+				print("      -> no LABEL column resolves from any key. The card will")
+				print("         show its rows and say why.")
 
 		# What the query really returns, since a config column that is not a
 		# real column is also withheld -- and looks identical from the outside.
@@ -136,8 +168,15 @@ def run():
 			doc = frappe.get_doc(QUERY_DOCTYPE, query_id)
 			doc.check_permission("read")
 			rows = (doc.execute(page_size=1) or {}).get("rows") or []
-			print("      the query returns columns: %s"
-				% (list(rows[0].keys()) if rows else "no rows"))
+			columns = list(rows[0].keys()) if rows else []
+			print("      the query returns columns: %s" % (columns or "no rows"))
+			# The final word: run the whole presentation exactly as the card
+			# does, and print its verdict verbatim.
+			verdict = chart_presentation.presentation_for(
+				found.get("query") or found.get("data_query"), columns=columns)
+			print("      SOPHIA'S OWN VERDICT: %s" % verdict.get("status"))
+			if verdict.get("reason"):
+				print("        reason: %s" % verdict["reason"])
 		except Exception as error:
 			print("      could not execute the query: %s" % error)
 

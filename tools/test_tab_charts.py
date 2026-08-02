@@ -903,6 +903,66 @@ report(chart_presentation._column_of(
 	[{"aggregation": "", "column_name": "", "data_type": ""}]) == "",
 	"a list containing only the empty placeholder yields no column")
 
+# THE DONUT BUG (2026-08-03, Felix's third card).
+# Its x_axis is {"dimension": {}} -- an empty wrapper -- while label_column
+# holds "benchmark_type". Reading x_axis universally left it blank, and the
+# probe's truthiness check called that "should draw this": a false positive on
+# exactly the chart that did not draw.
+State.rows = [{"benchmark_type": "Process", "count": 12}]
+State.insights_charts = [{"name": "chart-d", "title": "Innovation type mix",
+	"chart_type": "Donut", "query": "q-open", "data_query": None,
+	"config": json.dumps({"x_axis": {"dimension": {}},
+		"label_column": "benchmark_type", "value_column": "count"})}]
+donut = chart_presentation.presentation_for("q-open", columns=["benchmark_type", "count"])
+report(donut["status"] == "available" and donut["render_as"] == "donut",
+	"a Donut configured with label_column/value_column now draws")
+report(donut["x_column"] == "benchmark_type" and donut["y_columns"] == ["count"],
+	"...resolving the columns the chart actually names (%s / %s)"
+	% (donut["x_column"], donut["y_columns"]))
+
+# The FALLBACK chain alone fixes Felix's Donut, because its x_axis is empty.
+# What the type ORDERING adds is the case where both keys hold real, DIFFERENT
+# columns -- then the order decides, and getting it wrong draws a truthful
+# chart of the wrong thing, which is the worst outcome available.
+State.insights_charts[0]["config"] = json.dumps({
+	"x_axis": "status", "label_column": "benchmark_type", "value_column": "count"})
+State.rows = [{"status": "Open", "benchmark_type": "Process", "count": 12}]
+both = chart_presentation.presentation_for(
+	"q-open", columns=["status", "benchmark_type", "count"])
+report(both["x_column"] == "benchmark_type",
+	"a Donut with BOTH keys populated uses label_column, not x_axis (%s)" % both["x_column"])
+
+# An axis chart keeps preferring x_axis, so this did not just swap the bug over.
+State.insights_charts[0].update({"chart_type": "Bar", "config": json.dumps(
+	{"x_axis": "status", "label_column": "benchmark_type", "y_axis": ["count"]})})
+State.rows = [{"status": "Open", "count": 3, "benchmark_type": "Process"}]
+bar = chart_presentation.presentation_for(
+	"q-open", columns=["status", "count", "benchmark_type"])
+report(bar["x_column"] == "status",
+	"a Bar still prefers x_axis when BOTH are present (%s)" % bar["x_column"])
+
+# ...and each falls back to the other rather than failing.
+State.insights_charts[0].update({"chart_type": "Donut", "config": json.dumps(
+	{"x_axis": "status", "y_axis": ["count"]})})
+report(chart_presentation.presentation_for("q-open",
+	columns=["status", "count"])["x_column"] == "status",
+	"a Donut with only x_axis still draws -- the order is a preference, not a rule")
+
+# The empty wrapper on its own is still no axis.
+report(chart_presentation._column_of({"dimension": {}}) == "",
+	"an empty {'dimension': {}} wrapper yields no column")
+report(chart_presentation._column_of({"dimension": {"column_name": "benchmark_type"}})
+	== "benchmark_type", "...and a populated one does")
+
+# resolve_axes() is what the bench probe calls, so probe and app cannot diverge.
+report(chart_presentation.resolve_axes(
+	{"label_column": "benchmark_type"}, "donut") == ("benchmark_type", []),
+	"resolve_axes() is public, so the probe reports what the app really resolves")
+
+reset()
+State.doctypes.add("Insights Chart v3")
+with_config()   # restore the plain Bar chart the message tests below expect
+
 # A misleading message is its own bug. These three situations are different
 # and must never share a sentence.
 no_rows = chart_presentation.presentation_for("q-open", columns=[])
