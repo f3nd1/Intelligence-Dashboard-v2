@@ -428,7 +428,18 @@ function el(tag, attrs) {
 	const node = { tag, dataset: {}, hidden: false, children: [], listeners: {},
 		parentNode: null, src: "", style: {},
 		getBoundingClientRect() { return { top: 240 }; },
-		addEventListener(name, fn) { (this.listeners[name] = this.listeners[name] || []).push(fn); },
+		// {once:true} is HONOURED. Ignoring it let a once-only listener look
+		// like a persistent one, which is exactly the difference between a
+		// reloaded frame being re-hidden and staying uncovered for good.
+		addEventListener(name, fn, opts) {
+			(this.listeners[name] = this.listeners[name] || []).push(
+				{ fn, once: Boolean(opts && opts.once) });
+		},
+		fire(name) {
+			const queued = this.listeners[name] || [];
+			this.listeners[name] = queued.filter((entry) => !entry.once);
+			queued.forEach((entry) => entry.fn.call(this));
+		},
 		closest(sel) {
 			let at = this;
 			while (at) {
@@ -605,15 +616,21 @@ const chromeArea = area("4.2.2", false, "/insights/dashboards/dash-4");
 const chromeRoot = el("div", { dashboardPanel: "criterion_4" });
 chromeRoot.children.push(chromeArea.area);
 chromeArea.area.parentNode = chromeRoot;
-const loaderDoc = fakeInsights({ shown: true });
+const loaderDoc = fakeInsights({ shown: true, contentHeight: 900 });
 Object.defineProperty(chromeArea.frame, "contentDocument", { get: () => loaderDoc });
 win.deferred.length = 0;
 exported.uccLog.length = 0;
 exported.loadVisibleEmbeds(chromeRoot);
-(chromeArea.frame.listeners.load || []).forEach((fn) => fn.call(chromeArea.frame));
+chromeArea.frame.fire("load");
 assert.strictEqual(loaderDoc.styles.length, 1,
 	"the frame's load handler is what hides the chrome, on the real path");
-assert.strictEqual(win.deferred.length, 1,
+// A frame that reloads gets a fresh, styleless document. The listener must
+// still be there for the second load, or the chrome returns for good.
+loaderDoc.styles.length = 0;
+chromeArea.frame.fire("load");
+assert.strictEqual(loaderDoc.styles.length, 1,
+	"...and it fires on EVERY load, so a reloaded frame is hidden again");
+assert.ok(win.deferred.length >= 1,
 	"...and schedules the check for after Vue has mounted, not at load");
 assert.ok(win.deferred[0].ms >= 1000,
 	"the check waits long enough for the shell to render");
@@ -626,12 +643,21 @@ assert.strictEqual(heightLog.length, 1, "the measured height is logged on every 
 assert.ok(/dashboard content \d+px, frame \d+px/.test(heightLog[0].detail),
 	"...as both numbers, so a content height of 0 is the diagnosis rather than a mystery");
 
+
 const chromeLog = exported.uccLog.filter((row) => row.event === "embed_chrome");
-assert.strictEqual(chromeLog.length, 1, "the check logs its result once");
+assert.strictEqual(chromeLog.length, 1, "the check logs its result once per run");
 assert.strictEqual(chromeLog[0].level, "WARNING",
 	"chrome still showing is a WARNING in the diagnostics log, not a silent pass");
 assert.ok(chromeLog[0].detail.includes("border-r"),
 	"...carrying what it actually found");
+
+// The deferred check re-applies BEFORE it judges: a sheet lost between load
+// and the check comes back, rather than being reported as a failure it could
+// have repaired. Run last, so the log assertions above see one run's output.
+loaderDoc.styles.length = 0;
+win.deferred[win.deferred.length - 1].fn();
+assert.strictEqual(loaderDoc.styles.length, 1,
+	"the deferred check re-injects a lost stylesheet before reporting on it");
 
 // --- the frame is sized to the dashboard, not to a guess -------------------
 // Three rounds of this: 620px fixed cut charts in half; window-filling landed
@@ -717,6 +743,22 @@ assert.ok(watched.doc.observed.some((row) => row.target.className === "h-fit w-f
 	"...and the dashboard's grid is among them");
 assert.strictEqual(exported.watchEmbedContent(sizedFrame(900, { noObserver: true }).frame), false,
 	"a browser without ResizeObserver reports the failure rather than pretending");
+
+// SELF-HEALING. Injecting once assumes the frame keeps the document it was
+// given. If anything replaces it -- a reload, a re-render that wipes the head
+// -- the sidebar comes back and a one-shot injection has nothing left to put
+// it back. So the observer re-applies, and re-applying is what this asserts.
+const healing = sizedFrame(900);
+exported.watchEmbedContent(healing.frame);
+exported.hideInsightsChrome(healing.frame);
+assert.strictEqual(healing.doc.styles.length, 1, "the stylesheet is in");
+healing.doc.styles.length = 0;                      // the document lost it
+healing.doc.observed[0].fn();                       // ...and the content changed
+assert.strictEqual(healing.doc.styles.length, 1,
+	"a lost stylesheet is put back on the next content change, not left off");
+healing.doc.observed[0].fn();
+assert.strictEqual(healing.doc.styles.length, 1,
+	"...and not stacked up again on every tick");
 
 // THE BUG THAT SURVIVED TWO ROUNDS. AppSidebar.vue's link list is also an
 // `#app .overflow-y-auto`, and it comes first, so querySelector handed the
