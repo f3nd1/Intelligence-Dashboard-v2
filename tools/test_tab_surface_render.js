@@ -1,6 +1,6 @@
 // Behavioural self-check for the criterion tab surface: the Table view and its
 // drill-down, the tab intro's Markdown subset, the chart size spans, and the
-// Explore catalogue. Executed against the real page source, not grepped -- an
+// Explore catalogue (now asserted absent). Executed against the real page source, not grepped -- an
 // escaping rule that is only asserted by a regex over source text has not been
 // tested, it has been described.
 //
@@ -59,7 +59,7 @@ function lift(name) {
 }
 
 const NEEDED = ["esc", "tabChartNotice", "humaniseColumn", "renderIntroMarkdown",
-	"renderChartTable", "embeddedChartMarkup", "syncExploreCatalogue", "qaQuestionId",
+	"renderChartTable", "embeddedChartMarkup", "qaQuestionId",
 	"paletteOf", "seriesColour", "segmentButton", "paintBarSeries", "paintLineSeries",
 	"paintDonutSeries", "paintNumberSeries", "paintFunnelSeries", "paintChartSeries",
 	"paintTableOnly", "sortForDisplay", "embeddedDashboardMarkup", "loadVisibleEmbeds",
@@ -88,7 +88,7 @@ const exported = new Function("window", "document", "frappe", "CSS",
 	+ " viewAfterPaint: () => lastView };"
 )(win, doc, frappe, { escape: (s) => s });
 const { renderIntroMarkdown, renderChartTable, embeddedChartMarkup,
-	syncExploreCatalogue, tabChartState, qaQuestionId, paletteOf, seriesColour,
+	tabChartState, qaQuestionId, paletteOf, seriesColour,
 	paintBarSeries, paintLineSeries, paintDonutSeries, paintNumberSeries, sortForDisplay,
 	paintFunnelSeries, paintChartSeries, embeddedDashboardMarkup } = exported;
 
@@ -255,25 +255,15 @@ const tableBlock = SRC.slice(SRC.indexOf("function renderChartTable("), SRC.inde
 assert.ok(!tableBlock.includes("frappe.call"),
 	"the table view issues NO second request -- one execute feeds both views");
 
-// --- Explore auto-populates (#7) -------------------------------------------
-Object.keys(tabChartState).forEach((key) => delete tabChartState[key]);
-tabChartState["criterion_3::overview"] = { charts: [{ chart: "q1", title: "Agents by Country" }] };
-tabChartState["criterion_6::6.1.1"] = { charts: [{ chart: "q2", title: "Audit Findings" }] };
-tabChartState["criterion_1::overview"] = { charts: [] };
-let rebuilt = 0;
-win.UCCExplore = { rebuild: () => { rebuilt += 1; } };
-syncExploreCatalogue();
-assert.deepStrictEqual(Object.keys(win.UCCLiveVisualDefinitions).sort(), ["criterion_3", "criterion_6"],
-	"only criteria with charts appear in the Explore catalogue");
-assert.strictEqual(win.UCCLiveVisualDefinitions.criterion_3.overview[0].id, "q1",
-	"a chart added to a tab IS the Explore entry -- no separate list to maintain");
-assert.strictEqual(win.UCCLiveVisualDefinitions.criterion_6["6.1.1"][0].title, "Audit Findings",
-	"and it is catalogued under the tab it was added to");
-assert.strictEqual(rebuilt, 1, "Explore is told to rebuild, so it repopulates without a manual step");
-
-win.UCCExplore = undefined;
-assert.doesNotThrow(syncExploreCatalogue,
-	"and publishing the catalogue works even before Explore has initialised");
+// --- Explore is REMOVED (2026-08-04) ---------------------------------------
+// Its catalogue was published from tabChartState by syncExploreCatalogue(),
+// and it only ever listed PAINTED charts. Embedding a dashboard deletes a
+// tab's charts and nothing can add one any more, so the catalogue could only
+// shrink. Asserted as absence, so a re-port would have to be deliberate.
+assert.ok(!/syncExploreCatalogue|UCCLiveVisualDefinitions|UCCExplore/.test(SRC),
+	"nothing in the page publishes, reads or rebuilds an Explore catalogue");
+assert.ok(!/initDiagramExplorer|data-ucc-explore/.test(SRC),
+	"...and neither the Explore engine nor its markup survives");
 
 // --- question identity (#6) -------------------------------------------------
 assert.strictEqual(qaQuestionId({ metric_id: "m-1", question: "Q?" }, 0), "m-1",
@@ -841,4 +831,4 @@ assert.ok(SRC.includes("Table only"),
 assert.ok(SRC.includes("data-recolour-chart"),
 	"an editor can recolour a chart");
 
-console.log("PASS: tab intro, chart sizes, table view, drill-down, chart shapes, palette, Explore catalogue, question ids");
+console.log("PASS: tab intro, chart sizes, table view, drill-down, chart shapes, palette, Explore removal, question ids");

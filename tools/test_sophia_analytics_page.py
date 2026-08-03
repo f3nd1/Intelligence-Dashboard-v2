@@ -405,12 +405,14 @@ if m:
 		'data-build-id="UCC-PLATFORM-2.0.1-SHARED" data-platform-version="2.0.1"',
 		'data-build-id="SOPHIA-ANALYTICS-PAGE" data-platform-version="phase-3"',
 	)
-	# All three workspace tabs, per the original platform design. Phase 3
-	# trimmed Explore/Ask under "Decision A/B"; that was reversed once both
-	# workspaces had real implementations to mount, so the shell is rebuilt
-	# from the same legacy lines it was always cut from -- lines 1-6 for the
-	# header/buttons/analytics panel, 8-56 for the Explore panel.
-	explore_panel = "\n".join(html_lines[7:56])
+	# The legacy nav had Analytics / Explore / Ask UCC, and the legacy HTML
+	# carried an Explore panel on lines 8-56. Explore was REMOVED on
+	# 2026-08-04 (its catalogue could only ever list painted charts, and those
+	# are gone), so both the button and the panel are declared trims here --
+	# an *undocumented* edit to the shell still fails the check below.
+	EXPLORE_TAB = html_lines[2]
+	checks.append(report(EXPLORE_TAB.endswith(">Explore</button>"),
+		"the legacy nav's second tab really is Explore (baseline for its removal)"))
 	# One documented addition to the legacy header: a gear that opens the
 	# UCC Intelligence Settings doctype, which previously had no entry point
 	# anywhere in the UI. It sits immediately AFTER the workspace nav closes
@@ -445,16 +447,18 @@ if m:
 		"the legacy nav closes at the start of the next line -- where the gear is inserted"))
 	dashboard_line_with_gear = dashboard_line.replace("</nav>", "</nav>" + SETTINGS_GEAR, 1)
 	expected_shell_prefix = (
-		header_no_changelog + nav_line + html_lines[2] + html_lines[3] + OPERATIONS_TAB
-		+ dashboard_line_with_gear + criteria_line + "</section>" + explore_panel
+		header_no_changelog + nav_line + html_lines[3] + OPERATIONS_TAB
+		+ dashboard_line_with_gear + criteria_line + "</section>"
 	)
 	shell_match = re.search(r'const SHELL_HTML = (".*?");\n', ported, re.S)
 	checks.append(report(bool(shell_match), "SHELL_HTML constant found in the ported page"))
 	if shell_match:
 		embedded = json.loads(shell_match.group(1))
 		checks.append(report(embedded.startswith(expected_shell_prefix),
-			"shell HTML matches HTML.html's header + the 3 legacy workspace buttons + the "
-			"declared Operations tab + Analytics + Explore panels verbatim"))
+			"shell HTML matches HTML.html's header + the legacy workspace buttons minus "
+			"Explore + the declared Operations tab + the Analytics panel, verbatim"))
+		checks.append(report(EXPLORE_TAB not in embedded,
+			"...and the legacy Explore button is not in it"))
 		checks.append(report('data-ucc-workspace-panel="operations"' in embedded
 			and 'data-ops-panel="monitoring"' in embedded
 			and 'data-ops-panel="knowledge"' in embedded,
@@ -468,15 +472,16 @@ if m:
 		checks.append(report('data-ucc-ask=""' in embedded, "the Ask panel hosts our own server-backed Ask UCC surface"))
 
 checks.append(report(criteria_line.count('data-dashboard-panel="criterion_') == 7, "all seven criterion mount divs present in the source HTML"))
-# Both forms count: SHELL_HTML is a JSON-escaped string literal, while the
-# Explore code also uses an unescaped selector. "ask" legitimately appears
-# only in the shell -- nothing needs to select it by name.
+# Both forms count: SHELL_HTML is a JSON-escaped string literal, while other
+# code may use an unescaped selector.
 def has_workspace(key):
 	return ('data-ucc-workspace="%s"' % key) in ported or ('data-ucc-workspace=\\"%s\\"' % key) in ported
 
 
-checks.append(report(has_workspace("explore") and has_workspace("ask"),
-	"Explore and Ask UCC are workspace TABS in this one page, not separate Frappe Pages"))
+checks.append(report(has_workspace("ask") and has_workspace("operations"),
+	"Ask UCC and Operations are workspace TABS in this one page, not separate Frappe Pages"))
+checks.append(report(not has_workspace("explore"),
+	"...and Explore is not a tab any more (removed 2026-08-04)"))
 checks.append(report(not (ROOT / "ucc_intelligence" / "ucc_intelligence" / "sophia" / "page" / "ask_ucc").exists(),
 	"the standalone ask-ucc Page is gone -- one page with tabs, not parallel pages"))
 checks.append(report("show-changelog" not in ported, "changelog button correctly excluded (no changelog system ported)"))
@@ -538,38 +543,37 @@ if load_live_match:
 		"embed's blocked sources are merged into result.sources so the existing permission-notice path picks them up",
 	))
 
-# --- Explore (Diagram Explorer): verbatim port of the legacy IIFE ---
-# Same technique and same guarantee as the shell/engine ports above: the
-# legacy body is re-extracted and re-transformed here, so drift on either
-# side is caught rather than assumed away.
-explore_source = "\n".join(js_lines[2707:3064])
-explore_head_original = (
-	'const platformRoot = typeof root_element !== "undefined"\n'
-	'? root_element.querySelector("#uccIntelligencePlatform")\n'
-	': document.querySelector("#uccIntelligencePlatform");\n'
-	'\n'
-	'if (!platformRoot || platformRoot.dataset.exploreReady === "1") return;\n'
-	'platformRoot.dataset.exploreReady = "1";'
-)
-checks.append(report(explore_head_original in explore_source,
-	"Explore IIFE head matches the live deployed source verbatim"))
-explore_transformed = explore_source.replace(
-	explore_head_original,
-	'if (!platformRoot || platformRoot.dataset.exploreReady === "1") return;\n'
-	'platformRoot.dataset.exploreReady = "1";', 1)
-# The IIFE's `global` parameter is gone, so its two uses become window.
-explore_transformed = explore_transformed.replace("global.UCCLiveVisualDefinitions", "window.UCCLiveVisualDefinitions")
-explore_transformed = explore_transformed.replace("global.UCCExplore", "window.UCCExplore")
-expected_explore = "\n".join(indent_one_more(spaces_to_tabs_graceful(explore_transformed.split("\n"))))
-checks.append(report(expected_explore in ported,
-	"Explore body matches the legacy Diagram Explorer verbatim (modulo the documented head/global transforms)"))
-checks.append(report("function initDiagramExplorer(platformRoot) {" in ported,
-	"Explore is a named init function, not a self-invoking IIFE"))
-checks.append(report("initDiagramExplorer(root)" in ported, "initDiagramExplorer is wired into boot()"))
-explore_block_src = ported[ported.index("function initDiagramExplorer"):ported.index("// ASK UCC -- the decision-support surface")]
-checks.append(report("global." not in explore_block_src,
-	"no bare `global.` references survive in the ported Explore (its IIFE parameter is gone)"))
-checks.append(report('data-ucc-explore' in ported, "the Explore panel markup is present in the shell"))
+# --- Explore (Diagram Explorer) IS REMOVED ---------------------------------
+#
+# Felix removed it on 2026-08-04, after confirming what it had become. Explore
+# built its catalogue from window.UCCLiveVisualDefinitions, which only ever
+# held PAINTED charts; embedding a dashboard deletes a tab's charts and nothing
+# can add one any more, so Explore could only lose entries and would have ended
+# as a working search over nothing.
+#
+# It was a verbatim port of the legacy Diagram Explorer, so these assertions
+# replace the ones that proved the port faithful -- otherwise a re-port would
+# pass silently, and nothing would say the removal was deliberate.
+checks.append(report("initDiagramExplorer" not in ported,
+	"the Diagram Explorer engine is gone from the page"))
+checks.append(report("UCCExplore" not in ported and "UCCLiveVisualDefinitions" not in ported,
+	"...and so are both of its globals, so nothing can rebuild its catalogue"))
+checks.append(report("syncExploreCatalogue" not in ported,
+	"...and the publisher that fed it"))
+checks.append(report("data-ucc-explore" not in ported,
+	"the Explore panel markup is gone from the shell HTML"))
+checks.append(report('data-ucc-workspace="explore"' not in ported,
+	"...and the workspace tab that opened it"))
+# The LEGACY SHELL BODY still contains `workspace === "explore"` branches. They
+# are left alone on purpose: that body is asserted verbatim against
+# custom-html-block/JAVASCRIPT.js above, and editing it to delete unreachable
+# branches would trade a real guarantee for tidiness. No button sets that
+# workspace any more, so the branches cannot run.
+checks.append(report(ported.count('workspace !== "explore"') == 1,
+	"the verbatim legacy shell is NOT edited to remove its dead explore branch"))
+checks.append(report('explore:"explore"' in ported,
+	"...nor is the engine's ACCESS_WORKSPACE_PANELS map, for the same reason: with "
+	"no explore button and no explore panel, its access loop finds nothing to hide"))
 
 
 # --- THE PICKER IS TWO STEPS, NOT A FILTER ON A FLAT LIST -------------------
